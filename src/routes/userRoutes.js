@@ -5,6 +5,7 @@ import { findUserById } from '../models/userModel.js';
 
 const router = express.Router();
 
+//for testing
 router.get('/me', authenticate, async (req, res) => {
   try {
     const user = await findUserById(req.user.id);

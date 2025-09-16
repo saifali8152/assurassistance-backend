@@ -11,7 +11,7 @@ export default function authenticate(req, res, next) {
   const token = header.split(' ')[1];
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = payload; // { id, email, is_admin }
+    req.user = payload; 
     next();
   } catch (err) {
     return res.status(401).json({ message: 'Invalid or expired token' });

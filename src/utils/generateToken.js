@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 dotenv.config();
 
+
+//genration of token
 export default function generateToken(user) {
   const payload = {
     id: user.id,

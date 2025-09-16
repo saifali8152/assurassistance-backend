@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+     "seed:admin": "node src/scripts/seedAdmin.js"
   },
   "repository": {
     "type": "git",
@@ -20,9 +21,11 @@
   "homepage": "https://github.com/saifali8152/assurassistance-backend#readme",
   "description": "",
   "dependencies": {
+    "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.14.5"
   },
   "devDependencies": {

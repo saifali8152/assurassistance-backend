@@ -11,7 +11,7 @@ export const createAgent = async (req, res) => {
     const exists = await findUserByEmail(email);
     if (exists) return res.status(400).json({ message: 'User with this email already exists' });
 
-    const password = tempPassword || crypto.randomBytes(4).toString('hex'); // random 8 hex chars
+    const password = tempPassword || crypto.randomBytes(4).toString('hex'); 
     const hashed = await bcrypt.hash(password, 10);
 
     const userId = await createUser({ name, email, password: hashed, is_admin: 0, force_password_change: 1 });

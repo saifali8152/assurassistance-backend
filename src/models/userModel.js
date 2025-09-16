@@ -1,4 +1,3 @@
-// src/models/userModel.js
 import pool from "../db.js";
 
 export const findUserByEmail = async (email) => {

@@ -26,10 +26,11 @@ export const login = async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
-        is_admin: !!user.is_admin,
+        role: user.role_name,
         force_password_change: !!user.force_password_change
       }
     });
+    
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });

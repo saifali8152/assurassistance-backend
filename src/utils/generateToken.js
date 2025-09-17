@@ -3,14 +3,15 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 dotenv.config();
 
-
-//genration of token
 export default function generateToken(user) {
   const payload = {
     id: user.id,
     email: user.email,
-    is_admin: user.is_admin ? 1 : 0
+    role: user.role_name || user.role // so we return role instead of is_admin
   };
 
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '1h' });
+  return jwt.sign(payload, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN || '1h'
+  });
 }
+

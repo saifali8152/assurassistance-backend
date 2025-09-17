@@ -18,9 +18,10 @@ const seed = async () => {
 
     const hashed = await bcrypt.hash(adminPassword, 10);
     const [result] = await pool.execute(
-      'INSERT INTO users (name, email, password, is_admin, force_password_change) VALUES (?, ?, ?, ?, ?)',
-      ['Admin', adminEmail, hashed, 1, 0]
+      'INSERT INTO users (name, email, password, role_id, force_password_change) VALUES (?, ?, ?, ?, ?)',
+      ['Admin', adminEmail, hashed, 1, 0] // 1 = Admin role_id
     );
+    
 
     console.log('Admin created:', adminEmail, 'id:', result.insertId);
     process.exit(0);

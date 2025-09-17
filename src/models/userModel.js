@@ -1,25 +1,41 @@
 import pool from "../db.js";
 
 export const findUserByEmail = async (email) => {
-  const [rows] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
+  const [rows] = await pool.query(
+    `SELECT u.*, r.name as role_name 
+     FROM users u
+     JOIN roles r ON u.role_id = r.id
+     WHERE u.email = ?`, 
+    [email]
+  );
   return rows[0];
 };
 
 export const findUserById = async (id) => {
-  const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
+  const [rows] = await pool.query(
+    `SELECT u.*, r.name as role_name 
+     FROM users u
+     JOIN roles r ON u.role_id = r.id
+     WHERE u.id = ?`, 
+    [id]
+  );
   return rows[0];
 };
 
-export const createUser = async ({ name, email, password, is_admin = 0, force_password_change = 0 }) => {
+export const createUser = async ({ name, email, password, role_id, force_password_change = 0 }) => {
   const [result] = await pool.execute(
-    'INSERT INTO users (name, email, password, is_admin, force_password_change) VALUES (?, ?, ?, ?, ?)',
-    [name, email, password, is_admin ? 1 : 0, force_password_change ? 1 : 0]
+    'INSERT INTO users (name, email, password, role_id, force_password_change) VALUES (?, ?, ?, ?, ?)',
+    [name, email, password, role_id, force_password_change ? 1 : 0]
   );
   return result.insertId;
 };
 
 export const getAllUsers = async () => {
-  const [rows] = await pool.query('SELECT id, name, email, is_admin, status, force_password_change, last_login, created_at FROM users');
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.email, r.name as role_name, u.status, u.force_password_change, u.last_login, u.created_at
+     FROM users u
+     JOIN roles r ON u.role_id = r.id`
+  );
   return rows;
 };
 

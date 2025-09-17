@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import { findUserByEmail, updateLastLogin, updatePassword } from '../models/userModel.js';
 import generateToken from '../utils/generateToken.js';
 
+
+//login
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -33,6 +35,8 @@ export const login = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+//change password
 
 export const changePassword = async (req, res) => {
   try {

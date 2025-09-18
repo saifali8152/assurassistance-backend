@@ -39,6 +39,18 @@ export const getAllUsers = async () => {
   return rows;
 };
 
+export const getAgents = async () => {
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.email, r.name as role_name, u.status, 
+            u.force_password_change, u.last_login, u.created_at
+     FROM users u
+     JOIN roles r ON u.role_id = r.id
+     WHERE r.name = 'Agent'`  // Only return agents
+  );
+  return rows;
+};
+
+
 export const updatePassword = async (id, hashedPassword) => {
   await pool.execute('UPDATE users SET password = ?, force_password_change = 0, updated_at = NOW() WHERE id = ?', [hashedPassword, id]);
 };

@@ -6,7 +6,8 @@ import { adminOnly } from '../middlewares/roleMiddleware.js';
 
 const router = express.Router();
 
-router.post('/agents', authenticate, adminOnly, createAgent);
-router.get('/agents', authenticate, adminOnly, listAgents);
+// adminRoutes.js
+router.post('/create-agent', authenticate, adminOnly, createAgent);
+router.get('/list-agents', authenticate, adminOnly, listAgents);
 
 export default router;

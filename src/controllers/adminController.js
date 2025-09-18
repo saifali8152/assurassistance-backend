@@ -2,6 +2,7 @@
 import bcrypt from 'bcryptjs';
 import { createUser, findUserByEmail, getAllUsers, getAgents } from '../models/userModel.js';
 import crypto from 'crypto';
+import { updateUserStatus } from '../models/userModel.js';
 
 import { generateStrongPassword } from '../utils/passwordUtils.js';
 
@@ -41,5 +42,18 @@ export const listAgents = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const changeUserStatus = async (req, res) => {
+  try {
+    const { userId, status } = req.body;
+    if (!userId || !status) return res.status(400).json({ message: "User ID and status required" });
+
+    await updateUserStatus(userId, status);
+    res.json({ message: `User status updated to ${status}` });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
 };

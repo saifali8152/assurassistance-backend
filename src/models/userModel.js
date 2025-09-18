@@ -58,3 +58,8 @@ export const updatePassword = async (id, hashedPassword) => {
 export const updateLastLogin = async (id) => {
   await pool.execute('UPDATE users SET last_login = NOW() WHERE id = ?', [id]);
 };
+
+export const updateUserStatus = async (id, status) => {
+  await pool.execute('UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?', [status, id]);
+};
+

@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express from 'express';
-import cors from 'cors'; // ✅ Import CORS
+import cors from 'cors'; 
 import './db.js';
 import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';

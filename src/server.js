@@ -8,7 +8,7 @@ import './db.js';
 import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import userRoutes from './routes/userRoutes.js';
-
+import catalogueRoutes from './routes/catalogueRoutes.js';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
@@ -26,6 +26,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/catalogue', catalogueRoutes);
 
 app.get('/', (req, res) => res.send('Assur Assistance Backend is running'));
 

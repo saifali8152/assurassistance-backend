@@ -1,3 +1,5 @@
+//src/controllers/authController.js
+
 import sendEmail from '../utils/emailService.js';
 import { loginNotificationTemplate,passwordResetOtpTemplate  } from '../utils/emailTemplates.js';
 import bcrypt from 'bcryptjs';

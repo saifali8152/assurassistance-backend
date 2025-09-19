@@ -1,14 +1,14 @@
-// src/controllers/authController.js
+import sendEmail from '../utils/emailService.js';
+import { loginNotificationTemplate } from '../utils/emailTemplates.js';
 import bcrypt from 'bcryptjs';
 import { findUserByEmail, updateLastLogin, updatePassword } from '../models/userModel.js';
 import generateToken from '../utils/generateToken.js';
 
-
-//login
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
+    if (!email || !password)
+      return res.status(400).json({ message: 'Email and password required' });
 
     const user = await findUserByEmail(email);
     if (!user) return res.status(401).json({ message: 'Invalid credentials' });
@@ -16,10 +16,22 @@ export const login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
 
-    // update last login (async)
+    // Update last login
     try { await updateLastLogin(user.id); } catch (e) { /* ignore */ }
 
+    // Generate JWT token
     const token = generateToken(user);
+
+    // Send Login Notification Email
+    try {
+      const { subject, text, html } = loginNotificationTemplate(user.name, new Date().toLocaleString());
+      await sendEmail(user.email, subject, text, html);
+    } catch (emailErr) {
+      console.error('Email sending failed:', emailErr.message);
+      // Do not break login flow if email fails
+    }
+
+    // Send response
     res.json({
       token,
       user: {
@@ -30,12 +42,13 @@ export const login = async (req, res) => {
         force_password_change: !!user.force_password_change
       }
     });
-    
+
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
 };
+
 
 //change password
 

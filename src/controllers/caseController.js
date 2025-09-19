@@ -1,10 +1,11 @@
+//src/controllers/caseController.js
 import { createTraveller, createCase, getCasesByAgent, updateCaseStatus } from "../models/caseModel.js";
 
 // Create Traveller + Case
 export const createCaseWithTraveller = async (req, res) => {
   try {
     const { traveller, caseData } = req.body;
-    const created_by = req.user.id; // From auth middleware
+    const created_by = req.user.id; 
 
     // 1. Create traveller
     const travellerId = await createTraveller(traveller);

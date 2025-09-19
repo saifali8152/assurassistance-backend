@@ -1,3 +1,4 @@
+//src/routes/caseRoute.js
 import express from "express";
 import authenticate from "../middlewares/authMiddleware.js";
 import { createCaseWithTraveller, getMyCases, changeCaseStatus } from "../controllers/caseController.js";

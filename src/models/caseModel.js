@@ -1,3 +1,5 @@
+//src/models/caseModel.js
+
 import pool from "../db.js";
 
 // Create Traveller

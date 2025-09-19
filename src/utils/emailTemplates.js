@@ -12,3 +12,19 @@ export const loginNotificationTemplate = (userName, loginTime) => {
     `
   };
 };
+
+
+export const passwordResetOtpTemplate = (otp) => {
+  return {
+    subject: "Your Password Reset Code",
+    text: `Your password reset code is: ${otp}. It will expire in 10 minutes.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; padding: 10px; color: #333;">
+        <h2>Password Reset Request</h2>
+        <p>Your password reset code is: <strong>${otp}</strong></p>
+        <p>This code will expire in 10 minutes.</p>
+      </div>
+    `
+  };
+};
+

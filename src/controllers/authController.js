@@ -34,16 +34,18 @@ export const login = async (req, res) => {
     }
 
     // Send response
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role_name,
-        force_password_change: !!user.force_password_change
-      }
-    });
+// Send response
+res.json({
+  token,
+  user: {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role_name.toLowerCase(), // normalize here
+    force_password_change: !!user.force_password_change
+  }
+});
+
 
   } catch (err) {
     console.error(err);

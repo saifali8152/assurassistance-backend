@@ -1,7 +1,7 @@
 //src/controllers/authController.js
 
 import sendEmail from '../utils/emailService.js';
-import { loginNotificationTemplate,passwordResetOtpTemplate  } from '../utils/emailTemplates.js';
+import { passwordResetOtpTemplate  } from '../utils/emailTemplates.js';
 import bcrypt from 'bcryptjs';
 import { findUserByEmail, updateLastLogin, updatePassword } from '../models/userModel.js';
 import generateToken from '../utils/generateToken.js';
@@ -25,13 +25,14 @@ export const login = async (req, res) => {
     const token = generateToken(user);
 
     // Send Login Notification Email
+   {/*
     try {
       const { subject, text, html } = loginNotificationTemplate(user.name, new Date().toLocaleString());
       await sendEmail(user.email, subject, text, html);
     } catch (emailErr) {
       console.error('Email sending failed:', emailErr.message);
       // Do not break login flow if email fails
-    }
+    }  */}
 
     // Send response
 // Send response

@@ -1,3 +1,4 @@
+{/*
 export const loginNotificationTemplate = (userName, loginTime) => {
   return {
     subject: "Login Notification",
@@ -11,7 +12,7 @@ export const loginNotificationTemplate = (userName, loginTime) => {
       </div>
     `
   };
-};
+};   */}
 
 
 export const passwordResetOtpTemplate = (otp) => {

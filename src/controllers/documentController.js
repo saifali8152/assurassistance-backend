@@ -15,7 +15,7 @@ export const downloadInvoice = async (req, res) => {
     }
 
     const filePath = path.join(__dirname, "..", invoice.pdf_path);
-    const fileUrl = `${process.env.BASE_URL}/${invoice.pdf_path.replace(/\\/g, "/")}`;
+    const fileUrl = `${process.env.BASE_URL}/${invoice.pdf_path.replace(/\\/g, "/").replace(/^\/+/, "")}`;
 
     // If you want direct download in browser
     return res.json({ url: fileUrl });
@@ -37,7 +37,7 @@ export const downloadCertificate = async (req, res) => {
     }
 
     const filePath = path.join(__dirname, "..", cert.pdf_path);
-    const fileUrl = `${process.env.BASE_URL}/${cert.pdf_path.replace(/\\/g, "/")}`;
+    const fileUrl = `${process.env.BASE_URL}/${cert.pdf_path.replace(/\\/g, "/").replace(/^\/+/, "")}`;
 
     return res.json({ url: fileUrl });
   } catch (err) {

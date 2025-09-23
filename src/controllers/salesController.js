@@ -85,14 +85,24 @@ export const createSaleController = async (req, res) => {
     await updateCertificatePdf(certId, certificatePdfPath);
 
     // 8. Respond with details and paths (frontend will use returned file urls)
-    res.status(201).json({
-      message: "Sale created and documents generated",
-      saleId,
-      policyNumber,
-      certificateNumber,
-      invoice: { id: invoiceId, invoiceNumber, pdfPath: invoicePdfPath },
-      certificate: { id: certId, certificateNumber, pdfPath: certificatePdfPath }
-    });
+const BASE_URL = process.env.VITE_API_URL || "http://localhost:5000";
+
+res.status(201).json({
+  message: "Sale created and documents generated",
+  saleId,
+  policyNumber,
+  certificateNumber,
+  invoice: { 
+    id: invoiceId, 
+    invoiceNumber, 
+    pdfUrl: `${BASE_URL}/${invoicePdfPath}` 
+  },
+  certificate: { 
+    id: certId, 
+    certificateNumber, 
+    pdfUrl: `${BASE_URL}/${certificatePdfPath}` 
+  }
+});
   } catch (err) {
     console.error("Error creating sale:", err);
     res.status(500).json({ message: "Server error" });

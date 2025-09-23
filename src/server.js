@@ -1,11 +1,12 @@
 // src/server.js
 import dotenv from 'dotenv';
+import { fileURLToPath } from "url";
+import path from 'path';
 dotenv.config();
 
 import express from 'express';
 import cors from 'cors'; 
 import './db.js';
-import path from 'path'
 import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import userRoutes from './routes/userRoutes.js';
@@ -34,5 +35,9 @@ app.use("/api/cases", caseRoutes);
 app.use("/api/sales",salesRoute)
 app.get('/', (req, res) => res.send('Assur Assistance Backend is running'));
 // Serve uploads
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Serve static files for invoices/certificates
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

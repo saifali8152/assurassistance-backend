@@ -1,3 +1,4 @@
+//src/routes/salesRoute.js
 import express from "express";
 import authenticate from "../middlewares/authMiddleware.js";
 import {

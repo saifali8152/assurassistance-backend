@@ -5,6 +5,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors'; 
 import './db.js';
+import path from 'path'
 import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import userRoutes from './routes/userRoutes.js';
@@ -32,5 +33,6 @@ app.use('/api/catalogue', catalogueRoutes);
 app.use("/api/cases", caseRoutes);
 app.use("/api/sales",salesRoute)
 app.get('/', (req, res) => res.send('Assur Assistance Backend is running'));
-
+// Serve uploads
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

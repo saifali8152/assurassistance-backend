@@ -42,3 +42,17 @@ export const getCasesByAgent = async (agentId) => {
 export const updateCaseStatus = async (caseId, status) => {
   await pool.execute(`UPDATE cases SET status = ? WHERE id = ?`, [status, caseId]);
 };
+
+// append to src/models/caseModel.js
+
+export const getCaseDetailsById = async (caseId) => {
+  const [rows] = await pool.query(
+    `SELECT c.*, t.full_name, t.phone, t.email, t.passport_or_id, cat.id AS plan_id, cat.name AS plan_name, cat.product_type, cat.coverage, cat.flat_price
+     FROM cases c
+     JOIN travellers t ON c.traveller_id = t.id
+     LEFT JOIN catalogue cat ON c.selected_plan_id = cat.id
+     WHERE c.id = ? LIMIT 1`,
+    [caseId]
+  );
+  return rows[0];
+};

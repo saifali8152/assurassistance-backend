@@ -15,11 +15,11 @@ export const createTraveller = async (data) => {
 
 // Create Case
 export const createCase = async (data) => {
-  const { traveller_id, destination, start_date, end_date, selected_plan_id, created_by } = data;
+  const { traveller_id, destination, start_date, end_date, selected_plan_id, created_by, status } = data;
   const [result] = await pool.execute(
-    `INSERT INTO cases (traveller_id, destination, start_date, end_date, selected_plan_id, created_by)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [traveller_id, destination, start_date, end_date, selected_plan_id, created_by]
+    `INSERT INTO cases (traveller_id, destination, start_date, end_date, selected_plan_id, created_by, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [traveller_id, destination, start_date, end_date, selected_plan_id, created_by, status || "Draft"]
   );
   return result.insertId;
 };

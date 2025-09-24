@@ -137,3 +137,25 @@ export const getSaleByIdController = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+export const updatePaymentStatusController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { payment_status, payment_notes } = req.body;
+
+    if (!["Unpaid", "Paid", "Partial"].includes(payment_status)) {
+      return res.status(400).json({ message: "Invalid payment status" });
+    }
+
+    const updated = await updatePaymentStatus(id, payment_status, payment_notes);
+
+    if (!updated) {
+      return res.status(404).json({ message: "Sale not found" });
+    }
+
+    res.json({ message: "Payment status updated successfully" });
+  } catch (err) {
+    console.error("Error updating payment status:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};

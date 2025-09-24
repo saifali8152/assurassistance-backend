@@ -4,7 +4,8 @@ import authenticate from "../middlewares/authMiddleware.js";
 import {
   createSaleController,
   getAllSalesController,
-  getSaleByIdController
+  getSaleByIdController,
+  updatePaymentStatusController
 } from "../controllers/salesController.js";
 import { downloadInvoice, downloadCertificate } from "../controllers/documentController.js";
 
@@ -17,5 +18,5 @@ router.get("/:id", authenticate, getSaleByIdController);
 // download links
 router.get("/:id/invoice", authenticate, downloadInvoice);
 router.get("/:id/certificate", authenticate, downloadCertificate);
-
+router.patch("/:id/payment", authenticate, updatePaymentStatusController);
 export default router;

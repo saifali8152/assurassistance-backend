@@ -157,7 +157,7 @@ export const generateCertificatePDF = async ({ certificateNumber, sale, travelle
 
     doc.moveDown(2);
     doc.fontSize(8).fillColor("gray")
-      .text("AssurAssistance — Islamabad, Pakistan — 0123-45678", { align: "center" });
+      .text("AssurAssistance — Islamabad, Pakistan — 0123-456789", { align: "center" });
 
     doc.end();
 

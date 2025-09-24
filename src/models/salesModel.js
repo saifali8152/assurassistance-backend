@@ -1,3 +1,4 @@
+//src/models/salesModel.js
 import pool from "../db.js";
 
 // Create Sale

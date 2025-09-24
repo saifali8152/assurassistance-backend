@@ -1,5 +1,7 @@
 // src/server.js
 import dotenv from 'dotenv';
+import { fileURLToPath } from "url";
+import path from 'path';
 dotenv.config();
 
 import express from 'express';
@@ -32,5 +34,11 @@ app.use('/api/catalogue', catalogueRoutes);
 app.use("/api/cases", caseRoutes);
 app.use("/api/sales",salesRoute)
 app.get('/', (req, res) => res.send('Assur Assistance Backend is running'));
+// Serve uploads
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+// Serve static files for invoices/certificates
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

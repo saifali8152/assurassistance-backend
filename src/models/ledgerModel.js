@@ -50,18 +50,28 @@ export const getLedger = async ({ role, agentId, startDate, endDate, status, pay
   const total = countRows[0].total;
 
   // fetch page
-const dataSQL = `
-  SELECT s.id as sale_id, s.case_id, c.created_by as agent_id, 
-    t.full_name as traveller_name, t.phone as traveller_phone,
-    cat.name as plan_name, cat.product_type,
-    s.policy_number, s.certificate_number, s.premium_amount, s.tax, s.total,
-    s.received_amount,              
-    s.payment_status, s.payment_notes,     
-    s.confirmed_at
-  ${baseSQL}
-  ORDER BY s.confirmed_at DESC
-  LIMIT ? OFFSET ?`;
-
+  const dataSQL = `
+    SELECT 
+      s.id as sale_id, 
+      s.case_id, 
+      c.created_by as agent_id, 
+      t.full_name as traveller_name, 
+      t.phone as traveller_phone,
+      cat.name as plan_name, 
+      cat.product_type,
+      s.policy_number, 
+      s.certificate_number, 
+      s.premium_amount, 
+      s.tax, 
+      s.total,
+      COALESCE(s.received_amount, 0) as received_amount,
+      COALESCE(s.payment_notes, '') as payment_notes,
+      s.payment_status, 
+      s.confirmed_at
+    ${baseSQL}
+    ORDER BY s.confirmed_at DESC
+    LIMIT ? OFFSET ?
+  `;
   const dataParams = [...params, Number(limit), Number(offset)];
   const [rows] = await pool.query(dataSQL, dataParams);
 

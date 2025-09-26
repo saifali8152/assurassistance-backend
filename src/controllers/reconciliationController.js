@@ -3,10 +3,14 @@ import { Parser } from "json2csv";
 
 export const getReconciliationController = async (req, res) => {
   try {
-    const { month } = req.query; // e.g., "2025-09"
-    if (!month) return res.status(400).json({ message: "Month is required" });
+    const { month, year } = req.query; // month: "Sep", year: "2025"
+    if (!month || !year) return res.status(400).json({ message: "Month and year are required" });
 
-    const data = await getMonthlyReconciliation(month);
+    // Convert to "YYYY-MM" for SQL
+    const monthNum = ("0" + (["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].indexOf(month) + 1)).slice(-2);
+    const sqlMonth = `${year}-${monthNum}`;
+
+    const data = await getMonthlyReconciliation(sqlMonth);
     res.json({ success: true, data });
   } catch (err) {
     console.error("Error fetching reconciliation:", err);

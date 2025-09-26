@@ -36,22 +36,27 @@ export const updatePaymentStatus = async (saleId, payment_status, payment_notes)
 };
 
 export const getMonthlyReconciliation = async (month) => {
+  // month format: "2025-09"
   const [rows] = await pool.query(
     `SELECT 
         u.id as user_id,
-        u.full_name as agent_name,
+        u.name as agent_name,
+        DATE_FORMAT(s.confirmed_at, '%b-%Y') as month,
         COUNT(s.id) as total_sales,
         SUM(s.total) as total_amount,
-        SUM(CASE WHEN s.payment_status='Paid' THEN s.total ELSE 0 END) as total_paid,
-        SUM(CASE WHEN s.payment_status='Unpaid' THEN s.total ELSE 0 END) as total_unpaid,
-        SUM(CASE WHEN s.payment_status='Partial' THEN s.total ELSE 0 END) as total_partial
+        SUM(CASE WHEN s.payment_status='Paid' THEN s.total ELSE 0 END) as paid_amount,
+        SUM(CASE WHEN s.payment_status='Unpaid' THEN s.total ELSE 0 END) as unpaid_amount,
+        SUM(CASE WHEN s.payment_status='Partial' THEN s.total ELSE 0 END) as partial_amount,
+        SUM(s.total) - SUM(s.received_amount) as balance_due,
+        SUM(s.received_amount) as gross_collected,
+        SUM(s.tax) as fees,
+        SUM(s.received_amount) - SUM(s.tax) as net_due
      FROM sales s
-     JOIN users u ON u.id = s.created_by
-     WHERE DATE_FORMAT(s.created_at, '%Y-%m') = ?
-     GROUP BY u.id`,
+     JOIN cases c ON c.id = s.case_id
+     JOIN users u ON u.id = c.created_by
+     WHERE DATE_FORMAT(s.confirmed_at, '%Y-%m') = ?
+     GROUP BY u.id, month`,
     [month]
   );
   return rows;
 };
-
-

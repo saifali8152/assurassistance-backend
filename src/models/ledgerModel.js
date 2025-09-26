@@ -51,10 +51,13 @@ export const getLedger = async ({ role, agentId, startDate, endDate, status, pay
 
   // fetch page
   const dataSQL = `
-    SELECT s.id as sale_id, s.case_id, c.created_by as agent_id, t.full_name as traveller_name,
-           t.phone as traveller_phone, cat.name as plan_name, cat.product_type,
-           s.policy_number, s.certificate_number, s.premium_amount, s.tax, s.total,
-           s.payment_status, s.confirmed_at
+    SELECT s.id as sale_id, s.case_id, c.created_by as agent_id, 
+       t.full_name as traveller_name, t.phone as traveller_phone,
+       cat.name as plan_name, cat.product_type,
+       s.policy_number, s.certificate_number, s.premium_amount, s.tax, s.total,
+       s.payment_status, s.payment_notes,     
+       s.confirmed_at
+
     ${baseSQL}
     ORDER BY s.confirmed_at DESC
     LIMIT ? OFFSET ?`;

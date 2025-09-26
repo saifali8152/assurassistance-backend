@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import { createSale, getAllSales, getSaleById } from "../models/salesModel.js";
+import { createSale, getAllSales, getSaleById,updatePaymentStatus } from "../models/salesModel.js";
 import { createInvoice, updateInvoicePdf } from "../models/invoiceModel.js";
 import { createCertificate, updateCertificatePdf } from "../models/certificateModel.js";
 import { getCaseDetailsById } from "../models/caseModel.js";

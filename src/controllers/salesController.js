@@ -4,6 +4,7 @@ import { createInvoice, updateInvoicePdf } from "../models/invoiceModel.js";
 import { createCertificate, updateCertificatePdf } from "../models/certificateModel.js";
 import { getCaseDetailsById } from "../models/caseModel.js";
 import { generateInvoicePDF, generateCertificatePDF } from "../utils/pdfGenerator.js";
+import pool from "../db.js";
 
 export const createSaleController = async (req, res) => {
   try {
@@ -139,23 +140,19 @@ export const getSaleByIdController = async (req, res) => {
 };
 
 export const updatePaymentStatusController = async (req, res) => {
+  const { id } = req.params;
+  const { payment_status, payment_notes, received_amount } = req.body;
+
   try {
-    const { id } = req.params;
-    const { payment_status, payment_notes } = req.body;
-
-    if (!["Unpaid", "Paid", "Partial"].includes(payment_status)) {
-      return res.status(400).json({ message: "Invalid payment status" });
-    }
-
-    const updated = await updatePaymentStatus(id, payment_status, payment_notes);
-
-    if (!updated) {
-      return res.status(404).json({ message: "Sale not found" });
-    }
-
-    res.json({ message: "Payment status updated successfully" });
+    await pool.execute(
+      `UPDATE sales 
+       SET payment_status = ?, payment_notes = ?, received_amount = ?
+       WHERE id = ?`,
+      [payment_status, payment_notes || "", received_amount || 0, id]
+    );
+    res.json({ message: "Payment details updated successfully" });
   } catch (err) {
-    console.error("Error updating payment status:", err);
-    res.status(500).json({ message: "Server error" });
+    console.error(err);
+    res.status(500).json({ error: "Failed to update payment details" });
   }
 };

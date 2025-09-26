@@ -1,11 +1,7 @@
 // src/models/ledgerModel.js
 import pool from "../db.js";
 
-/**
- * Get ledger rows with filters, pagination and search.
- * filters: { agentId, startDate, endDate, status, paymentStatus, search, page, limit }
- * role: 'admin'|'agent' (agent means only their sales)
- */
+
 export const getLedger = async ({ role, agentId, startDate, endDate, status, paymentStatus, search, page = 1, limit = 25 }) => {
   const offset = (page - 1) * limit;
   const params = [];

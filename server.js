@@ -155,6 +155,29 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.use("/api/reconciliation", reconciliationRoute);
 app.use("/api/ledger", ledgerRoutes);
 app.use("/api/activity-log", activityLogRoutes);
+
+// 404 for unknown API routes (so proxy gets a response, not hang)
+app.use('/api', (req, res, next) => {
+  const origin = req.get('Origin');
+  if (origin && origins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  res.status(404).json({ message: 'Not found' });
+});
+
+// Global error handler: always send a response so proxy never sees "bad gateway"
+app.use((err, req, res, next) => {
+  const origin = req.get('Origin');
+  if (origin && origins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  if (res.headersSent) return next(err);
+  console.error('Unhandled error:', err);
+  res.status(500).json({ message: 'Server error' });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`server is running on ${PORT}`);
 });

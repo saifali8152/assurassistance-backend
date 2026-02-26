@@ -5,7 +5,7 @@ let pool = null;
 // Initialize the database pool
 export const initializePool = (config) => {
   if (!pool) {
-    pool = mysql.createPool({
+    const rawPool = mysql.createPool({
       host: config.DB_HOST,
       port: Number(config.DB_PORT || 3306),
       user: config.DB_USER,
@@ -13,8 +13,16 @@ export const initializePool = (config) => {
       database: config.DB_NAME,
       waitForConnections: true,
       connectionLimit: 10,
-      queueLimit: 0
-    }).promise();
+      queueLimit: 0,
+      connectTimeout: 60000, // 60s (helps slow/VPC connections)
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 10000,
+    });
+    // Prevent pool errors (e.g. ETIMEDOUT) from crashing the process
+    rawPool.on('error', (err) => {
+      console.error('Database pool error:', err.code || err.message);
+    });
+    pool = rawPool.promise();
   }
   return pool;
 };

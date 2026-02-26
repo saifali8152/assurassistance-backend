@@ -61,11 +61,52 @@ emailTransporter.verify((error, success) => {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ✅ CORS first (before any other middleware) so headers are always set
+const allowedOrigins = [
+  'https://assurassistancepro.org',
+  'https://www.assurassistancepro.org',
+  'https://app.acareeracademy.com',
+  'https://acareeracademy.com',
+  'https://www.acareeracademy.com',
+  'http://localhost:3000',
+  'http://localhost:5173'
+];
+const extraOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+const origins = [...new Set([...allowedOrigins, ...extraOrigins])];
 
+// Handle preflight for all /api routes first so CORS headers are always sent (helps behind proxy)
+app.use('/api', (req, res, next) => {
+  if (req.method !== 'OPTIONS') return next();
+  const origin = req.get('Origin');
+  if (origin && origins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  }
+  res.sendStatus(204);
+});
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (origins.includes(origin)) return callback(null, true);
+      callback(null, false);
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    credentials: true,
+    optionsSuccessStatus: 204,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  })
+);
 
 // Basic input sanitization (simplified)
 app.use((req, res, next) => {
-  // Basic XSS protection
   if (req.body && typeof req.body === 'object') {
     const sanitizeString = (str) => {
       if (typeof str === 'string') {
@@ -76,11 +117,8 @@ app.use((req, res, next) => {
       }
       return str;
     };
-    
     const sanitizeObject = (obj) => {
-      if (Array.isArray(obj)) {
-        return obj.map(sanitizeObject);
-      }
+      if (Array.isArray(obj)) return obj.map(sanitizeObject);
       if (obj && typeof obj === 'object') {
         const sanitized = {};
         for (const [key, value] of Object.entries(obj)) {
@@ -90,47 +128,10 @@ app.use((req, res, next) => {
       }
       return sanitizeString(obj);
     };
-    
     req.body = sanitizeObject(req.body);
   }
   next();
 });
-
-
-// ✅ Secure CORS configuration
-const allowedOrigins = [
-  // AssurAssistance production
-  'https://assurassistancepro.org',
-  'https://www.assurassistancepro.org',
-  // Legacy / other
-  'https://app.acareeracademy.com',
-  'https://acareeracademy.com',
-  'https://www.acareeracademy.com',
-  process.env.FRONTEND_URL || 'https://assurassistancepro.org',
-  // Local development
-  'http://localhost:3000',
-  'http://localhost:5173'
-];
-
-
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  credentials: true,
-  optionsSuccessStatus: 200,
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
-  exposedHeaders: ["Content-Range", "X-Content-Range"]
-}));
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));

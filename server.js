@@ -99,10 +99,15 @@ app.use((req, res, next) => {
 
 // ✅ Secure CORS configuration
 const allowedOrigins = [
+  // AssurAssistance production
+  'https://assurassistancepro.org',
+  'https://www.assurassistancepro.org',
+  // Legacy / other
   'https://app.acareeracademy.com',
   'https://acareeracademy.com',
   'https://www.acareeracademy.com',
-  process.env.FRONTEND_URL || 'https://acareeracademy.com',
+  process.env.FRONTEND_URL || 'https://assurassistancepro.org',
+  // Local development
   'http://localhost:3000',
   'http://localhost:5173'
 ];

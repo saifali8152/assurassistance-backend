@@ -4,7 +4,7 @@ import getPool from "../utils/db.js"; // your mysql connection
 export const createCatalogue = async (req, res) => {
     try {
         const pool = getPool();
-        const { product_type, name, pricing_rules, flat_price, country_of_residence, route_type, currency } = req.body;
+        const { product_type, name, coverage, pricing_rules, flat_price, country_of_residence, route_type, currency } = req.body;
         
         // Handle country_of_residence: convert empty string to null, otherwise use the value
         const countryValue = (country_of_residence && typeof country_of_residence === 'string' && country_of_residence.trim() !== '') 
@@ -16,10 +16,12 @@ export const createCatalogue = async (req, res) => {
             ? route_type.trim() 
             : null;
         
+        const coverageValue = (coverage != null && String(coverage).trim() !== '') ? String(coverage).trim() : null;
+        
         await pool.query(
-            `INSERT INTO catalogue (product_type, name, pricing_rules, flat_price, country_of_residence, route_type, currency)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [product_type, name, JSON.stringify(pricing_rules), flat_price, countryValue, routeValue, currency || 'XOF']
+            `INSERT INTO catalogue (product_type, name, coverage, pricing_rules, flat_price, country_of_residence, route_type, currency)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [product_type, name, coverageValue, JSON.stringify(pricing_rules), flat_price, countryValue, routeValue, currency || 'XOF']
         );
         res.status(201).json({ success: true, message: 'Catalogue plan created successfully' });
     } catch (err) {
@@ -62,7 +64,7 @@ export const updateCatalogue = async (req, res) => {
     try {
         const pool = getPool();
         const { id } = req.params;
-        const { product_type, name, pricing_rules, flat_price, active, country_of_residence, route_type, currency } = req.body;
+        const { product_type, name, coverage, pricing_rules, flat_price, active, country_of_residence, route_type, currency } = req.body;
         
         // Handle country_of_residence: convert empty string to null, otherwise use the value
         const countryValue = (country_of_residence && typeof country_of_residence === 'string' && country_of_residence.trim() !== '') 
@@ -74,9 +76,11 @@ export const updateCatalogue = async (req, res) => {
             ? route_type.trim() 
             : null;
         
+        const coverageValue = (coverage != null && String(coverage).trim() !== '') ? String(coverage).trim() : null;
+        
         await pool.query(
-            `UPDATE catalogue SET product_type=?, name=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=? WHERE id=?`,
-            [product_type, name, JSON.stringify(pricing_rules), flat_price, active, countryValue, routeValue, currency || 'XOF', id]
+            `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=? WHERE id=?`,
+            [product_type, name, coverageValue, JSON.stringify(pricing_rules), flat_price, active, countryValue, routeValue, currency || 'XOF', id]
         );
         res.json({ success: true, message: 'Catalogue updated successfully' });
     } catch (err) {

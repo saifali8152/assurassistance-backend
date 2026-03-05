@@ -22,10 +22,18 @@ export const createSale = async (data) => {
     ? JSON.stringify(guarantees_details) 
     : null;
   
+  // Coerce amounts to numbers and round to 2 decimals to avoid out-of-range or invalid values
+  const toAmount = (v) => (v != null && v !== '') ? Math.round(Number(v) * 100) / 100 : 0;
+  const premium = toAmount(premium_amount);
+  const taxVal = toAmount(tax);
+  const totalVal = toAmount(total);
+  const planPrice = toAmount(plan_price);
+  const guaranteesTotal = toAmount(guarantees_total);
+  
   const [result] = await pool.execute(
     `INSERT INTO sales (case_id, policy_number, certificate_number, premium_amount, tax, total, currency, plan_price, guarantees_total, guarantees_details, payment_status, confirmed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Unpaid', NOW())`,
-    [case_id, policy_number, certificate_number, premium_amount, tax, total, currency, plan_price, guarantees_total, guaranteesDetailsJson]
+    [case_id, policy_number, certificate_number, premium, taxVal, totalVal, currency, planPrice, guaranteesTotal, guaranteesDetailsJson]
   );
   return result.insertId;
 };

@@ -22,8 +22,15 @@ export const createSale = async (data) => {
     ? JSON.stringify(guarantees_details) 
     : null;
   
-  // Coerce amounts to numbers and round to 2 decimals to avoid out-of-range or invalid values
-  const toAmount = (v) => (v != null && v !== '') ? Math.round(Number(v) * 100) / 100 : 0;
+  // Coerce amounts to numbers, round to 2 decimals, and cap to safe range for DECIMAL(15,2)
+  const MAX_AMOUNT = 999999999999.99;
+  const toAmount = (v) => {
+    if (v == null || v === '') return 0;
+    const n = Number(v);
+    if (Number.isNaN(n) || !Number.isFinite(n)) return 0;
+    const rounded = Math.round(n * 100) / 100;
+    return Math.max(-MAX_AMOUNT, Math.min(MAX_AMOUNT, rounded));
+  };
   const premium = toAmount(premium_amount);
   const taxVal = toAmount(tax);
   const totalVal = toAmount(total);

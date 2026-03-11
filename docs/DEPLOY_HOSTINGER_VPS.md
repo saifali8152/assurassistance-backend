@@ -420,3 +420,7 @@ chmod 755 uploads
 - **Permission denied on uploads:** Ensure `uploads` exists and is writable by the user running Node.
 
 Your backend will be at `http://YOUR_VPS_IP:3000`, or at `https://your-api-domain.com` if you set up Nginx, DNS, and SSL (certbot).
+
+
+ssh root@187.77.172.212
+?Eg7ouw'CcC?Dni4UKm8

@@ -1,6 +1,6 @@
 // src/controllers/adminController.js
 import bcrypt from 'bcryptjs';
-import { createUser, findUserByEmail, getAllUsers, getAgents } from '../models/userModel.js';
+import { createUser, findUserByEmail, getAllUsers, getAgents, findUserById, updateAgentProfile, getAgentAssignedPlanIds, setAgentAssignedPlans } from '../models/userModel.js';
 import crypto from 'crypto';
 import { updateUserStatus } from '../models/userModel.js';
 import getPool from '../utils/db.js';
@@ -8,10 +8,23 @@ import { generateStrongPassword } from '../utils/passwordUtils.js';
 import sendEmail from '../utils/emailService.js';
 import { agentWelcomeTemplate, passwordResetLinkTemplate } from '../utils/emailTemplates.js';
 
+const REQUIRED_AGENT_FIELDS = ['company_name', 'partnership_type', 'country_of_residence', 'whatsapp_phone'];
+
 export const createAgent = async (req, res) => {
   try {
-    const { name, email, tempPassword } = req.body;
+    const {
+      name, email, tempPassword,
+      company_name, partnership_type, country_of_residence, whatsapp_phone,
+      iata_number, geographical_location, work_phone,
+      assigned_plan_ids
+    } = req.body;
     if (!name || !email) return res.status(400).json({ message: 'Name and email are required' });
+    for (const field of REQUIRED_AGENT_FIELDS) {
+      const val = req.body[field];
+      if (val == null || (typeof val === 'string' && val.trim() === '')) {
+        return res.status(400).json({ message: `${field.replace(/_/g, ' ')} is required` });
+      }
+    }
 
     const exists = await findUserByEmail(email);
     if (exists) return res.status(400).json({ message: 'User with this email already exists' });
@@ -20,8 +33,17 @@ export const createAgent = async (req, res) => {
     const password = tempPassword || generateStrongPassword(12);
     const hashed = await bcrypt.hash(password, 10);
 
-    // role for Agent is 'agent'
-    const userId = await createUser({ name, email, password: hashed, role: 'agent', force_password_change: 1 });
+    const userId = await createUser({
+      name, email, password: hashed, role: 'agent', force_password_change: 1,
+      company_name: company_name || null, partnership_type: partnership_type || null,
+      country_of_residence: country_of_residence || null, whatsapp_phone: whatsapp_phone || null,
+      iata_number: iata_number || null, geographical_location: geographical_location || null,
+      work_phone: work_phone || null
+    });
+
+    if (assigned_plan_ids && Array.isArray(assigned_plan_ids) && assigned_plan_ids.length > 0) {
+      await setAgentAssignedPlans(userId, assigned_plan_ids.map((id) => parseInt(id, 10)));
+    }
 
     // Send welcome email to agent
     try {
@@ -84,17 +106,21 @@ export const listAgents = async (req, res) => {
       params
     );
     
-    // Get paginated results
+    // Get paginated results (include agent profile fields and assigned plan ids)
     const [agents] = await pool.query(`
       SELECT 
-        u.id, u.name, u.email, u.status, u.created_at, u.force_password_change,u.last_login,
-        COUNT(c.id) as total_cases,
-        SUM(s.received_amount) as total_collected,
+        u.id, u.name, u.email, u.status, u.created_at, u.force_password_change, u.last_login,
+        u.company_name, u.partnership_type, u.country_of_residence, u.iata_number,
+        u.geographical_location, u.work_phone, u.whatsapp_phone,
+        GROUP_CONCAT(DISTINCT uap.catalogue_id) AS assigned_plan_ids,
+        COUNT(DISTINCT c.id) as total_cases,
+        COALESCE(SUM(DISTINCT s.received_amount), 0) as total_collected,
         MAX(a.activity_date) as last_activity
       FROM users u
       LEFT JOIN cases c ON c.created_by = u.id
       LEFT JOIN sales s ON s.case_id = c.id
       LEFT JOIN user_activity a ON a.user_id = u.id
+      LEFT JOIN user_assigned_plans uap ON uap.user_id = u.id
       ${whereClause}
       GROUP BY u.id
       ORDER BY u.created_at DESC
@@ -117,6 +143,73 @@ export const listAgents = async (req, res) => {
         }
       }
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const getAgent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await findUserById(id);
+    if (!user || user.role_name !== 'agent') {
+      return res.status(404).json({ message: 'Agent not found' });
+    }
+    const assigned_plan_ids = await getAgentAssignedPlanIds(parseInt(id, 10));
+    res.json({
+      success: true,
+      data: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        status: user.status,
+        force_password_change: user.force_password_change,
+        last_login: user.last_login,
+        created_at: user.created_at,
+        company_name: user.company_name,
+        partnership_type: user.partnership_type,
+        country_of_residence: user.country_of_residence,
+        iata_number: user.iata_number,
+        geographical_location: user.geographical_location,
+        work_phone: user.work_phone,
+        whatsapp_phone: user.whatsapp_phone,
+        assigned_plan_ids
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const updateAgent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await findUserById(id);
+    if (!user || user.role_name !== 'agent') {
+      return res.status(404).json({ message: 'Agent not found' });
+    }
+    const {
+      name, company_name, partnership_type, country_of_residence, whatsapp_phone,
+      iata_number, geographical_location, work_phone, assigned_plan_ids
+    } = req.body;
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (company_name !== undefined) updates.company_name = company_name;
+    if (partnership_type !== undefined) updates.partnership_type = partnership_type;
+    if (country_of_residence !== undefined) updates.country_of_residence = country_of_residence;
+    if (whatsapp_phone !== undefined) updates.whatsapp_phone = whatsapp_phone;
+    if (iata_number !== undefined) updates.iata_number = iata_number;
+    if (geographical_location !== undefined) updates.geographical_location = geographical_location;
+    if (work_phone !== undefined) updates.work_phone = work_phone;
+    if (Object.keys(updates).length > 0) {
+      await updateAgentProfile(parseInt(id, 10), updates);
+    }
+    if (assigned_plan_ids !== undefined && Array.isArray(assigned_plan_ids)) {
+      await setAgentAssignedPlans(parseInt(id, 10), assigned_plan_ids.map((x) => parseInt(x, 10)));
+    }
+    res.json({ success: true, message: 'Agent updated successfully' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });

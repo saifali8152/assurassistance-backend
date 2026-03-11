@@ -22,13 +22,67 @@ export const findUserById = async (id) => {
   return rows[0];
 };
 
-export const createUser = async ({ name, email, password, role, force_password_change = 0 }) => {
+export const createUser = async ({
+  name, email, password, role, force_password_change = 0,
+  company_name = null, partnership_type = null, country_of_residence = null,
+  iata_number = null, geographical_location = null, work_phone = null, whatsapp_phone = null
+}) => {
   const pool = getPool();
   const [result] = await pool.execute(
-    'INSERT INTO users (name, email, password, role, force_password_change) VALUES (?, ?, ?, ?, ?)',
-    [name, email, password, role, force_password_change ? 1 : 0]
+    `INSERT INTO users (name, email, password, role, force_password_change,
+      company_name, partnership_type, country_of_residence, iata_number,
+      geographical_location, work_phone, whatsapp_phone)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      name, email, password, role, force_password_change ? 1 : 0,
+      company_name || null, partnership_type || null, country_of_residence || null,
+      iata_number || null, geographical_location || null, work_phone || null, whatsapp_phone || null
+    ]
   );
   return result.insertId;
+};
+
+export const updateAgentProfile = async (userId, {
+  name, company_name, partnership_type, country_of_residence, iata_number,
+  geographical_location, work_phone, whatsapp_phone
+}) => {
+  const pool = getPool();
+  const updates = [];
+  const values = [];
+  if (name !== undefined) { updates.push('name = ?'); values.push(name); }
+  if (company_name !== undefined) { updates.push('company_name = ?'); values.push(company_name || null); }
+  if (partnership_type !== undefined) { updates.push('partnership_type = ?'); values.push(partnership_type || null); }
+  if (country_of_residence !== undefined) { updates.push('country_of_residence = ?'); values.push(country_of_residence || null); }
+  if (iata_number !== undefined) { updates.push('iata_number = ?'); values.push(iata_number || null); }
+  if (geographical_location !== undefined) { updates.push('geographical_location = ?'); values.push(geographical_location || null); }
+  if (work_phone !== undefined) { updates.push('work_phone = ?'); values.push(work_phone || null); }
+  if (whatsapp_phone !== undefined) { updates.push('whatsapp_phone = ?'); values.push(whatsapp_phone || null); }
+  if (updates.length === 0) return 0;
+  values.push(userId);
+  const [result] = await pool.execute(
+    `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
+    values
+  );
+  return result.affectedRows;
+};
+
+export const getAgentAssignedPlanIds = async (userId) => {
+  const pool = getPool();
+  const [rows] = await pool.query('SELECT catalogue_id FROM user_assigned_plans WHERE user_id = ?', [userId]);
+  return rows.map((r) => r.catalogue_id);
+};
+
+export const setAgentAssignedPlans = async (userId, catalogueIds) => {
+  const pool = getPool();
+  await pool.execute('DELETE FROM user_assigned_plans WHERE user_id = ?', [userId]);
+  if (catalogueIds && catalogueIds.length > 0) {
+    const placeholders = catalogueIds.map(() => '(?, ?)').join(', ');
+    const values = catalogueIds.flatMap((id) => [userId, id]);
+    await pool.execute(
+      `INSERT INTO user_assigned_plans (user_id, catalogue_id) VALUES ${placeholders}`,
+      values
+    );
+  }
 };
 
 export const getAllUsers = async () => {

@@ -1,6 +1,6 @@
 // src/controllers/adminController.js
 import bcrypt from 'bcryptjs';
-import { createUser, findUserByEmail, getAllUsers, getAgents, findUserById, updateAgentProfile, getAgentAssignedPlanIds, setAgentAssignedPlans } from '../models/userModel.js';
+import { createUser, findUserByEmail, getAllUsers, getAgents, findUserById, updateAgentProfile, getAgentAssignedPlanIds, setAgentAssignedPlans, getSubAgents } from '../models/userModel.js';
 import crypto from 'crypto';
 import { updateUserStatus } from '../models/userModel.js';
 import getPool from '../utils/db.js';
@@ -86,8 +86,8 @@ export const listAgents = async (req, res) => {
     
     const pool = getPool();
     
-    // Build WHERE clause for filtering
-    let whereClause = "WHERE u.role = 'agent'";
+    // Build WHERE clause for filtering (only main agents; sub-agents have parent_agent_id set)
+    let whereClause = "WHERE u.role = 'agent' AND (u.parent_agent_id IS NULL OR u.parent_agent_id = 0)";
     const params = [];
     
     if (search) {
@@ -157,6 +157,8 @@ export const getAgent = async (req, res) => {
       return res.status(404).json({ message: 'Agent not found' });
     }
     const assigned_plan_ids = await getAgentAssignedPlanIds(parseInt(id, 10));
+    const isMainAgent = user.parent_agent_id == null;
+    const sub_agents = isMainAgent ? await getSubAgents(parseInt(id, 10)) : [];
     res.json({
       success: true,
       data: {
@@ -174,7 +176,18 @@ export const getAgent = async (req, res) => {
         geographical_location: user.geographical_location,
         work_phone: user.work_phone,
         whatsapp_phone: user.whatsapp_phone,
-        assigned_plan_ids
+        assigned_plan_ids,
+        parent_agent_id: user.parent_agent_id,
+        sub_agents: sub_agents.map((s) => ({
+          id: s.id,
+          name: s.name,
+          email: s.email,
+          status: s.status,
+          work_phone: s.work_phone,
+          whatsapp_phone: s.whatsapp_phone,
+          created_at: s.created_at,
+          assigned_plan_ids: s.assigned_plan_ids ? String(s.assigned_plan_ids).split(',').map((x) => parseInt(x, 10)).filter((n) => !Number.isNaN(n)) : []
+        }))
       }
     });
   } catch (err) {
@@ -210,6 +223,103 @@ export const updateAgent = async (req, res) => {
       await setAgentAssignedPlans(parseInt(id, 10), assigned_plan_ids.map((x) => parseInt(x, 10)));
     }
     res.json({ success: true, message: 'Agent updated successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+export const listSubAgents = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const parent = await findUserById(id);
+    if (!parent || parent.role_name !== 'agent') {
+      return res.status(404).json({ message: 'Agent not found' });
+    }
+    if (parent.parent_agent_id != null) {
+      return res.status(400).json({ message: 'Sub-agents can only be added to main agents' });
+    }
+    const subAgents = await getSubAgents(parseInt(id, 10));
+    const withPlanIds = await Promise.all(
+      subAgents.map(async (s) => {
+        const planIds = await getAgentAssignedPlanIds(s.id);
+        return {
+          id: s.id,
+          name: s.name,
+          email: s.email,
+          status: s.status,
+          work_phone: s.work_phone,
+          whatsapp_phone: s.whatsapp_phone,
+          created_at: s.created_at,
+          assigned_plan_ids: planIds
+        };
+      })
+    );
+    res.json({ success: true, data: withPlanIds });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+const REQUIRED_SUB_AGENT_FIELDS = ['first_name', 'last_name', 'email', 'whatsapp_phone', 'assigned_plan_ids'];
+
+export const createSubAgent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const parent = await findUserById(id);
+    if (!parent || parent.role_name !== 'agent') {
+      return res.status(404).json({ message: 'Agent not found' });
+    }
+    if (parent.parent_agent_id != null) {
+      return res.status(400).json({ message: 'Sub-agents can only be added to main agents' });
+    }
+    const { first_name, last_name, email, work_phone, whatsapp_phone, assigned_plan_ids } = req.body;
+    const name = [first_name, last_name].filter(Boolean).map((s) => (s || '').trim()).join(' ').trim();
+    if (!name || !email || !whatsapp_phone) {
+      return res.status(400).json({ message: 'First name, last name, email and WhatsApp phone are required' });
+    }
+    if (!assigned_plan_ids || !Array.isArray(assigned_plan_ids) || assigned_plan_ids.length === 0) {
+      return res.status(400).json({ message: 'At least one assigned plan is required' });
+    }
+    const exists = await findUserByEmail(email);
+    if (exists) return res.status(400).json({ message: 'User with this email already exists' });
+
+    const password = generateStrongPassword(12);
+    const hashed = await bcrypt.hash(password, 10);
+    const agentId = parseInt(id, 10);
+
+    const userId = await createUser({
+      name,
+      email: email.trim(),
+      password: hashed,
+      role: 'agent',
+      force_password_change: 1,
+      company_name: null,
+      partnership_type: null,
+      country_of_residence: null,
+      iata_number: null,
+      geographical_location: null,
+      work_phone: (work_phone && work_phone.trim()) || null,
+      whatsapp_phone: whatsapp_phone.trim(),
+      parent_agent_id: agentId
+    });
+
+    await setAgentAssignedPlans(userId, assigned_plan_ids.map((x) => parseInt(x, 10)));
+
+    try {
+      const loginUrl = `${process.env.FRONTEND_URL || 'https://acareeracademy.com'}/login`;
+      const emailTemplate = agentWelcomeTemplate(name, password, loginUrl);
+      await sendEmail(email.trim(), emailTemplate.subject, emailTemplate.text, emailTemplate.html);
+    } catch (emailErr) {
+      console.error('Failed to send welcome email to sub-agent:', emailErr);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: { id: userId, email: email.trim(), tempPassword: password },
+      message: 'Sub-agent created successfully. Welcome email sent.'
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });

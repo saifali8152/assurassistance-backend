@@ -5,12 +5,18 @@ import { format } from "@fast-csv/format";
 export const listLedger = async (req, res) => {
   try {
     const role = req.user.role; // 'admin' or 'agent'
+    let agentIds = null;
+    if (role === "agent") {
+      const { getAgentVisibilityIds } = await import("../models/userModel.js");
+      agentIds = await getAgentVisibilityIds(req.user.id);
+    }
     const agentId = req.user.id;
     const { startDate, endDate, status, paymentStatus, search, page = 1, limit = 25 } = req.query;
 
     const result = await getLedger({
       role,
       agentId,
+      agentIds,
       startDate,
       endDate,
       status,
@@ -35,11 +41,17 @@ export const exportLedgerCsv = async (req, res) => {
   try {
     const role = req.user.role;
     const agentId = req.user.id;
+    let agentIds = null;
+    if (role === "agent") {
+      const { getAgentVisibilityIds } = await import("../models/userModel.js");
+      agentIds = await getAgentVisibilityIds(req.user.id);
+    }
     const { startDate, endDate, status, paymentStatus, search } = req.query;
 
     const result = await getLedger({
       role,
       agentId,
+      agentIds,
       startDate,
       endDate,
       status,

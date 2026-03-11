@@ -25,18 +25,20 @@ export const findUserById = async (id) => {
 export const createUser = async ({
   name, email, password, role, force_password_change = 0,
   company_name = null, partnership_type = null, country_of_residence = null,
-  iata_number = null, geographical_location = null, work_phone = null, whatsapp_phone = null
+  iata_number = null, geographical_location = null, work_phone = null, whatsapp_phone = null,
+  parent_agent_id = null
 }) => {
   const pool = getPool();
   const [result] = await pool.execute(
     `INSERT INTO users (name, email, password, role, force_password_change,
       company_name, partnership_type, country_of_residence, iata_number,
-      geographical_location, work_phone, whatsapp_phone)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      geographical_location, work_phone, whatsapp_phone, parent_agent_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       name, email, password, role, force_password_change ? 1 : 0,
       company_name || null, partnership_type || null, country_of_residence || null,
-      iata_number || null, geographical_location || null, work_phone || null, whatsapp_phone || null
+      iata_number || null, geographical_location || null, work_phone || null, whatsapp_phone || null,
+      parent_agent_id || null
     ]
   );
   return result.insertId;
@@ -100,7 +102,40 @@ export const getAgents = async () => {
     `SELECT u.id, u.name, u.email, u.role as role_name, u.status, 
             u.force_password_change, u.last_login, u.created_at
      FROM users u
-     WHERE u.role = 'agent'`  // Only return agents
+     WHERE u.role = 'agent'`
+  );
+  return rows;
+};
+
+/** Ids of sub-agents under a main agent (parent_agent_id = agentId) */
+export const getSubAgentIds = async (agentId) => {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    'SELECT id FROM users WHERE role = ? AND parent_agent_id = ?',
+    ['agent', agentId]
+  );
+  return rows.map((r) => r.id);
+};
+
+/** Full list of agent ids this user can see (self + sub-agents if main agent) */
+export const getAgentVisibilityIds = async (userId) => {
+  const user = await findUserById(userId);
+  if (!user || user.role_name !== 'agent') return [userId];
+  if (user.parent_agent_id != null) return [userId]; // sub-agent: only self
+  const subIds = await getSubAgentIds(userId);
+  return [userId, ...subIds];
+};
+
+/** Sub-agents under an agent (for admin list) */
+export const getSubAgents = async (agentId) => {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.email, u.status, u.work_phone, u.whatsapp_phone, u.created_at,
+            (SELECT GROUP_CONCAT(catalogue_id) FROM user_assigned_plans WHERE user_id = u.id) AS assigned_plan_ids
+     FROM users u
+     WHERE u.role = 'agent' AND u.parent_agent_id = ?
+     ORDER BY u.created_at DESC`,
+    [agentId]
   );
   return rows;
 };

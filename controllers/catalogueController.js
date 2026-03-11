@@ -30,16 +30,22 @@ export const createCatalogue = async (req, res) => {
     }
 };
 
-// Get all catalogues
+// Get all catalogues (Admin: all plans; Agent/Sub-agent: only assigned plans)
 export const getCatalogues = async (req, res) => {
     try {
         const pool = getPool();
-        let query = 'SELECT * FROM catalogue';
-        // Agents should only see active plans
-        if (req.user.role === 'agent') {
-            query += ' WHERE active = true';
+        let query;
+        const params = [];
+        if (req.user.role === 'admin') {
+            query = 'SELECT * FROM catalogue';
+        } else {
+            // Agent and sub-agent: only plans assigned to this user
+            query = `SELECT c.* FROM catalogue c
+                INNER JOIN user_assigned_plans uap ON uap.catalogue_id = c.id AND uap.user_id = ?
+                WHERE c.active = true`;
+            params.push(req.user.id);
         }
-        const [rows] = await pool.query(query);
+        const [rows] = await pool.query(query, params);
         // Parse pricing_rules JSON if it exists
         const parsedRows = rows.map(row => {
             if (row.pricing_rules && typeof row.pricing_rules === 'string') {

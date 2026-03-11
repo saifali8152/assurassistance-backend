@@ -50,33 +50,47 @@ export const createCase = async (data) => {
   return result.insertId;
 };
 
-// Get Cases for an Agent
+// Get Cases for an Agent (single id - backward compatible)
 export const getCasesByAgent = async (agentId) => {
+  return getCasesByAgentIds([agentId]);
+};
+
+// Get Cases for one or more agents (self + sub-agents for main agent)
+export const getCasesByAgentIds = async (agentIds) => {
+  if (!agentIds || agentIds.length === 0) return [];
   const pool = getPool();
+  const placeholders = agentIds.map(() => '?').join(',');
   const [rows] = await pool.query(
     `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, CONCAT(t.first_name, ' ', t.last_name) as full_name, cat.name as plan_name
      FROM cases c
      JOIN travellers t ON c.traveller_id = t.id
      JOIN catalogue cat ON c.selected_plan_id = cat.id
-     WHERE c.created_by = ?
+     WHERE c.created_by IN (${placeholders})
      ORDER BY c.created_at DESC`,
-    [agentId]
+    agentIds
   );
   return rows;
 };
 
-// Get Cases without Sales (Pending Sales)
+// Get Cases without Sales (Pending Sales) - single id
 export const getCasesWithoutSales = async (agentId) => {
+  return getCasesWithoutSalesByAgentIds([agentId]);
+};
+
+// Get Cases without Sales by agent ids (self + sub-agents)
+export const getCasesWithoutSalesByAgentIds = async (agentIds) => {
+  if (!agentIds || agentIds.length === 0) return [];
   const pool = getPool();
+  const placeholders = agentIds.map(() => '?').join(',');
   const [rows] = await pool.query(
     `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, CONCAT(t.first_name, ' ', t.last_name) as full_name, t.phone, t.email, cat.name as plan_name, cat.product_type, cat.coverage, cat.flat_price
      FROM cases c
      JOIN travellers t ON c.traveller_id = t.id
      JOIN catalogue cat ON c.selected_plan_id = cat.id
      LEFT JOIN sales s ON c.id = s.case_id
-     WHERE c.created_by = ? AND c.status = 'Confirmed' AND s.id IS NULL
+     WHERE c.created_by IN (${placeholders}) AND c.status = 'Confirmed' AND s.id IS NULL
      ORDER BY c.created_at DESC`,
-    [agentId]
+    agentIds
   );
   return rows;
 };
@@ -132,29 +146,36 @@ export const getAllCasesWithPagination = async (page = 1, limit = 10) => {
   };
 };
 
-// Get cases by agent with pagination
+// Get cases by agent with pagination (single id - backward compatible)
 export const getCasesByAgentWithPagination = async (agentId, page = 1, limit = 10) => {
+  return getCasesByAgentIdsWithPagination([agentId], page, limit);
+};
+
+// Get cases by agent ids with pagination (self + sub-agents)
+export const getCasesByAgentIdsWithPagination = async (agentIds, page = 1, limit = 10) => {
+  if (!agentIds || agentIds.length === 0) {
+    return { cases: [], totalCases: 0, totalPages: 0, currentPage: page };
+  }
   const pool = getPool();
   const offset = (page - 1) * limit;
+  const placeholders = agentIds.map(() => '?').join(',');
   
-  // Get total count for this agent
   const [countResult] = await pool.query(
-    'SELECT COUNT(*) as total FROM cases WHERE created_by = ?',
-    [agentId]
+    `SELECT COUNT(*) as total FROM cases WHERE created_by IN (${placeholders})`,
+    agentIds
   );
   const totalCases = countResult[0].total;
   
-  // Get cases with pagination
   const [rows] = await pool.query(
     `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, t.phone, t.email, t.address, t.passport_or_id, CONCAT(t.first_name, ' ', t.last_name) as full_name, cat.name as plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules, cat.currency, cat.country_of_residence as plan_country_of_residence, cat.route_type, s.id as sale_id, c.duration_days
      FROM cases c
      JOIN travellers t ON c.traveller_id = t.id
      JOIN catalogue cat ON c.selected_plan_id = cat.id
      LEFT JOIN sales s ON c.id = s.case_id
-     WHERE c.created_by = ?
+     WHERE c.created_by IN (${placeholders})
      ORDER BY c.created_at DESC
      LIMIT ? OFFSET ?`,
-    [agentId, limit, offset]
+    [...agentIds, limit, offset]
   );
   
   return {

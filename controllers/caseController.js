@@ -1,5 +1,6 @@
 // src/controllers/caseController.js
-import { createTraveller, createCase, getCasesByAgent, getCasesWithoutSales, updateCaseStatus, getAllCasesWithPagination, getCasesByAgentWithPagination, updateCaseAndTraveller } from "../models/caseModel.js";
+import { createTraveller, createCase, getCasesByAgentIds, getCasesWithoutSalesByAgentIds, updateCaseStatus, getAllCasesWithPagination, getCasesByAgentIdsWithPagination, updateCaseAndTraveller } from "../models/caseModel.js";
+import { getAgentVisibilityIds } from "../models/userModel.js";
 import { createSale } from "../models/salesModel.js";
 import { logActivity } from "../models/activityModel.js";  // <-- make sure this exists
 
@@ -31,10 +32,11 @@ export const createCaseWithTraveller = async (req, res) => {
 };
 
 
-// Get all cases for logged-in Agent
+// Get all cases for logged-in Agent (includes sub-agent cases for main agents)
 export const getMyCases = async (req, res) => {
   try {
-    const cases = await getCasesByAgent(req.user.id);
+    const agentIds = await getAgentVisibilityIds(req.user.id);
+    const cases = await getCasesByAgentIds(agentIds);
     res.json(cases);
   } catch (err) {
     console.error(err);
@@ -42,10 +44,11 @@ export const getMyCases = async (req, res) => {
   }
 };
 
-// Get cases without sales (pending sales)
+// Get cases without sales (pending sales) - agent + sub-agents
 export const getPendingSales = async (req, res) => {
   try {
-    const cases = await getCasesWithoutSales(req.user.id);
+    const agentIds = await getAgentVisibilityIds(req.user.id);
+    const cases = await getCasesWithoutSalesByAgentIds(agentIds);
     res.json(cases);
   } catch (err) {
     console.error(err);
@@ -81,13 +84,13 @@ export const getAllCases = async (req, res) => {
   }
 };
 
-// Get cases for agent with pagination
+// Get cases for agent with pagination (agent + sub-agents)
 export const getMyCasesWithPagination = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    
-    const result = await getCasesByAgentWithPagination(req.user.id, page, limit);
+    const agentIds = await getAgentVisibilityIds(req.user.id);
+    const result = await getCasesByAgentIdsWithPagination(agentIds, page, limit);
     res.json(result);
   } catch (err) {
     console.error(err);

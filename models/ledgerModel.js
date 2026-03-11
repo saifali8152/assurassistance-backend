@@ -2,16 +2,22 @@
 import getPool from "../utils/db.js";
 
 
-export const getLedger = async ({ role, agentId, startDate, endDate, status, paymentStatus, search, page = 1, limit = 25 }) => {
+export const getLedger = async ({ role, agentId, agentIds, startDate, endDate, status, paymentStatus, search, page = 1, limit = 25 }) => {
   const pool = getPool();
   const offset = (page - 1) * limit;
   const params = [];
   let whereClauses = [];
 
-  // If agent role, limit to their sales
+  // If agent role, limit to their sales (and sub-agents' if main agent)
   if (role === "agent") {
-    whereClauses.push("c.created_by = ?");
-    params.push(agentId);
+    const ids = agentIds && agentIds.length > 0 ? agentIds : [agentId];
+    if (ids.length === 1) {
+      whereClauses.push("c.created_by = ?");
+      params.push(ids[0]);
+    } else {
+      whereClauses.push(`c.created_by IN (${ids.map(() => "?").join(",")})`);
+      params.push(...ids);
+    }
   }
 
   if (startDate) {

@@ -1,7 +1,7 @@
 // src/routes/userRoutes.js
 import express from 'express';
 import authenticate from '../middlewares/authMiddleware.js';
-import { findUserById } from '../models/userModel.js';
+import { findUserById, getAgentVisibilityIds } from '../models/userModel.js';
 import getPool from '../utils/db.js';
 
 const router = express.Router();
@@ -28,13 +28,13 @@ router.get('/me', authenticate, async (req, res) => {
   }
 });
 
-// Agent dashboard - get recent sales for the logged-in agent
+// Agent dashboard - get recent sales for the logged-in agent (and sub-agents if main agent)
 router.get('/dashboard', authenticate, async (req, res) => {
   try {
-    const agentId = req.user.id;
+    const agentIds = await getAgentVisibilityIds(req.user.id);
     const pool = getPool();
+    const placeholders = agentIds.map(() => '?').join(',');
     
-    // Get recent sales for this agent (last 5)
     const [recentSales] = await pool.query(`
       SELECT 
         s.id as sale_id,
@@ -53,10 +53,10 @@ router.get('/dashboard', authenticate, async (req, res) => {
       JOIN cases c ON s.case_id = c.id
       JOIN travellers t ON c.traveller_id = t.id
       LEFT JOIN catalogue cat ON c.selected_plan_id = cat.id
-      WHERE c.created_by = ?
+      WHERE c.created_by IN (${placeholders})
       ORDER BY s.confirmed_at DESC
       LIMIT 5
-    `, [agentId]);
+    `, agentIds);
 
     res.json({
       success: true,

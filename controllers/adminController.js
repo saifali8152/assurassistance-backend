@@ -149,6 +149,17 @@ export const listAgents = async (req, res) => {
   }
 };
 
+const mapSubAgentRow = (s) => ({
+  id: s.id,
+  name: s.name,
+  email: s.email,
+  status: s.status,
+  work_phone: s.work_phone,
+  whatsapp_phone: s.whatsapp_phone,
+  created_at: s.created_at,
+  assigned_plan_ids: s.assigned_plan_ids ? String(s.assigned_plan_ids).split(',').map((x) => parseInt(x, 10)).filter((n) => !Number.isNaN(n)) : []
+});
+
 export const getAgent = async (req, res) => {
   try {
     const { id } = req.params;
@@ -157,8 +168,23 @@ export const getAgent = async (req, res) => {
       return res.status(404).json({ message: 'Agent not found' });
     }
     const assigned_plan_ids = await getAgentAssignedPlanIds(parseInt(id, 10));
-    const isMainAgent = user.parent_agent_id == null;
-    const sub_agents = isMainAgent ? await getSubAgents(parseInt(id, 10)) : [];
+    const isSupervisor = user.parent_agent_id == null;
+    let userType = 'supervisor';
+    if (!isSupervisor) {
+      const parent = await findUserById(user.parent_agent_id);
+      userType = parent && parent.parent_agent_id == null ? 'agent' : 'sub_agent';
+    }
+    let sub_agents = [];
+    if (isSupervisor) {
+      const agents = await getSubAgents(parseInt(id, 10));
+      sub_agents = await Promise.all(agents.map(async (a) => {
+        const subList = await getSubAgents(a.id);
+        return { ...mapSubAgentRow(a), type: 'agent', sub_agents: subList.map((s) => ({ ...mapSubAgentRow(s), type: 'sub_agent' })) };
+      }));
+    } else {
+      const children = await getSubAgents(parseInt(id, 10));
+      sub_agents = children.map((s) => ({ ...mapSubAgentRow(s), type: 'sub_agent' }));
+    }
     res.json({
       success: true,
       data: {
@@ -178,16 +204,8 @@ export const getAgent = async (req, res) => {
         whatsapp_phone: user.whatsapp_phone,
         assigned_plan_ids,
         parent_agent_id: user.parent_agent_id,
-        sub_agents: sub_agents.map((s) => ({
-          id: s.id,
-          name: s.name,
-          email: s.email,
-          status: s.status,
-          work_phone: s.work_phone,
-          whatsapp_phone: s.whatsapp_phone,
-          created_at: s.created_at,
-          assigned_plan_ids: s.assigned_plan_ids ? String(s.assigned_plan_ids).split(',').map((x) => parseInt(x, 10)).filter((n) => !Number.isNaN(n)) : []
-        }))
+        type: userType,
+        sub_agents
       }
     });
   } catch (err) {
@@ -236,9 +254,6 @@ export const listSubAgents = async (req, res) => {
     if (!parent || parent.role_name !== 'agent') {
       return res.status(404).json({ message: 'Agent not found' });
     }
-    if (parent.parent_agent_id != null) {
-      return res.status(400).json({ message: 'Sub-agents can only be added to main agents' });
-    }
     const subAgents = await getSubAgents(parseInt(id, 10));
     const withPlanIds = await Promise.all(
       subAgents.map(async (s) => {
@@ -270,9 +285,6 @@ export const createSubAgent = async (req, res) => {
     const parent = await findUserById(id);
     if (!parent || parent.role_name !== 'agent') {
       return res.status(404).json({ message: 'Agent not found' });
-    }
-    if (parent.parent_agent_id != null) {
-      return res.status(400).json({ message: 'Sub-agents can only be added to main agents' });
     }
     const { first_name, last_name, email, work_phone, whatsapp_phone, assigned_plan_ids } = req.body;
     const name = [first_name, last_name].filter(Boolean).map((s) => (s || '').trim()).join(' ').trim();

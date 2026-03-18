@@ -107,23 +107,39 @@ export const getAgents = async () => {
   return rows;
 };
 
-/** Ids of sub-agents under a main agent (parent_agent_id = agentId) */
-export const getSubAgentIds = async (agentId) => {
+/** Direct children (agents under supervisor, or sub-agents under agent) */
+export const getSubAgentIds = async (parentId) => {
   const pool = getPool();
   const [rows] = await pool.query(
     'SELECT id FROM users WHERE role = ? AND parent_agent_id = ?',
-    ['agent', agentId]
+    ['agent', parentId]
   );
   return rows.map((r) => r.id);
 };
 
-/** Full list of agent ids this user can see (self + sub-agents if main agent) */
+/** All descendant ids for a supervisor (agents + their sub-agents). Supervisor → Agent → Sub-agent. */
+export const getAllDescendantIds = async (supervisorId) => {
+  const agentIds = await getSubAgentIds(supervisorId);
+  const subAgentIds = [];
+  for (const aid of agentIds) {
+    subAgentIds.push(...(await getSubAgentIds(aid)));
+  }
+  return [...agentIds, ...subAgentIds];
+};
+
+/** Visibility: supervisor sees self + all agents + sub-agents; agent sees self + sub-agents; sub-agent sees only self */
 export const getAgentVisibilityIds = async (userId) => {
   const user = await findUserById(userId);
   if (!user || user.role_name !== 'agent') return [userId];
-  if (user.parent_agent_id != null) return [userId]; // sub-agent: only self
-  const subIds = await getSubAgentIds(userId);
-  return [userId, ...subIds];
+  if (user.parent_agent_id == null) {
+    const descendantIds = await getAllDescendantIds(userId);
+    return [userId, ...descendantIds];
+  }
+  const parent = await findUserById(user.parent_agent_id);
+  if (parent && parent.parent_agent_id == null) {
+    return [userId, ...(await getSubAgentIds(userId))];
+  }
+  return [userId];
 };
 
 /** Sub-agents under an agent (for admin list) */

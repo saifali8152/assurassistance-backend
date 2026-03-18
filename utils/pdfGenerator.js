@@ -6,7 +6,7 @@ const ensureDir = (dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 };
 
-export const generateInvoicePDF = async ({ invoiceNumber, sale, traveller, plan, subtotal, tax, total }, returnBuffer = false) => {
+export const generateInvoicePDF = async ({ invoiceNumber, sale, traveller, plan, subtotal, tax, total, countryOfResidence }, returnBuffer = false) => {
   const doc = new PDFDocument({ size: "A4", margin: 50 });
 
   return new Promise((resolve, reject) => {
@@ -139,10 +139,11 @@ export const generateInvoicePDF = async ({ invoiceNumber, sale, traveller, plan,
     doc.fillColor(secondaryColor).fontSize(12).font('Helvetica-Bold')
        .text("ISSUER DETAILS", 50, issuerY);
     
+    const issuerAddress = (countryOfResidence && String(countryOfResidence).trim()) ? String(countryOfResidence).trim() : null;
     doc.fillColor('black').fontSize(10).font('Helvetica');
     doc.text("Issued By: AssurAssistance", 50, issuerY + 25);
     doc.text("Contact: 0123-456789 / contact@assurassistance.com", doc.page.width - 300, issuerY + 25);
-    doc.text("Address: Islamabad, Pakistan", 50, issuerY + 40);
+    doc.text(issuerAddress ? `Address: ${issuerAddress}` : "Address: —", 50, issuerY + 40);
 
     // NOTES/DISCLAIMER Section
     const notesY = issuerY + 80;
@@ -164,8 +165,9 @@ export const generateInvoicePDF = async ({ invoiceNumber, sale, traveller, plan,
   });
 };
 
-export const generateCertificatePDF = async ({ certificateNumber, sale, traveller, plan, productType }, returnBuffer = false) => {
+export const generateCertificatePDF = async ({ certificateNumber, sale, traveller, plan, productType, countryOfResidence, guaranteesDetails = [] }, returnBuffer = false) => {
   const doc = new PDFDocument({ size: "A4", margin: 50 });
+  const benefits = Array.isArray(guaranteesDetails) ? guaranteesDetails : [];
 
   return new Promise((resolve, reject) => {
     let stream;
@@ -274,10 +276,45 @@ export const generateCertificatePDF = async ({ certificateNumber, sale, travelle
     doc.text(`Certificate No: ${certificateNumber}`, 50, doc.y);
     doc.text(`Policy No: ${sale.policy_number || ''}`, 50, doc.y + 15);
 
+    // Benefits table (as indicated when the plan was created)
+    if (benefits.length > 0) {
+      doc.moveDown(3);
+      doc.fillColor(secondaryColor).fontSize(12).font('Helvetica-Bold')
+         .text("Benefits / Coverage", 50, doc.y);
+      doc.moveDown(1);
+      const tableStartY = doc.y;
+      const tableWidth = 500;
+      const col1 = 70;
+      const col2 = 280;
+      const col3 = 420;
+      const rowH = 22;
+      doc.rect(50, tableStartY, tableWidth, rowH).fill(lightGray).stroke('#cccccc');
+      doc.fillColor('black').fontSize(9).font('Helvetica-Bold');
+      doc.text("Category", col1, tableStartY + 6);
+      doc.text("Coverage Type", col2, tableStartY + 6);
+      doc.text("Amount", col3, tableStartY + 6);
+      let currentTableY = tableStartY + rowH;
+      doc.font('Helvetica');
+      for (const row of benefits) {
+        doc.rect(50, currentTableY, tableWidth, rowH).fill(white).stroke('#cccccc');
+        doc.fillColor('black').fontSize(9);
+        doc.text(String(row.category || '—'), col1, currentTableY + 6, { width: 200 });
+        doc.text(String(row.coverageType || '—'), col2, currentTableY + 6, { width: 130 });
+        doc.text(String(row.amount != null ? row.amount : '—'), col3, currentTableY + 6);
+        currentTableY += rowH;
+      }
+      doc.y = currentTableY + 10;
+    }
+
+    const issueLocation = (countryOfResidence && String(countryOfResidence).trim()) ? String(countryOfResidence).trim() : null;
+
     // Issue date and location
     doc.moveDown(4);
     doc.fillColor('black').fontSize(11).font('Helvetica');
-    doc.text(`Issued on this ${new Date().toLocaleDateString()}, at Islamabad, Pakistan, under the seal and authority of AssurAssistance.`, 50, doc.y, { width: 500 });
+    doc.text(issueLocation
+      ? `Issued on this ${new Date().toLocaleDateString()}, at ${issueLocation}, under the seal and authority of AssurAssistance.`
+      : `Issued on this ${new Date().toLocaleDateString()}, under the seal and authority of AssurAssistance.`,
+      50, doc.y, { width: 500 });
 
     // Footer - moved to bottom of page
     const footerY = doc.page.height - 120;
@@ -286,7 +323,7 @@ export const generateCertificatePDF = async ({ certificateNumber, sale, travelle
 
     doc.moveDown(1);
     doc.fontSize(8)
-       .text("AssurAssistance — Islamabad, Pakistan — 0123-456789", 0, footerY + 20, { align: 'center' });
+       .text(issueLocation ? `AssurAssistance — ${issueLocation} — 0123-456789` : "AssurAssistance — 0123-456789", 0, footerY + 20, { align: 'center' });
 
     doc.end();
 

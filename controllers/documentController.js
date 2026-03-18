@@ -28,7 +28,8 @@ export const downloadInvoice = async (req, res) => {
       phone: caseDetails.phone,
       email: caseDetails.email,
       passport_or_id: caseDetails.passport_or_id,
-      address: caseDetails.address
+      address: caseDetails.address,
+      country_of_residence: caseDetails.country_of_residence || null
     };
 
     const plan = {
@@ -49,7 +50,8 @@ export const downloadInvoice = async (req, res) => {
       plan,
       subtotal: invoice.subtotal,
       tax: invoice.tax,
-      total: invoice.total
+      total: invoice.total,
+      countryOfResidence: traveller.country_of_residence
     }, true); // true = return buffer instead of saving file
 
     // Set headers for PDF download
@@ -89,7 +91,8 @@ export const downloadCertificate = async (req, res) => {
       phone: caseDetails.phone,
       email: caseDetails.email,
       passport_or_id: caseDetails.passport_or_id,
-      address: caseDetails.address
+      address: caseDetails.address,
+      country_of_residence: caseDetails.country_of_residence || null
     };
 
     const plan = {
@@ -102,13 +105,26 @@ export const downloadCertificate = async (req, res) => {
 
     const sale = saleDetails;
 
+    // Parse guarantees_details (benefits table) for certificate
+    let guaranteesDetails = sale.guarantees_details;
+    if (typeof guaranteesDetails === 'string') {
+      try {
+        guaranteesDetails = JSON.parse(guaranteesDetails);
+      } catch (e) {
+        guaranteesDetails = null;
+      }
+    }
+    if (!Array.isArray(guaranteesDetails)) guaranteesDetails = [];
+
     // Generate PDF buffer (without saving to file)
     const pdfBuffer = await generateCertificatePDF({
       certificateNumber: cert.certificate_number,
       sale,
       traveller,
       plan,
-      productType: plan.product_type
+      productType: plan.product_type,
+      countryOfResidence: traveller.country_of_residence,
+      guaranteesDetails
     }, true); // true = return buffer instead of saving file
 
     // Set headers for PDF download

@@ -172,3 +172,78 @@ export const updateUserStatus = async (id, status) => {
   await pool.execute('UPDATE users SET status = ?, updated_at = NOW() WHERE id = ?', [status, id]);
 };
 
+/**
+ * Ordered user IDs to delete: sub-agents first, then agents, then root (supervisor or single agent).
+ */
+export const getAgentDeletionOrder = async (rootUserId) => {
+  const user = await findUserById(rootUserId);
+  if (!user || user.role_name !== 'agent') {
+    return { error: 'NOT_AGENT', order: [] };
+  }
+  const id = parseInt(String(rootUserId), 10);
+  if (user.parent_agent_id == null || user.parent_agent_id === 0) {
+    const agentIds = await getSubAgentIds(id);
+    const allSubIds = [];
+    for (const aid of agentIds) {
+      allSubIds.push(...(await getSubAgentIds(aid)));
+    }
+    return { error: null, order: [...allSubIds, ...agentIds, id] };
+  }
+  const parent = await findUserById(user.parent_agent_id);
+  if (parent && (parent.parent_agent_id == null || parent.parent_agent_id === 0)) {
+    const subIds = await getSubAgentIds(id);
+    return { error: null, order: [...subIds, id] };
+  }
+  return { error: null, order: [id] };
+};
+
+/**
+ * Deletes agent user(s): supervisor removes whole tree; agent removes self + sub-agents; sub-agent removes self.
+ * Deletes cases by those users (cascades sales/invoices/certificates) and travellers no longer referenced.
+ */
+export const deleteAgentHierarchy = async (rootUserId) => {
+  const pool = getPool();
+  const { error, order } = await getAgentDeletionOrder(rootUserId);
+  if (error) return { ok: false, message: 'User is not an agent account' };
+  if (order.length === 0) return { ok: false, message: 'Nothing to delete' };
+
+  const uniqueIds = [...new Set(order)];
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const placeholders = uniqueIds.map(() => '?').join(',');
+    const [caseRows] = await conn.query(
+      `SELECT DISTINCT traveller_id FROM cases WHERE created_by IN (${placeholders})`,
+      uniqueIds
+    );
+    const travellerIds = caseRows.map((r) => r.traveller_id).filter((tid) => tid != null);
+
+    await conn.query(`DELETE FROM cases WHERE created_by IN (${placeholders})`, uniqueIds);
+
+    if (travellerIds.length > 0) {
+      const tPlaceholders = travellerIds.map(() => '?').join(',');
+      await conn.query(
+        `DELETE FROM travellers WHERE id IN (${tPlaceholders})
+         AND NOT EXISTS (SELECT 1 FROM cases c WHERE c.traveller_id = travellers.id)`,
+        travellerIds
+      );
+    }
+
+    for (const uid of order) {
+      await conn.execute('DELETE FROM user_assigned_plans WHERE user_id = ?', [uid]);
+      await conn.execute('DELETE FROM user_activity WHERE user_id = ?', [uid]);
+      await conn.execute('DELETE FROM users WHERE id = ? AND role = ?', [uid, 'agent']);
+    }
+
+    await conn.commit();
+    return { ok: true, deletedCount: order.length };
+  } catch (e) {
+    await conn.rollback();
+    console.error('deleteAgentHierarchy:', e);
+    throw e;
+  } finally {
+    conn.release();
+  }
+};
+

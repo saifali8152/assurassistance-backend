@@ -1,6 +1,6 @@
 // src/routes/adminRoutes.js
 import express from 'express';
-import { createAgent, listAgents, getAgent, updateAgent, listSubAgents, createSubAgent, changeUserStatus, getAdminDashboardStats, getProductionTrend, sendPasswordResetLink } from '../controllers/adminController.js';
+import { createAgent, listAgents, getAgent, updateAgent, listSubAgents, createSubAgent, deleteAgentOrHierarchy, changeUserStatus, getAdminDashboardStats, getProductionTrend, sendPasswordResetLink } from '../controllers/adminController.js';
 import authenticate from '../middlewares/authMiddleware.js';
 import { adminOnly } from '../middlewares/roleMiddleware.js';
 import { findUserById } from '../models/userModel.js';
@@ -13,6 +13,7 @@ router.post('/create-agent', authenticate, adminOnly, createAgent);
 router.get('/list-agents', authenticate, adminOnly, listAgents);
 router.get('/agents/:id', authenticate, adminOnly, getAgent);
 router.patch('/agents/:id', authenticate, adminOnly, updateAgent);
+router.delete('/agents/:id', authenticate, adminOnly, deleteAgentOrHierarchy);
 router.get('/agents/:id/sub-agents', authenticate, adminOnly, listSubAgents);
 router.post('/agents/:id/sub-agents', authenticate, adminOnly, createSubAgent);
 router.patch('/users/status', changeUserStatus);

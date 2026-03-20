@@ -1,6 +1,6 @@
 // src/controllers/adminController.js
 import bcrypt from 'bcryptjs';
-import { createUser, findUserByEmail, getAllUsers, getAgents, findUserById, updateAgentProfile, getAgentAssignedPlanIds, setAgentAssignedPlans, getSubAgents } from '../models/userModel.js';
+import { createUser, findUserByEmail, getAllUsers, getAgents, findUserById, updateAgentProfile, getAgentAssignedPlanIds, setAgentAssignedPlans, getSubAgents, deleteAgentHierarchy } from '../models/userModel.js';
 import crypto from 'crypto';
 import { updateUserStatus } from '../models/userModel.js';
 import getPool from '../utils/db.js';
@@ -335,6 +335,25 @@ export const createSubAgent = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/** DELETE /admin/agents/:id — delete supervisor (whole tree), agent (+ sub-agents), or sub-agent only */
+export const deleteAgentOrHierarchy = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await deleteAgentHierarchy(id);
+    if (!result.ok) {
+      return res.status(404).json({ success: false, message: result.message || 'Agent not found or cannot be deleted' });
+    }
+    res.json({
+      success: true,
+      message: `Deleted ${result.deletedCount} user account(s) and related cases.`,
+      deletedCount: result.deletedCount
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error during delete' });
   }
 };
 

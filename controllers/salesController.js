@@ -5,6 +5,7 @@ import { createCertificate } from "../models/certificateModel.js";
 import { getCaseDetailsById } from "../models/caseModel.js";
 import { logActivity } from "../models/activityModel.js";  // <-- Add this
 import getPool from "../utils/db.js";
+import { getAgeFromDateString, getAgePremiumMultiplier } from "../utils/travelPricing.js";
 
 export const createSaleController = async (req, res) => {
   try {
@@ -22,6 +23,19 @@ export const createSaleController = async (req, res) => {
 
     if (!case_id || !premium_amount || !total) {
       return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const caseRow = await getCaseDetailsById(case_id);
+    if (!caseRow) {
+      return res.status(404).json({ message: "Case not found" });
+    }
+    if (["Travel", "Travel Inbound", "Road travel"].includes(caseRow.product_type)) {
+      const age = getAgeFromDateString(caseRow.date_of_birth);
+      if (!getAgePremiumMultiplier(age).eligible) {
+        return res.status(400).json({
+          message: "Travel insurance is not available for travellers over 85 years of age."
+        });
+      }
     }
 
     // 1. Generate numbers
@@ -43,8 +57,8 @@ export const createSaleController = async (req, res) => {
       guarantees_details: (guarantees_details !== null && guarantees_details !== undefined) ? guarantees_details : null
     });
 
-    // 3. Get case + traveller + plan details
-    const caseDetails = await getCaseDetailsById(case_id);
+    // 3. Case + traveller + plan details (reuse loaded case)
+    const caseDetails = caseRow;
     const traveller = {
       full_name: caseDetails.full_name,
       phone: caseDetails.phone,

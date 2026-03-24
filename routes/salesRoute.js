@@ -7,7 +7,7 @@ import {
   getSaleByIdController,
   updatePaymentStatusController
 } from "../controllers/salesController.js";
-import { downloadInvoice, downloadCertificate } from "../controllers/documentController.js";
+import { downloadInvoice, downloadCertificate, getCertificatePageData } from "../controllers/documentController.js";
 
 const router = express.Router();
 
@@ -16,6 +16,7 @@ router.get("/", authenticate, getAllSalesController);
 
 // download links (must come before /:id route)
 router.get("/invoice/:id", authenticate, downloadInvoice);
+router.get("/certificate/:id/page", authenticate, getCertificatePageData);
 router.get("/certificate/:id", authenticate, downloadCertificate);
 
 router.get("/:id", authenticate, getSaleByIdController);

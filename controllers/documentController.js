@@ -103,6 +103,7 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     guaranteesList = pricingRules.guarantees.map((g) => ({
       category: g.category,
       categoryHeader: categoryHeader(g.category),
+      coverageType: g.coverageType || null,
       benefit: COVERAGE_LABELS[g.coverageType] || g.coverageType || "—",
       level: g.amount != null && g.amount !== undefined ? g.amount : "—"
     }));
@@ -116,12 +117,13 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
       }
     }
     if (Array.isArray(gd)) {
-      guaranteesList = gd.map((g) => ({
-        category: g.category,
-        categoryHeader: categoryHeader(g.category),
-        benefit: COVERAGE_LABELS[g.coverageType] || g.coverageType || "—",
-        level: g.amount != null ? g.amount : "—"
-      }));
+        guaranteesList = gd.map((g) => ({
+          category: g.category,
+          categoryHeader: categoryHeader(g.category),
+          coverageType: g.coverageType || null,
+          benefit: COVERAGE_LABELS[g.coverageType] || g.coverageType || "—",
+          level: g.amount != null ? g.amount : "—"
+        }));
     }
   }
 

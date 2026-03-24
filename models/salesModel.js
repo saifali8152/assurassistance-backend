@@ -59,6 +59,22 @@ export const getSaleById = async (id) => {
   return rows[0];
 };
 
+/** Sales for a group subscription (cases.group_id), scoped to allowed agent ids */
+export const getSalesByGroupIdForAgents = async (groupId, agentIds) => {
+  if (!groupId || !agentIds || agentIds.length === 0) return [];
+  const pool = getPool();
+  const ph = agentIds.map(() => "?").join(",");
+  const [rows] = await pool.query(
+    `SELECT s.id AS sale_id, s.certificate_number
+     FROM sales s
+     INNER JOIN cases c ON c.id = s.case_id
+     WHERE c.group_id = ? AND c.created_by IN (${ph})
+     ORDER BY s.id ASC`,
+    [groupId, ...agentIds]
+  );
+  return rows;
+};
+
 // Update payment status + notes
 export const updatePaymentStatus = async (saleId, payment_status, payment_notes) => {
   const pool = getPool();

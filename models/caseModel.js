@@ -39,13 +39,13 @@ export const createTraveller = async (data) => {
 // Create Case
 export const createCase = async (data) => {
   const pool = getPool();
-  const { traveller_id, destination, start_date, end_date, selected_plan_id, created_by, status } = data;
+  const { traveller_id, destination, start_date, end_date, selected_plan_id, created_by, status, group_id = null } = data;
   // Destination can be a string (comma-separated) or array - convert to string
   const destinationStr = Array.isArray(destination) ? destination.join(", ") : destination;
   const [result] = await pool.execute(
-    `INSERT INTO cases (traveller_id, destination, start_date, end_date, selected_plan_id, created_by, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [traveller_id, destinationStr, start_date, end_date, selected_plan_id, created_by, status || "Draft"]
+    `INSERT INTO cases (traveller_id, destination, start_date, end_date, selected_plan_id, created_by, status, group_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [traveller_id, destinationStr, start_date, end_date, selected_plan_id, created_by, status || "Draft", group_id || null]
   );
   return result.insertId;
 };
@@ -106,7 +106,7 @@ export const updateCaseStatus = async (caseId, status) => {
 export const getCaseDetailsById = async (caseId) => {
   const pool = getPool();
   const [rows] = await pool.query(
-    `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, CONCAT(t.first_name, ' ', t.last_name) as full_name, t.phone, t.email, t.passport_or_id, cat.id AS plan_id, cat.name AS plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules, cat.currency, c.duration_days
+    `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, CONCAT(t.first_name, ' ', t.last_name) as full_name, t.phone, t.email, t.passport_or_id, t.address, cat.id AS plan_id, cat.name AS plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules, cat.currency, c.duration_days
      FROM cases c
      JOIN travellers t ON c.traveller_id = t.id
      LEFT JOIN catalogue cat ON c.selected_plan_id = cat.id

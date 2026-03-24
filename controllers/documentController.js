@@ -6,8 +6,9 @@ import {
 } from "../models/certificateModel.js";
 import { generateInvoicePDF, generateCertificatePDF } from "../utils/pdfGenerator.js";
 import { getCaseDetailsById } from "../models/caseModel.js";
-import { getSaleById } from "../models/salesModel.js";
-import { findUserById } from "../models/userModel.js";
+import { getSaleById, getSalesByGroupIdForAgents } from "../models/salesModel.js";
+import { findUserById, getAgentVisibilityIds } from "../models/userModel.js";
+import archiver from "archiver";
 import QRCode from "qrcode";
 import {
   stayDaysToValidityTier,
@@ -337,57 +338,48 @@ export const downloadInvoice = async (req, res) => {
   }
 };
 
-export const downloadCertificate = async (req, res) => {
-  try {
-    const saleId = req.params.id;
-    const cert = await getCertificateBySaleId(saleId);
-    if (!cert) {
-      return res.status(404).json({ message: "Certificate not found" });
+/** PDF buffer for a sale id (used by single download and group ZIP) */
+async function certificatePdfBufferForSaleId(saleId) {
+  const cert = await getCertificateBySaleId(saleId);
+  if (!cert) return null;
+
+  const saleDetails = await getSaleById(cert.sale_id);
+  if (!saleDetails) return null;
+
+  const caseDetails = await getCaseDetailsById(saleDetails.case_id);
+  if (!caseDetails) return null;
+
+  const traveller = {
+    full_name: caseDetails.full_name,
+    phone: caseDetails.phone,
+    email: caseDetails.email,
+    passport_or_id: caseDetails.passport_or_id,
+    address: caseDetails.address,
+    country_of_residence: caseDetails.country_of_residence || null
+  };
+
+  const plan = {
+    id: caseDetails.plan_id,
+    name: caseDetails.plan_name,
+    product_type: caseDetails.product_type,
+    coverage: caseDetails.coverage,
+    flat_price: caseDetails.flat_price
+  };
+
+  const sale = saleDetails;
+
+  let guaranteesDetails = sale.guarantees_details;
+  if (typeof guaranteesDetails === "string") {
+    try {
+      guaranteesDetails = JSON.parse(guaranteesDetails);
+    } catch (e) {
+      guaranteesDetails = null;
     }
+  }
+  if (!Array.isArray(guaranteesDetails)) guaranteesDetails = [];
 
-    const saleDetails = await getSaleById(cert.sale_id);
-    if (!saleDetails) {
-      return res.status(404).json({ message: "Sale not found" });
-    }
-
-    const caseDetails = await getCaseDetailsById(saleDetails.case_id);
-      if (!caseDetails) {
-      return res.status(404).json({ message: "Case not found" });
-    }
-
-    // Prepare data for PDF generation
-    const traveller = {
-      full_name: caseDetails.full_name,
-      phone: caseDetails.phone,
-      email: caseDetails.email,
-      passport_or_id: caseDetails.passport_or_id,
-      address: caseDetails.address,
-      country_of_residence: caseDetails.country_of_residence || null
-    };
-
-    const plan = {
-      id: caseDetails.plan_id,
-      name: caseDetails.plan_name,
-      product_type: caseDetails.product_type,
-      coverage: caseDetails.coverage,
-      flat_price: caseDetails.flat_price
-    };
-
-    const sale = saleDetails;
-
-    // Parse guarantees_details (benefits table) for certificate
-    let guaranteesDetails = sale.guarantees_details;
-    if (typeof guaranteesDetails === 'string') {
-      try {
-        guaranteesDetails = JSON.parse(guaranteesDetails);
-      } catch (e) {
-        guaranteesDetails = null;
-      }
-    }
-    if (!Array.isArray(guaranteesDetails)) guaranteesDetails = [];
-
-    // Generate PDF buffer (without saving to file)
-    const pdfBuffer = await generateCertificatePDF({
+  const pdfBuffer = await generateCertificatePDF(
+    {
       certificateNumber: cert.certificate_number,
       sale,
       traveller,
@@ -395,17 +387,67 @@ export const downloadCertificate = async (req, res) => {
       productType: plan.product_type,
       countryOfResidence: traveller.country_of_residence,
       guaranteesDetails
-    }, true); // true = return buffer instead of saving file
+    },
+    true
+  );
+  return { pdfBuffer, certificate_number: cert.certificate_number };
+}
 
-    // Set headers for PDF download
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="certificate-${cert.certificate_number}.pdf"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-
-    // Send PDF buffer
+export const downloadCertificate = async (req, res) => {
+  try {
+    const saleId = req.params.id;
+    const result = await certificatePdfBufferForSaleId(saleId);
+    if (!result) {
+      return res.status(404).json({ message: "Certificate not found" });
+    }
+    const { pdfBuffer, certificate_number } = result;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="certificate-${certificate_number}.pdf"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
     res.send(pdfBuffer);
   } catch (err) {
     console.error("Error downloading certificate:", err);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** ZIP of all certificate PDFs for a group subscription (cases.group_id) */
+export const downloadGroupCertificatesZip = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    if (!groupId?.trim()) {
+      return res.status(400).json({ message: "Invalid group id" });
+    }
+    const agentIds = await getAgentVisibilityIds(req.user.id);
+    const salesRows = await getSalesByGroupIdForAgents(groupId.trim(), agentIds);
+    if (!salesRows.length) {
+      return res.status(404).json({ message: "No certificates found for this group" });
+    }
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    archive.on("error", (err) => {
+      console.error("ZIP archive error:", err);
+      if (!res.headersSent) res.status(500).end();
+    });
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="certificates-group-${encodeURIComponent(groupId)}.zip"`
+    );
+    archive.pipe(res);
+
+    for (const row of salesRows) {
+      const result = await certificatePdfBufferForSaleId(row.sale_id);
+      if (result) {
+        archive.append(result.pdfBuffer, {
+          name: `certificate-${result.certificate_number}.pdf`
+        });
+      }
+    }
+    await archive.finalize();
+  } catch (err) {
+    console.error("Error downloading group certificates:", err);
+    if (!res.headersSent) res.status(500).json({ message: "Server error" });
   }
 };

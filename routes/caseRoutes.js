@@ -2,7 +2,8 @@
 import express from "express";
 import authenticate from "../middlewares/authMiddleware.js";
 import { 
-  createCaseWithTraveller, 
+  createCaseWithTraveller,
+  createGroupCasesWithTravellers,
   getMyCases, 
   getPendingSales, 
   changeCaseStatus,
@@ -15,6 +16,7 @@ import {
 
 const router = express.Router();
 
+router.post("/group", authenticate, createGroupCasesWithTravellers);
 router.post("/", authenticate, createCaseWithTraveller);
 router.get("/", authenticate, getMyCases);
 router.get("/all", authenticate, getAllCases); // Admin only - all cases with pagination

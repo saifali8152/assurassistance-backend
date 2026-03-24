@@ -1,8 +1,61 @@
 // src/controllers/caseController.js
+import { v4 as uuidv4 } from "uuid";
 import { createTraveller, createCase, getCasesByAgentIds, getCasesWithoutSalesByAgentIds, updateCaseStatus, getAllCasesWithPagination, getCasesByAgentIdsWithPagination, updateCaseAndTraveller } from "../models/caseModel.js";
 import { getAgentVisibilityIds } from "../models/userModel.js";
 import { createSale } from "../models/salesModel.js";
 import { logActivity } from "../models/activityModel.js";  // <-- make sure this exists
+
+const MAX_GROUP_MEMBERS = 500;
+
+/** Multiple travellers sharing the same trip/plan (Excel group subscription) */
+export const createGroupCasesWithTravellers = async (req, res) => {
+  try {
+    const { travellers, caseData } = req.body;
+    const created_by = req.user.id;
+
+    if (!Array.isArray(travellers) || travellers.length === 0) {
+      return res.status(400).json({ message: "At least one traveller is required" });
+    }
+    if (travellers.length > MAX_GROUP_MEMBERS) {
+      return res.status(400).json({ message: `Maximum ${MAX_GROUP_MEMBERS} travellers per group` });
+    }
+    if (!caseData?.selected_plan_id || !caseData?.start_date || !caseData?.end_date) {
+      return res.status(400).json({ message: "Missing case details (plan, dates)" });
+    }
+
+    const group_id = uuidv4();
+    const caseIds = [];
+
+    for (const traveller of travellers) {
+      if (!traveller?.first_name?.trim() || !traveller?.last_name?.trim() || !traveller?.date_of_birth?.trim()) {
+        return res.status(400).json({ message: "Each traveller must have surname, given names, and date of birth" });
+      }
+      const travellerId = await createTraveller(traveller);
+      const cid = await createCase({
+        ...caseData,
+        traveller_id: travellerId,
+        created_by,
+        group_id
+      });
+      caseIds.push(cid);
+    }
+
+    try {
+      await logActivity(created_by, `Created group subscription — ${caseIds.length} cases — group ${group_id}`);
+    } catch (logErr) {
+      console.error("Activity log failed:", logErr.message);
+    }
+
+    res.status(201).json({
+      message: "Group cases created successfully",
+      groupId: group_id,
+      caseIds
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
 // Create Traveller + Case
 export const createCaseWithTraveller = async (req, res) => {

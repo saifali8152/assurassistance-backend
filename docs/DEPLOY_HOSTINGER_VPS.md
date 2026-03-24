@@ -402,6 +402,7 @@ chmod 755 uploads
 | 10 | (Optional) Nginx reverse proxy and DNS for your API domain |
 | 11 | (Optional) SSL cert: `certbot --nginx -d your-api-domain.com` |
 | 12 | (If upgrading DB) Run `migrations/add_certificates_public_token.sql`; set `PUBLIC_CERTIFICATE_FRONTEND_URL` in `.env` if API and SPA use different domains |
+| 13 | (If upgrading DB) For **group subscriptions**, run `migrations/add_cases_group_id.sql` so `cases.group_id` exists |
 
 ---
 
@@ -445,3 +446,7 @@ Certificate QR codes point to `{FRONTEND}/certificate-public/{token}`. The API s
    CERTIFICATE_EMERGENCY_PHONE=+91 62916 62954
    CERTIFICATE_WEBSITE_URL=https://www.assurassistance.org
    ```
+
+
+ssh root@187.77.172.212
+?Eg7ouw'CcC?Dni4UKm8

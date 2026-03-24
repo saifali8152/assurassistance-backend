@@ -7,6 +7,7 @@ import {
 import { generateInvoicePDF, generateCertificatePDF } from "../utils/pdfGenerator.js";
 import { getCaseDetailsById } from "../models/caseModel.js";
 import { getSaleById } from "../models/salesModel.js";
+import { findUserById } from "../models/userModel.js";
 import QRCode from "qrcode";
 import {
   stayDaysToValidityTier,
@@ -57,6 +58,24 @@ function formatDateDMY(d) {
 }
 
 /** Absolute URL for the public certificate page (QR). Set PUBLIC_CERTIFICATE_FRONTEND_URL or FRONTEND_URL in production if API and SPA use different hosts. */
+/** Main agent = top of parent chain (supervisor); if no parent, the case creator. */
+async function resolveMainAgentContact(createdByUserId) {
+  if (!createdByUserId) {
+    return { generalPhone: "", whatsapp: "" };
+  }
+  let current = await findUserById(createdByUserId);
+  if (!current) return { generalPhone: "", whatsapp: "" };
+  while (current.parent_agent_id) {
+    const parent = await findUserById(current.parent_agent_id);
+    if (!parent) break;
+    current = parent;
+  }
+  return {
+    generalPhone: current.work_phone ? String(current.work_phone).trim() : "",
+    whatsapp: current.whatsapp_phone ? String(current.whatsapp_phone).trim() : ""
+  };
+}
+
 function resolvePublicCertificateUrl(req, token) {
   const base = (process.env.PUBLIC_CERTIFICATE_FRONTEND_URL || process.env.FRONTEND_URL || "").trim();
   const path = `/certificate-public/${encodeURIComponent(token)}`;
@@ -134,6 +153,11 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     console.error("QR generation failed:", e);
   }
 
+  const agentContact = await resolveMainAgentContact(caseDetails.created_by);
+  const emergencyHelpline =
+    (process.env.CERTIFICATE_EMERGENCY_PHONE || "+91 62916 62954").trim();
+  const websiteUrl = (process.env.CERTIFICATE_WEBSITE_URL || "https://www.assurassistance.org").trim();
+
   return {
     certificateNumber: cert.certificate_number,
     policyNumber: sale.policy_number,
@@ -177,6 +201,12 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     },
     benefits: guaranteesList,
     qrDataUrl,
+    contact: {
+      emergencyHelpline,
+      generalLine: agentContact.generalPhone,
+      whatsapp: agentContact.whatsapp,
+      websiteUrl
+    },
     footer: {
       line1:
         "ASSUR'ASSISTANCE SARL — Abidjan, Côte d'Ivoire — This certificate is issued electronically and is valid without signature."

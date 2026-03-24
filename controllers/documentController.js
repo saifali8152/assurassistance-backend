@@ -1,5 +1,9 @@
 import { getInvoiceBySaleId } from "../models/invoiceModel.js";
-import { getCertificateBySaleId } from "../models/certificateModel.js";
+import {
+  getCertificateBySaleId,
+  getCertificateByPublicToken,
+  ensureCertificatePublicToken
+} from "../models/certificateModel.js";
 import { generateInvoicePDF, generateCertificatePDF } from "../utils/pdfGenerator.js";
 import { getCaseDetailsById } from "../models/caseModel.js";
 import { getSaleById } from "../models/salesModel.js";
@@ -52,8 +56,134 @@ function formatDateDMY(d) {
   return `${dd}/${mm}/${yy}`;
 }
 
+/** Absolute URL for the public certificate page (QR). Set PUBLIC_CERTIFICATE_FRONTEND_URL or FRONTEND_URL in production if API and SPA use different hosts. */
+function resolvePublicCertificateUrl(req, token) {
+  const base = (process.env.PUBLIC_CERTIFICATE_FRONTEND_URL || process.env.FRONTEND_URL || "").trim();
+  const path = `/certificate-public/${encodeURIComponent(token)}`;
+  if (base) return `${base.replace(/\/$/, "")}${path}`;
+  const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+  const host = req.get("x-forwarded-host") || req.get("host") || "";
+  if (!host) return path;
+  return `${proto}://${host}${path}`;
+}
+
+async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoice }) {
+  let shareToken = cert.public_token;
+  if (!shareToken) {
+    shareToken = await ensureCertificatePublicToken(cert.id);
+  }
+  const publicViewUrl = resolvePublicCertificateUrl(req, shareToken);
+
+  const pricingRules = parsePricingRules(caseDetails.pricing_rules);
+  const stayDays = Number(caseDetails.duration_days) || 1;
+  const validityDays = stayDaysToValidityTier(stayDays);
+
+  let basePremium = null;
+  let ageInfo = null;
+  let computedPlanPremium = null;
+  let pricingNote = null;
+
+  const travelLike = ["Travel", "Travel Inbound", "Road travel"].includes(caseDetails.product_type);
+  if (travelLike && pricingRules?.pricing?.length) {
+    const comp = computeTravelPlanPremium(pricingRules, stayDays, caseDetails.date_of_birth);
+    if (comp.error === "age_ineligible") {
+      pricingNote = "Age over 85 — travel coverage not available under current rules.";
+    } else if (comp.planPremium != null) {
+      basePremium = comp.basePremium;
+      ageInfo = comp.ageInfo;
+      computedPlanPremium = comp.planPremium;
+    }
+  }
+
+  const planPremiumDisplay =
+    computedPlanPremium != null ? computedPlanPremium : Number(sale.plan_price) || 0;
+
+  let guaranteesList = [];
+  if (pricingRules?.guarantees?.length) {
+    guaranteesList = pricingRules.guarantees.map((g) => ({
+      category: g.category,
+      categoryHeader: categoryHeader(g.category),
+      benefit: COVERAGE_LABELS[g.coverageType] || g.coverageType || "—",
+      level: g.amount != null && g.amount !== undefined ? g.amount : "—"
+    }));
+  } else {
+    let gd = sale.guarantees_details;
+    if (typeof gd === "string") {
+      try {
+        gd = JSON.parse(gd);
+      } catch {
+        gd = [];
+      }
+    }
+    if (Array.isArray(gd)) {
+      guaranteesList = gd.map((g) => ({
+        category: g.category,
+        categoryHeader: categoryHeader(g.category),
+        benefit: COVERAGE_LABELS[g.coverageType] || g.coverageType || "—",
+        level: g.amount != null ? g.amount : "—"
+      }));
+    }
+  }
+
+  let qrDataUrl = "";
+  try {
+    qrDataUrl = await QRCode.toDataURL(publicViewUrl, { width: 200, margin: 1, errorCorrectionLevel: "M" });
+  } catch (e) {
+    console.error("QR generation failed:", e);
+  }
+
+  return {
+    certificateNumber: cert.certificate_number,
+    policyNumber: sale.policy_number,
+    invoiceNumber: invoice?.invoice_number || null,
+    issuedOn: formatDateDMY(sale.confirmed_at || sale.created_at),
+    productType: caseDetails.product_type,
+    publicViewUrl,
+    traveller: {
+      givenNames: caseDetails.first_name || "",
+      surname: caseDetails.last_name || "",
+      fullName: caseDetails.full_name || "",
+      dateOfBirth: formatDateDMY(caseDetails.date_of_birth),
+      passportOrId: caseDetails.passport_or_id || "",
+      gender: caseDetails.gender || "",
+      nationality: caseDetails.nationality || "",
+      countryOfResidence: caseDetails.country_of_residence || ""
+    },
+    coverage: {
+      periodFrom: formatDateDMY(caseDetails.start_date),
+      periodTo: formatDateDMY(caseDetails.end_date),
+      stayDays,
+      validityDays,
+      destinations: caseDetails.destination || "",
+      email: caseDetails.email || "",
+      phone: caseDetails.phone || "",
+      planName: caseDetails.plan_name || "",
+      currency: sale.currency || caseDetails.currency || "XOF",
+      worldwideLabel: "Worldwide"
+    },
+    pricing: {
+      basePremium,
+      ageBand: ageInfo?.band || null,
+      ageMultiplier: ageInfo?.multiplier ?? null,
+      planPremium: planPremiumDisplay,
+      guaranteesTotal: Number(sale.guarantees_total) || 0,
+      premiumAmount: Number(sale.premium_amount) || 0,
+      tax: Number(sale.tax) || 0,
+      total: Number(sale.total) || 0,
+      storedPlanPrice: Number(sale.plan_price) || 0,
+      pricingNote
+    },
+    benefits: guaranteesList,
+    qrDataUrl,
+    footer: {
+      line1:
+        "ASSUR'ASSISTANCE SARL — Abidjan, Côte d'Ivoire — This certificate is issued electronically and is valid without signature."
+    }
+  };
+}
+
 /**
- * JSON payload for the printable certificate page (browser print → PDF).
+ * JSON payload for the printable certificate page (browser print → PDF). Authenticated.
  */
 export const getCertificatePageData = async (req, res) => {
   try {
@@ -74,119 +204,40 @@ export const getCertificatePageData = async (req, res) => {
     }
 
     const invoice = await getInvoiceBySaleId(saleId);
-
-    const pricingRules = parsePricingRules(caseDetails.pricing_rules);
-    const stayDays = Number(caseDetails.duration_days) || 1;
-    const validityDays = stayDaysToValidityTier(stayDays);
-
-    let basePremium = null;
-    let ageInfo = null;
-    let computedPlanPremium = null;
-    let pricingNote = null;
-
-    const travelLike = ["Travel", "Travel Inbound", "Road travel"].includes(caseDetails.product_type);
-    if (travelLike && pricingRules?.pricing?.length) {
-      const comp = computeTravelPlanPremium(pricingRules, stayDays, caseDetails.date_of_birth);
-      if (comp.error === "age_ineligible") {
-        pricingNote = "Age over 85 — travel coverage not available under current rules.";
-      } else if (comp.planPremium != null) {
-        basePremium = comp.basePremium;
-        ageInfo = comp.ageInfo;
-        computedPlanPremium = comp.planPremium;
-      }
-    }
-
-    const planPremiumDisplay =
-      computedPlanPremium != null ? computedPlanPremium : Number(sale.plan_price) || 0;
-
-    let guaranteesList = [];
-    if (pricingRules?.guarantees?.length) {
-      guaranteesList = pricingRules.guarantees.map((g) => ({
-        category: g.category,
-        categoryHeader: categoryHeader(g.category),
-        benefit: COVERAGE_LABELS[g.coverageType] || g.coverageType || "—",
-        level: g.amount != null && g.amount !== undefined ? g.amount : "—"
-      }));
-    } else {
-      let gd = sale.guarantees_details;
-      if (typeof gd === "string") {
-        try {
-          gd = JSON.parse(gd);
-        } catch {
-          gd = [];
-        }
-      }
-      if (Array.isArray(gd)) {
-        guaranteesList = gd.map((g) => ({
-          category: g.category,
-          categoryHeader: categoryHeader(g.category),
-          benefit: COVERAGE_LABELS[g.coverageType] || g.coverageType || "—",
-          level: g.amount != null ? g.amount : "—"
-        }));
-      }
-    }
-
-    const verifyPayload = JSON.stringify({
-      cert: cert.certificate_number,
-      pol: sale.policy_number,
-      sale: sale.id
-    });
-    let qrDataUrl = "";
-    try {
-      qrDataUrl = await QRCode.toDataURL(verifyPayload, { width: 160, margin: 1 });
-    } catch (e) {
-      console.error("QR generation failed:", e);
-    }
-
-    res.json({
-      certificateNumber: cert.certificate_number,
-      policyNumber: sale.policy_number,
-      invoiceNumber: invoice?.invoice_number || null,
-      issuedOn: formatDateDMY(sale.confirmed_at || sale.created_at),
-      productType: caseDetails.product_type,
-      traveller: {
-        givenNames: caseDetails.first_name || "",
-        surname: caseDetails.last_name || "",
-        fullName: caseDetails.full_name || "",
-        dateOfBirth: formatDateDMY(caseDetails.date_of_birth),
-        passportOrId: caseDetails.passport_or_id || "",
-        gender: caseDetails.gender || "",
-        nationality: caseDetails.nationality || "",
-        countryOfResidence: caseDetails.country_of_residence || ""
-      },
-      coverage: {
-        periodFrom: formatDateDMY(caseDetails.start_date),
-        periodTo: formatDateDMY(caseDetails.end_date),
-        stayDays,
-        validityDays,
-        destinations: caseDetails.destination || "",
-        email: caseDetails.email || "",
-        phone: caseDetails.phone || "",
-        planName: caseDetails.plan_name || "",
-        currency: sale.currency || caseDetails.currency || "XOF",
-        worldwideLabel: "Worldwide"
-      },
-      pricing: {
-        basePremium,
-        ageBand: ageInfo?.band || null,
-        ageMultiplier: ageInfo?.multiplier ?? null,
-        planPremium: planPremiumDisplay,
-        guaranteesTotal: Number(sale.guarantees_total) || 0,
-        premiumAmount: Number(sale.premium_amount) || 0,
-        tax: Number(sale.tax) || 0,
-        total: Number(sale.total) || 0,
-        storedPlanPrice: Number(sale.plan_price) || 0,
-        pricingNote
-      },
-      benefits: guaranteesList,
-      qrDataUrl,
-      footer: {
-        line1:
-          "ASSUR'ASSISTANCE SARL — Abidjan, Côte d'Ivoire — This certificate is issued electronically and is valid without signature."
-      }
-    });
+    const payload = await buildCertificatePagePayload(req, { cert, sale, caseDetails, invoice });
+    res.json(payload);
   } catch (err) {
     console.error("Error building certificate page data:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/**
+ * Same JSON as /certificate/:id/page — no auth; lookup by certificates.public_token (QR).
+ */
+export const getCertificatePageDataPublic = async (req, res) => {
+  try {
+    const token = req.params.token;
+    const cert = await getCertificateByPublicToken(token);
+    if (!cert) {
+      return res.status(404).json({ message: "Certificate not found" });
+    }
+
+    const sale = await getSaleById(cert.sale_id);
+    if (!sale) {
+      return res.status(404).json({ message: "Sale not found" });
+    }
+
+    const caseDetails = await getCaseDetailsById(sale.case_id);
+    if (!caseDetails) {
+      return res.status(404).json({ message: "Case not found" });
+    }
+
+    const invoice = await getInvoiceBySaleId(sale.id);
+    const payload = await buildCertificatePagePayload(req, { cert, sale, caseDetails, invoice });
+    res.json(payload);
+  } catch (err) {
+    console.error("Error building public certificate page data:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

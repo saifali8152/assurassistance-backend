@@ -401,6 +401,7 @@ chmod 755 uploads
 | 9 | (Optional) UFW allow 22, 80, 443, 3000 |
 | 10 | (Optional) Nginx reverse proxy and DNS for your API domain |
 | 11 | (Optional) SSL cert: `certbot --nginx -d your-api-domain.com` |
+| 12 | (If upgrading DB) Run `migrations/add_certificates_public_token.sql`; set `PUBLIC_CERTIFICATE_FRONTEND_URL` in `.env` if API and SPA use different domains |
 
 ---
 
@@ -421,6 +422,19 @@ chmod 755 uploads
 
 Your backend will be at `http://YOUR_VPS_IP:3000`, or at `https://your-api-domain.com` if you set up Nginx, DNS, and SSL (certbot).
 
+---
 
-ssh root@187.77.172.212
-?Eg7ouw'CcC?Dni4UKm8
+## Public certificate links (QR codes)
+
+Certificate QR codes point to `{FRONTEND}/certificate-public/{token}`. The API serves JSON at `GET /api/sales/certificate/public/:token` (no login).
+
+1. **New installs:** `database_dump.sql` already includes `certificates.public_token`.
+2. **Existing databases:** run the migration once:
+   ```bash
+   mysql -u assurapp -p assurassistance < migrations/add_certificates_public_token.sql
+   ```
+3. **`.env` on the backend** — set the **public URL of your SPA** (no trailing slash) so QR codes are absolute when the API host differs from the app host:
+   ```env
+   PUBLIC_CERTIFICATE_FRONTEND_URL=https://your-app-domain.com
+   ```
+   Alternatively you can set `FRONTEND_URL` to the same value. If neither is set, the server builds the link from the incoming request host (works when the API and the SPA are served from the same hostname).

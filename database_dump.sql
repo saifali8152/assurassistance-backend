@@ -108,12 +108,14 @@ CREATE TABLE `certificates` (
   `id` int NOT NULL AUTO_INCREMENT,
   `sale_id` int NOT NULL,
   `certificate_number` varchar(100) NOT NULL,
+  `public_token` varchar(64) DEFAULT NULL,
   `pdf_path` varchar(255) DEFAULT NULL,
   `issue_date` datetime DEFAULT CURRENT_TIMESTAMP,
   `coverage_summary` text,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `certificate_number` (`certificate_number`),
+  UNIQUE KEY `uq_certificates_public_token` (`public_token`),
   KEY `fk_certificate_sale` (`sale_id`),
   CONSTRAINT `fk_certificate_sale` FOREIGN KEY (`sale_id`) REFERENCES `sales` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

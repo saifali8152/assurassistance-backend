@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from "uuid";
 import { createSale, getAllSales, getSaleById, updatePaymentStatus } from "../models/salesModel.js";
 import { createInvoice } from "../models/invoiceModel.js";
-import { createCertificate } from "../models/certificateModel.js";
+import { createCertificate, generatePublicToken } from "../models/certificateModel.js";
 import { getCaseDetailsById } from "../models/caseModel.js";
 import { logActivity } from "../models/activityModel.js";  // <-- Add this
 import getPool from "../utils/db.js";
@@ -88,6 +88,7 @@ export const createSaleController = async (req, res) => {
     const certId = await createCertificate({
       sale_id: saleId,
       certificate_number: certificateNumber,
+      public_token: generatePublicToken(),
       coverage_summary: plan.coverage || ''
     });
 

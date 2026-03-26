@@ -4,7 +4,8 @@ import {
   getCertificateByPublicToken,
   ensureCertificatePublicToken
 } from "../models/certificateModel.js";
-import { generateInvoicePDF, generateCertificatePDF } from "../utils/pdfGenerator.js";
+import { generateInvoicePDF } from "../utils/pdfGenerator.js";
+import { generateCertificatePdfFromPagePayload } from "../utils/certificatePagePdf.js";
 import { getCaseDetailsById } from "../models/caseModel.js";
 import { getSaleById, getSalesByGroupIdForAgents } from "../models/salesModel.js";
 import { findUserById, getAgentVisibilityIds } from "../models/userModel.js";
@@ -338,12 +339,34 @@ export const downloadInvoice = async (req, res) => {
   }
 };
 
-/** PDF buffer for a sale id (used by single download and group ZIP) */
-async function certificatePdfBufferForSaleId(saleId) {
+/** PDF buffer for a sale id — same layout as printable certificate page */
+async function certificatePdfBufferForSaleId(saleId, req) {
   const cert = await getCertificateBySaleId(saleId);
   if (!cert) return null;
 
   const saleDetails = await getSaleById(cert.sale_id);
+  if (!saleDetails) return null;
+
+  const caseDetails = await getCaseDetailsById(saleDetails.case_id);
+  if (!caseDetails) return null;
+
+  const invoice = await getInvoiceBySaleId(saleId);
+  const payload = await buildCertificatePagePayload(req, {
+    cert,
+    sale: saleDetails,
+    caseDetails,
+    invoice
+  });
+  const pdfBuffer = await generateCertificatePdfFromPagePayload(payload, true);
+  return { pdfBuffer, certificate_number: cert.certificate_number };
+}
+
+/** Invoice PDF buffer for a sale id (group ZIP) */
+async function invoicePdfBufferForSaleId(saleId) {
+  const invoice = await getInvoiceBySaleId(saleId);
+  if (!invoice) return null;
+
+  const saleDetails = await getSaleById(invoice.sale_id);
   if (!saleDetails) return null;
 
   const caseDetails = await getCaseDetailsById(saleDetails.case_id);
@@ -366,37 +389,26 @@ async function certificatePdfBufferForSaleId(saleId) {
     flat_price: caseDetails.flat_price
   };
 
-  const sale = saleDetails;
-
-  let guaranteesDetails = sale.guarantees_details;
-  if (typeof guaranteesDetails === "string") {
-    try {
-      guaranteesDetails = JSON.parse(guaranteesDetails);
-    } catch (e) {
-      guaranteesDetails = null;
-    }
-  }
-  if (!Array.isArray(guaranteesDetails)) guaranteesDetails = [];
-
-  const pdfBuffer = await generateCertificatePDF(
+  const pdfBuffer = await generateInvoicePDF(
     {
-      certificateNumber: cert.certificate_number,
-      sale,
+      invoiceNumber: invoice.invoice_number,
+      sale: saleDetails,
       traveller,
       plan,
-      productType: plan.product_type,
-      countryOfResidence: traveller.country_of_residence,
-      guaranteesDetails
+      subtotal: invoice.subtotal,
+      tax: invoice.tax,
+      total: invoice.total,
+      countryOfResidence: traveller.country_of_residence
     },
     true
   );
-  return { pdfBuffer, certificate_number: cert.certificate_number };
+  return { pdfBuffer, invoice_number: invoice.invoice_number };
 }
 
 export const downloadCertificate = async (req, res) => {
   try {
     const saleId = req.params.id;
-    const result = await certificatePdfBufferForSaleId(saleId);
+    const result = await certificatePdfBufferForSaleId(saleId, req);
     if (!result) {
       return res.status(404).json({ message: "Certificate not found" });
     }
@@ -438,7 +450,7 @@ export const downloadGroupCertificatesZip = async (req, res) => {
     archive.pipe(res);
 
     for (const row of salesRows) {
-      const result = await certificatePdfBufferForSaleId(row.sale_id);
+      const result = await certificatePdfBufferForSaleId(row.sale_id, req);
       if (result) {
         archive.append(result.pdfBuffer, {
           name: `certificate-${result.certificate_number}.pdf`
@@ -448,6 +460,47 @@ export const downloadGroupCertificatesZip = async (req, res) => {
     await archive.finalize();
   } catch (err) {
     console.error("Error downloading group certificates:", err);
+    if (!res.headersSent) res.status(500).json({ message: "Server error" });
+  }
+};
+
+/** ZIP of all invoice PDFs for a group subscription */
+export const downloadGroupInvoicesZip = async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    if (!groupId?.trim()) {
+      return res.status(400).json({ message: "Invalid group id" });
+    }
+    const agentIds = await getAgentVisibilityIds(req.user.id);
+    const salesRows = await getSalesByGroupIdForAgents(groupId.trim(), agentIds);
+    if (!salesRows.length) {
+      return res.status(404).json({ message: "No sales found for this group" });
+    }
+
+    const archive = archiver("zip", { zlib: { level: 9 } });
+    archive.on("error", (err) => {
+      console.error("ZIP archive error:", err);
+      if (!res.headersSent) res.status(500).end();
+    });
+
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="invoices-group-${encodeURIComponent(groupId)}.zip"`
+    );
+    archive.pipe(res);
+
+    for (const row of salesRows) {
+      const inv = await invoicePdfBufferForSaleId(row.sale_id);
+      if (inv) {
+        archive.append(inv.pdfBuffer, {
+          name: `invoice-${inv.invoice_number}.pdf`
+        });
+      }
+    }
+    await archive.finalize();
+  } catch (err) {
+    console.error("Error downloading group invoices:", err);
     if (!res.headersSent) res.status(500).json({ message: "Server error" });
   }
 };

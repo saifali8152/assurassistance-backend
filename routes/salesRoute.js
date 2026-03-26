@@ -11,6 +11,7 @@ import {
   downloadInvoice,
   downloadCertificate,
   downloadGroupCertificatesZip,
+  downloadGroupInvoicesZip,
   getCertificatePageData,
   getCertificatePageDataPublic
 } from "../controllers/documentController.js";
@@ -22,6 +23,7 @@ router.get("/", authenticate, getAllSalesController);
 
 // download links (must come before /:id route)
 router.get("/group/:groupId/certificates-zip", authenticate, downloadGroupCertificatesZip);
+router.get("/group/:groupId/invoices-zip", authenticate, downloadGroupInvoicesZip);
 router.get("/invoice/:id", authenticate, downloadInvoice);
 /** Public certificate JSON (QR link) — no auth */
 router.get("/certificate/public/:token", getCertificatePageDataPublic);

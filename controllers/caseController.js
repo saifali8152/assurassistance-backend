@@ -4,8 +4,17 @@ import { createTraveller, createCase, getCasesByAgentIds, getCasesWithoutSalesBy
 import { getAgentVisibilityIds } from "../models/userModel.js";
 import { createSale } from "../models/salesModel.js";
 import { logActivity } from "../models/activityModel.js";  // <-- make sure this exists
+import { INVALID_DATE_OF_BIRTH_CODE } from "../utils/parseFlexibleDate.js";
 
 const MAX_GROUP_MEMBERS = 500;
+
+function handleCaseWriteError(err, res) {
+  if (err?.code === INVALID_DATE_OF_BIRTH_CODE) {
+    return res.status(400).json({ message: err.message });
+  }
+  console.error(err);
+  return res.status(500).json({ message: "Server error" });
+}
 
 /** Multiple travellers sharing the same trip/plan (Excel group subscription) */
 export const createGroupCasesWithTravellers = async (req, res) => {
@@ -27,7 +36,8 @@ export const createGroupCasesWithTravellers = async (req, res) => {
     const caseIds = [];
 
     for (const traveller of travellers) {
-      if (!traveller?.first_name?.trim() || !traveller?.last_name?.trim() || !traveller?.date_of_birth?.trim()) {
+      const dobPresent = String(traveller?.date_of_birth ?? "").trim();
+      if (!traveller?.first_name?.trim() || !traveller?.last_name?.trim() || !dobPresent) {
         return res.status(400).json({ message: "Each traveller must have surname, given names, and date of birth" });
       }
       const travellerId = await createTraveller(traveller);
@@ -52,8 +62,7 @@ export const createGroupCasesWithTravellers = async (req, res) => {
       caseIds
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    return handleCaseWriteError(err, res);
   }
 };
 
@@ -79,8 +88,7 @@ export const createCaseWithTraveller = async (req, res) => {
     // 4. Send response
     res.status(201).json({ message: "Case created successfully", caseId });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    return handleCaseWriteError(err, res);
   }
 };
 
@@ -238,7 +246,6 @@ export const updateCase = async (req, res) => {
 
     res.json({ message: "Case updated successfully" });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
+    return handleCaseWriteError(err, res);
   }
 };

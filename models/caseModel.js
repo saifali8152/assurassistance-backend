@@ -1,14 +1,15 @@
 //src/models/caseModel.js
 
 import getPool from "../utils/db.js";
+import { normalizeDateOfBirthForDb } from "../utils/parseFlexibleDate.js";
 
 // Create Traveller
 export const createTraveller = async (data) => {
   const pool = getPool();
   const { first_name, last_name, date_of_birth, country_of_residence, gender, nationality, passport_or_id, phone, email, address } = data;
   
-  // Ensure all optional fields are null instead of undefined
-  const dateOfBirth = (date_of_birth && date_of_birth.trim() !== '') ? date_of_birth.trim() : null;
+  const rawDob = date_of_birth != null ? String(date_of_birth).trim() : "";
+  const dateOfBirth = rawDob ? normalizeDateOfBirthForDb(date_of_birth) : null;
   const countryOfResidence = (country_of_residence && country_of_residence.trim() !== '') ? country_of_residence.trim() : null;
   const genderValue = (gender && gender.trim() !== '') ? gender.trim() : null;
   const nationalityValue = (nationality && nationality.trim() !== '') ? nationality.trim() : null;
@@ -207,7 +208,8 @@ export const updateCaseAndTraveller = async (caseId, travellerData, caseData) =>
     const travellerId = caseResult[0].traveller_id;
     
     // Update traveller - ensure all optional fields are null instead of undefined
-    const dateOfBirth = (travellerData.date_of_birth && travellerData.date_of_birth.trim() !== '') ? travellerData.date_of_birth.trim() : null;
+    const rawDobUpd = travellerData.date_of_birth != null ? String(travellerData.date_of_birth).trim() : "";
+    const dateOfBirth = rawDobUpd ? normalizeDateOfBirthForDb(travellerData.date_of_birth) : null;
     const countryOfResidence = (travellerData.country_of_residence && travellerData.country_of_residence.trim() !== '') ? travellerData.country_of_residence.trim() : null;
     const genderValue = (travellerData.gender && travellerData.gender.trim() !== '') ? travellerData.gender.trim() : null;
     const nationalityValue = (travellerData.nationality && travellerData.nationality.trim() !== '') ? travellerData.nationality.trim() : null;

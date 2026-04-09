@@ -62,7 +62,7 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
     size: "A4",
     margin: 20,
     bufferPages: true,
-    info: { Title: "Insurance certificate", Author: "Assur Assistance" }
+    info: { Title: "Insurance certificate", Author: "Assur'Assistance" }
   });
 
   return new Promise((resolve, reject) => {
@@ -96,10 +96,22 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
       path.join(cwd, "..", "frontend", "public", "logo.png")
     );
 
+    const partnerLogoPath =
+      payload.partnerLogoFsPath && fs.existsSync(payload.partnerLogoFsPath)
+        ? payload.partnerLogoFsPath
+        : null;
+
     const headerH = 38;
     if (mainLogo) {
       try {
         doc.image(mainLogo, left, y, { height: 34, fit: [120, 34] });
+      } catch {
+        /* ignore */
+      }
+    }
+    if (partnerLogoPath) {
+      try {
+        doc.image(partnerLogoPath, right - 118, y, { height: 32, fit: [110, 32] });
       } catch {
         /* ignore */
       }
@@ -137,15 +149,18 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
     function row2(l1, v1, l2, v2) {
       const v1s = (v1 || "—").toString();
       const v2s = (v2 || "—").toString();
+      const rowStart = y;
       doc.font("Helvetica-Oblique").fontSize(6.5).fillColor("#333");
-      doc.text(`${l1}:`, left, y);
+      doc.text(`${l1}:`, left, rowStart);
       doc.font("Helvetica-Bold").fillColor("#000");
-      doc.text(v1s, left + 58, y, { width: mid - left - 64, ellipsis: true });
+      doc.text(v1s, left + 58, rowStart, { width: mid - left - 64, lineGap: 0.5 });
+      const bottom1 = doc.y;
       doc.font("Helvetica-Oblique").fillColor("#333");
-      doc.text(`${l2}:`, mid, y);
+      doc.text(`${l2}:`, mid, rowStart);
       doc.font("Helvetica-Bold").fillColor("#000");
-      doc.text(v2s, mid + 58, y, { width: right - mid - 58, ellipsis: true });
-      y += rowH;
+      doc.text(v2s, mid + 58, rowStart, { width: right - mid - 58, lineGap: 0.5 });
+      const bottom2 = doc.y;
+      y = Math.max(bottom1, bottom2, rowStart + rowH) + 2;
       doc
         .moveTo(left, y - 2)
         .lineTo(right, y - 2)
@@ -158,8 +173,8 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
       doc.font("Helvetica-Oblique").fontSize(6.5).fillColor("#333");
       doc.text(`${l1}:`, left, y);
       doc.font("Helvetica-Bold").fillColor("#000");
-      doc.text((v1 || "—").toString(), left + 58, y, { width: w - 60, ellipsis: true });
-      y += rowH;
+      doc.text((v1 || "—").toString(), left + 58, y, { width: w - 60, lineGap: 0.5 });
+      y = doc.y + 2;
       doc
         .moveTo(left, y - 2)
         .lineTo(right, y - 2)
@@ -214,48 +229,63 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
     y = doc.y + 4;
 
     const groups = groupBenefits(payload.benefits);
-    const catW = 22;
-    const benW = w - catW - 52;
-    const levW = 50;
-    const tableRow = 10;
+    const catW = 26;
+    const levW = 48;
+    const benW = w - catW - levW;
+    const tableRowMin = 12;
 
     if (!groups.length) {
       doc.fontSize(6.5).fillColor("#666").text("No benefit rows configured for this plan.", left, y);
       y = doc.y + 6;
     } else {
-      doc.rect(left, y, w, tableRow).fill("#f5f5f5").strokeColor(GRAY_LINE).stroke();
+      doc.rect(left, y, w, tableRowMin).fill("#f5f5f5").strokeColor(GRAY_LINE).stroke();
       doc.fillColor("#000").font("Helvetica-Bold").fontSize(6);
       doc.text("Travel", left + 2, y + 3, { width: catW - 4 });
       doc.text("Benefits", left + catW + 2, y + 3, { width: benW - 4 });
       doc.text("Levels", left + catW + benW, y + 3, { width: levW - 4, align: "right" });
-      y += tableRow;
+      y += tableRowMin;
 
       for (const g of groups) {
-        const blockH = g.rows.length * tableRow;
+        const rowHeights = g.rows.map((row) => {
+          const benefitText = String(row.benefit || "—");
+          doc.font("Helvetica").fontSize(6);
+          const h = doc.heightOfString(benefitText, {
+            width: benW - 6,
+            lineGap: 0.5
+          });
+          return Math.max(tableRowMin, Math.ceil(h) + 5);
+        });
+        const blockH = rowHeights.reduce((a, b) => a + b, 0);
         const yStart = y;
         doc.rect(left, yStart, catW, blockH).strokeColor(GRAY_LINE).stroke();
         doc.save();
         doc.translate(left + catW / 2, yStart + blockH / 2);
         doc.rotate(-90);
-        doc.font("Helvetica-Bold").fontSize(6).fillColor("#000");
+        doc.font("Helvetica-Bold").fontSize(5.5).fillColor("#000");
         doc.text(g.header, -blockH / 2 + 2, -3, {
           width: blockH - 4,
-          align: "center"
+          align: "center",
+          lineGap: 0.5
         });
         doc.restore();
 
         let yr = yStart;
-        for (const row of g.rows) {
-          doc.rect(left + catW, yr, benW + levW, tableRow).strokeColor(GRAY_LINE).stroke();
+        g.rows.forEach((row, idx) => {
+          const rh = rowHeights[idx];
+          doc.rect(left + catW, yr, benW + levW, rh).strokeColor(GRAY_LINE).stroke();
           doc.fillColor("#000").font("Helvetica").fontSize(6);
-          doc.text(String(row.benefit || "—"), left + catW + 3, yr + 2, { width: benW - 6, ellipsis: true });
+          doc.text(String(row.benefit || "—"), left + catW + 3, yr + 2, {
+            width: benW - 6,
+            lineGap: 0.5
+          });
           const lv = row.level != null && row.level !== "" ? String(row.level) : "—";
           doc.text(lv, left + catW + benW, yr + 2, {
             width: levW - 6,
-            align: "right"
+            align: "right",
+            lineGap: 0.5
           });
-          yr += tableRow;
-        }
+          yr += rh;
+        });
         y = yStart + blockH;
       }
     }
@@ -312,14 +342,14 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
       doc.rect(left, y, qrSize, qrSize).strokeColor(GRAY_LINE).stroke();
     }
 
-    doc.font("Helvetica-Bold").fontSize(7).text("FOR ASSUR", right - 72, y + qrSize / 2 - 4, {
-      width: 72,
+    doc.font("Helvetica-Bold").fontSize(7).text("Assur'Assistance", right - 100, y + qrSize / 2 - 6, {
+      width: 100,
       align: "right"
     });
 
     y += qrSize + 6;
     doc.font("Helvetica").fontSize(7).text(
-      `Issued on this ${payload.issuedOn} under the seal and authority of Assur Assistance.`,
+      `Issued on this ${payload.issuedOn} under the seal and authority of Assur'Assistance.`,
       left,
       y,
       { width: w, align: "center" }
@@ -340,6 +370,28 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
       payload.footer?.line1 ||
       "ASSUR'ASSISTANCE SARL — Abidjan, Côte d'Ivoire — This certificate is issued electronically and is valid without signature.";
     doc.text(foot, left, y, { width: w, align: "center" });
+
+    const wmLogo = tryImagePath(
+      path.join(cwd, "public", "full-logo.png"),
+      path.join(cwd, "..", "frontend", "public", "full-logo.png")
+    );
+    if (wmLogo) {
+      try {
+        const range = doc.bufferedPageRange();
+        for (let i = range.start; i < range.start + range.count; i++) {
+          doc.switchToPage(i);
+          doc.save();
+          doc.opacity(0.09);
+          doc.image(wmLogo, doc.page.width - 128, doc.page.height - 118, {
+            fit: [92, 92]
+          });
+          doc.restore();
+          doc.opacity(1);
+        }
+      } catch (e) {
+        console.error("Certificate watermark:", e?.message || e);
+      }
+    }
 
     doc.end();
   });

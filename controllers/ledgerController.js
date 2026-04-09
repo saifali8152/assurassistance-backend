@@ -79,7 +79,7 @@ export const exportLedgerCsv = async (req, res) => {
         "Product Type": r.product_type || "",
         "Policy Number": r.policy_number || "",
         "Certificate Number": r.certificate_number || "",
-        "Premium Amount": r.premium_amount || 0,
+        "Plan premium (rate)": (r.plan_price != null && Number(r.plan_price) > 0 ? r.plan_price : r.premium_amount) || 0,
         "Tax": r.tax || 0,
         "Total": r.total || 0,
         "Received Amount": r.received_amount || 0,

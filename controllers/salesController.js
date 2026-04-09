@@ -74,13 +74,17 @@ export const createSaleController = async (req, res) => {
       flat_price: caseDetails.flat_price
     };
 
-    // 4. Create invoice record
+    const planP = Number(plan_price) || 0;
+    const taxN = Number(tax) || 0;
+    const invoiceSubtotal = planP > 0 ? planP : Number(premium_amount);
+    const invoiceTotal = planP > 0 ? planP + taxN : Number(total);
+
     const invoiceId = await createInvoice({
       sale_id: saleId,
       invoice_number: invoiceNumber,
-      subtotal: Number(premium_amount),
-      tax: Number(tax),
-      total: Number(total),
+      subtotal: invoiceSubtotal,
+      tax: taxN,
+      total: invoiceTotal,
       payment_status: 'Unpaid'
     });
 

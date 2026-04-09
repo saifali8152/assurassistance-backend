@@ -59,6 +59,21 @@ export const getSaleById = async (id) => {
   return rows[0];
 };
 
+/** First sale row for a case (confirmed policy) */
+export const getSaleByCaseId = async (caseId) => {
+  const pool = getPool();
+  const [rows] = await pool.query(`SELECT * FROM sales WHERE case_id = ? ORDER BY id ASC LIMIT 1`, [caseId]);
+  return rows[0] || null;
+};
+
+export const incrementPolicyEditCount = async (saleId) => {
+  const pool = getPool();
+  await pool.execute(
+    `UPDATE sales SET policy_edit_count = policy_edit_count + 1 WHERE id = ?`,
+    [saleId]
+  );
+};
+
 /** Sales for a group subscription (cases.group_id), scoped to allowed agent ids */
 export const getSalesByGroupIdForAgents = async (groupId, agentIds) => {
   if (!groupId || !agentIds || agentIds.length === 0) return [];
@@ -89,18 +104,49 @@ export const updatePaymentStatus = async (saleId, payment_status, payment_notes)
 
 export const getMonthlyReconciliation = async (month) => {
   const pool = getPool();
-  // month format: "2025-09"
+  // Billable amount = plan premium rate + tax when plan_price > 0; else legacy sale.total
   const [rows] = await pool.query(
     `SELECT 
         u.id as user_id,
         u.name as agent_name,
         DATE_FORMAT(s.confirmed_at, '%b-%Y') as month,
         COUNT(s.id) as total_sales,
-        SUM(s.total) as total_amount,
-        SUM(CASE WHEN s.payment_status='Paid' THEN s.total ELSE 0 END) as paid_amount,
-        SUM(CASE WHEN s.payment_status='Unpaid' THEN s.total ELSE 0 END) as unpaid_amount,
-        SUM(CASE WHEN s.payment_status='Partial' THEN s.total ELSE 0 END) as partial_amount,
-        SUM(s.total) - SUM(s.received_amount) as balance_due,
+        SUM(
+          CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
+            THEN s.plan_price + COALESCE(s.tax, 0)
+            ELSE s.total
+          END
+        ) as total_amount,
+        SUM(
+          CASE WHEN s.payment_status = 'Paid' THEN
+            CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
+              THEN s.plan_price + COALESCE(s.tax, 0)
+              ELSE s.total
+            END
+          ELSE 0 END
+        ) as paid_amount,
+        SUM(
+          CASE WHEN s.payment_status = 'Unpaid' THEN
+            CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
+              THEN s.plan_price + COALESCE(s.tax, 0)
+              ELSE s.total
+            END
+          ELSE 0 END
+        ) as unpaid_amount,
+        SUM(
+          CASE WHEN s.payment_status = 'Partial' THEN
+            CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
+              THEN s.plan_price + COALESCE(s.tax, 0)
+              ELSE s.total
+            END
+          ELSE 0 END
+        ) as partial_amount,
+        SUM(
+          CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
+            THEN s.plan_price + COALESCE(s.tax, 0)
+            ELSE s.total
+          END
+        ) - SUM(COALESCE(s.received_amount, 0)) as balance_due,
         SUM(s.received_amount) as gross_collected,
         SUM(s.tax) as fees,
         SUM(s.received_amount) - SUM(s.tax) as net_due

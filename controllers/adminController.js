@@ -508,33 +508,99 @@ export const getAdminDashboardStats = async (req, res) => {
   }
 };
 
-// Get production trend data (monthly sales for the last 12 months)
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Daily points for the current calendar month (all days 1..last day; empty days = 0). */
+async function buildCurrentMonthTrend(pool) {
+  const [rows] = await pool.query(
+    `SELECT 
+        DAY(confirmed_at) AS day_of_month,
+        COUNT(*) AS sales_count,
+        SUM(s.total) AS total_amount,
+        SUM(COALESCE(s.received_amount, 0)) AS collected_amount
+      FROM sales s
+      WHERE s.confirmed_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
+        AND s.confirmed_at < DATE_ADD(DATE_FORMAT(NOW(), '%Y-%m-01'), INTERVAL 1 MONTH)
+      GROUP BY DAY(confirmed_at)
+      ORDER BY day_of_month`
+  );
+
+  const byDay = new Map();
+  for (const r of rows) {
+    const d = Number(r.day_of_month);
+    byDay.set(d, {
+      salesCount: Number(r.sales_count) || 0,
+      totalAmount: Number(r.total_amount) || 0,
+      collectedAmount: Number(r.collected_amount) || 0
+    });
+  }
+
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const out = [];
+  for (let day = 1; day <= daysInMonth; day++) {
+    const pt = byDay.get(day) || { salesCount: 0, totalAmount: 0, collectedAmount: 0 };
+    out.push({
+      periodLabel: String(day),
+      day,
+      salesCount: pt.salesCount,
+      totalAmount: pt.totalAmount,
+      collectedAmount: pt.collectedAmount
+    });
+  }
+  return out;
+}
+
+/** Monthly points for the current calendar year (Jan–Dec; months with no sales = 0). */
+async function buildCurrentYearTrend(pool) {
+  const [rows] = await pool.query(
+    `SELECT 
+        MONTH(confirmed_at) AS month_num,
+        COUNT(*) AS sales_count,
+        SUM(s.total) AS total_amount,
+        SUM(COALESCE(s.received_amount, 0)) AS collected_amount
+      FROM sales s
+      WHERE YEAR(s.confirmed_at) = YEAR(NOW())
+      GROUP BY MONTH(confirmed_at)
+      ORDER BY month_num`
+  );
+
+  const byMonth = new Map();
+  for (const r of rows) {
+    const m = Number(r.month_num);
+    byMonth.set(m, {
+      salesCount: Number(r.sales_count) || 0,
+      totalAmount: Number(r.total_amount) || 0,
+      collectedAmount: Number(r.collected_amount) || 0
+    });
+  }
+
+  const out = [];
+  for (let m = 1; m <= 12; m++) {
+    const pt = byMonth.get(m) || { salesCount: 0, totalAmount: 0, collectedAmount: 0 };
+    out.push({
+      periodLabel: MONTH_SHORT[m - 1],
+      month: m,
+      salesCount: pt.salesCount,
+      totalAmount: pt.totalAmount,
+      collectedAmount: pt.collectedAmount
+    });
+  }
+  return out;
+}
+
+/** Sales volume, number of policies (sales count), and collections — current month (daily) and current year (monthly). */
 export const getProductionTrend = async (req, res) => {
   try {
     const pool = getPool();
-    
-    const [trendData] = await pool.query(`
-      SELECT 
-        DATE_FORMAT(confirmed_at, '%Y-%m') as month,
-        DATE_FORMAT(confirmed_at, '%b %Y') as month_label,
-        COUNT(*) as sales_count,
-        SUM(total) as total_amount,
-        SUM(received_amount) as collected_amount
-      FROM sales
-      WHERE confirmed_at >= DATE_SUB(NOW(), INTERVAL 12 MONTH)
-      GROUP BY DATE_FORMAT(confirmed_at, '%Y-%m'), DATE_FORMAT(confirmed_at, '%b %Y')
-      ORDER BY month ASC
-    `);
+    const [currentMonth, currentYear] = await Promise.all([buildCurrentMonthTrend(pool), buildCurrentYearTrend(pool)]);
 
     res.json({
       success: true,
-      data: trendData.map(row => ({
-        month: row.month,
-        monthLabel: row.month_label,
-        salesCount: Number(row.sales_count) || 0,
-        totalAmount: Number(row.total_amount) || 0,
-        collectedAmount: Number(row.collected_amount) || 0
-      }))
+      data: {
+        currentMonth,
+        currentYear
+      }
     });
   } catch (error) {
     console.error("Error fetching production trend:", error);

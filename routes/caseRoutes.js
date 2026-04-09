@@ -11,7 +11,8 @@ import {
   getMyCasesWithPagination,
   confirmSale,
   cancelCase,
-  updateCase
+  updateCase,
+  getPolicyEditMeta
 } from "../controllers/caseController.js";
 
 const router = express.Router();
@@ -26,5 +27,6 @@ router.patch("/:id/status", authenticate, changeCaseStatus);
 router.post("/:caseId/confirm-sale", authenticate, confirmSale); // Admin only
 router.post("/:caseId/cancel", authenticate, cancelCase); // Admin only
 router.put("/:caseId/update", authenticate, updateCase); // Update case
+router.get("/:caseId/policy-edit-meta", authenticate, getPolicyEditMeta);
 
 export default router;

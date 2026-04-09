@@ -15,6 +15,58 @@ import {
   stayDaysToValidityTier,
   computeTravelPlanPremium
 } from "../utils/travelPricing.js";
+import path from "path";
+import fs from "fs";
+
+const DEFAULT_GENERAL_PHONE = (process.env.CERTIFICATE_GENERAL_PHONE || "+225 27 22 22 82 60").trim();
+const DEFAULT_WHATSAPP_PHONE = (process.env.CERTIFICATE_WHATSAPP_PHONE || "+225 07 18 92 31 94").trim();
+
+function resolvePublicUploadUrl(req, relativePath) {
+  if (!relativePath || String(relativePath).trim() === "") return null;
+  const p = String(relativePath).trim();
+  if (/^https?:\/\//i.test(p)) return p;
+  const envBase = (process.env.BASE_URL || "").replace(/\/$/, "");
+  if (envBase) return `${envBase}${p.startsWith("/") ? "" : "/"}${p}`;
+  const host = req.get("x-forwarded-host") || req.get("host") || "";
+  const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+  if (!host) return p.startsWith("/") ? p : `/${p}`;
+  return `${proto}://${host}${p.startsWith("/") ? "" : "/"}${p}`;
+}
+
+function partnerLogoFsFromDb(rel) {
+  if (!rel || typeof rel !== "string" || !rel.startsWith("/uploads/")) return null;
+  const fp = path.join(process.cwd(), rel.replace(/^\//, ""));
+  try {
+    return fs.existsSync(fp) ? fp : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Invoice amounts must use actual plan premium (plan_price), not sums of coverage limits. */
+function invoiceBillableFromSale(sale, invoice) {
+  const pp = Number(sale.plan_price);
+  const taxV = Number(sale.tax != null ? sale.tax : invoice?.tax) || 0;
+  if (Number.isFinite(pp) && pp > 0) {
+    return { subtotal: pp, tax: taxV, total: pp + taxV };
+  }
+  const sub = Number(invoice?.subtotal ?? sale?.premium_amount) || 0;
+  const tot = Number(invoice?.total ?? sale?.total) || 0;
+  return { subtotal: sub, tax: taxV, total: tot };
+}
+
+function invoiceTitleFromReq(req) {
+  if (!req?.get) return "INVOICE";
+  const al = (req.get("Accept-Language") || "").toLowerCase();
+  return al.startsWith("fr") ? "FACTURE" : "INVOICE";
+}
+
+/** "fr" | "en" — matches Accept-Language for invoice PDF copy */
+function invoiceLocaleFromReq(req) {
+  if (!req?.get) return "en";
+  const al = (req.get("Accept-Language") || "").toLowerCase();
+  return al.startsWith("fr") ? "fr" : "en";
+}
 
 const COVERAGE_LABELS = {
   medicalEmergencies: "Medical emergencies",
@@ -159,6 +211,16 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
   const emergencyHelpline =
     (process.env.CERTIFICATE_EMERGENCY_PHONE || "+91 62916 62954").trim();
   const websiteUrl = (process.env.CERTIFICATE_WEBSITE_URL || "https://www.assurassistance.org").trim();
+  const generalLine =
+    agentContact.generalPhone && String(agentContact.generalPhone).trim() !== ""
+      ? String(agentContact.generalPhone).trim()
+      : DEFAULT_GENERAL_PHONE;
+  const whatsappLine =
+    agentContact.whatsapp && String(agentContact.whatsapp).trim() !== ""
+      ? String(agentContact.whatsapp).trim()
+      : DEFAULT_WHATSAPP_PHONE;
+
+  const partnerRel = caseDetails.plan_partner_insurer_logo || null;
 
   return {
     certificateNumber: cert.certificate_number,
@@ -203,10 +265,12 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     },
     benefits: guaranteesList,
     qrDataUrl,
+    partnerLogoUrl: resolvePublicUploadUrl(req, partnerRel),
+    partnerLogoFsPath: partnerLogoFsFromDb(partnerRel),
     contact: {
       emergencyHelpline,
-      generalLine: agentContact.generalPhone,
-      whatsapp: agentContact.whatsapp,
+      generalLine,
+      whatsapp: whatsappLine,
       websiteUrl
     },
     footer: {
@@ -313,18 +377,26 @@ export const downloadInvoice = async (req, res) => {
     };
 
     const sale = saleDetails;
+    const bill = invoiceBillableFromSale(sale, invoice);
+    const partnerFs = partnerLogoFsFromDb(caseDetails.plan_partner_insurer_logo);
 
-    // Generate PDF buffer (without saving to file)
-    const pdfBuffer = await generateInvoicePDF({
-      invoiceNumber: invoice.invoice_number,
-      sale,
-      traveller,
-      plan,
-      subtotal: invoice.subtotal,
-      tax: invoice.tax,
-      total: invoice.total,
-      countryOfResidence: traveller.country_of_residence
-    }, true); // true = return buffer instead of saving file
+    const pdfBuffer = await generateInvoicePDF(
+      {
+        invoiceNumber: invoice.invoice_number,
+        sale,
+        traveller,
+        plan,
+        subtotal: bill.subtotal,
+        tax: bill.tax,
+        total: bill.total,
+        countryOfResidence: traveller.country_of_residence,
+        partnerLogoFsPath: partnerFs,
+        invoiceTitle: invoiceTitleFromReq(req),
+        currency: sale.currency || "XOF",
+        locale: invoiceLocaleFromReq(req)
+      },
+      true
+    );
 
     // Set headers for PDF download
     res.setHeader('Content-Type', 'application/pdf');
@@ -362,7 +434,7 @@ async function certificatePdfBufferForSaleId(saleId, req) {
 }
 
 /** Invoice PDF buffer for a sale id (group ZIP) */
-async function invoicePdfBufferForSaleId(saleId) {
+async function invoicePdfBufferForSaleId(saleId, req) {
   const invoice = await getInvoiceBySaleId(saleId);
   if (!invoice) return null;
 
@@ -389,16 +461,23 @@ async function invoicePdfBufferForSaleId(saleId) {
     flat_price: caseDetails.flat_price
   };
 
+  const bill = invoiceBillableFromSale(saleDetails, invoice);
+  const partnerFs = partnerLogoFsFromDb(caseDetails.plan_partner_insurer_logo);
+
   const pdfBuffer = await generateInvoicePDF(
     {
       invoiceNumber: invoice.invoice_number,
       sale: saleDetails,
       traveller,
       plan,
-      subtotal: invoice.subtotal,
-      tax: invoice.tax,
-      total: invoice.total,
-      countryOfResidence: traveller.country_of_residence
+      subtotal: bill.subtotal,
+      tax: bill.tax,
+      total: bill.total,
+      countryOfResidence: traveller.country_of_residence,
+      partnerLogoFsPath: partnerFs,
+      invoiceTitle: invoiceTitleFromReq(req),
+      currency: saleDetails.currency || "XOF",
+      locale: invoiceLocaleFromReq(req)
     },
     true
   );
@@ -491,7 +570,7 @@ export const downloadGroupInvoicesZip = async (req, res) => {
     archive.pipe(res);
 
     for (const row of salesRows) {
-      const inv = await invoicePdfBufferForSaleId(row.sale_id);
+      const inv = await invoicePdfBufferForSaleId(row.sale_id, req);
       if (inv) {
         archive.append(inv.pdfBuffer, {
           name: `invoice-${inv.invoice_number}.pdf`

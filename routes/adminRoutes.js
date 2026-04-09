@@ -1,6 +1,6 @@
 // src/routes/adminRoutes.js
 import express from 'express';
-import { createAgent, listAgents, getAgent, updateAgent, listSubAgents, createSubAgent, deleteAgentOrHierarchy, changeUserStatus, getAdminDashboardStats, getProductionTrend, sendPasswordResetLink } from '../controllers/adminController.js';
+import { createAgent, listAgents, getAgent, updateAgent, listSubAgents, createSubAgent, deleteAgentOrHierarchy, changeUserStatus, getAdminDashboardStats, getProductionTrend, sendPasswordResetLink, listAgentHierarchy, exportAgentHierarchyCsv } from '../controllers/adminController.js';
 import authenticate from '../middlewares/authMiddleware.js';
 import { adminOnly } from '../middlewares/roleMiddleware.js';
 import { findUserById } from '../models/userModel.js';
@@ -11,6 +11,8 @@ const router = express.Router();
 // adminRoutes.js
 router.post('/create-agent', authenticate, adminOnly, createAgent);
 router.get('/list-agents', authenticate, adminOnly, listAgents);
+router.get('/agent-hierarchy/export', authenticate, adminOnly, exportAgentHierarchyCsv);
+router.get('/agent-hierarchy', authenticate, adminOnly, listAgentHierarchy);
 router.get('/agents/:id', authenticate, adminOnly, getAgent);
 router.patch('/agents/:id', authenticate, adminOnly, updateAgent);
 router.delete('/agents/:id', authenticate, adminOnly, deleteAgentOrHierarchy);

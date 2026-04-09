@@ -1,8 +1,21 @@
 // src/controllers/adminController.js
 import bcrypt from 'bcryptjs';
-import { createUser, findUserByEmail, getAllUsers, getAgents, findUserById, updateAgentProfile, getAgentAssignedPlanIds, setAgentAssignedPlans, getSubAgents, deleteAgentHierarchy } from '../models/userModel.js';
+import {
+  createUser,
+  findUserByEmail,
+  getAllUsers,
+  getAgents,
+  findUserById,
+  updateAgentProfile,
+  getAgentAssignedPlanIds,
+  setAgentAssignedPlans,
+  getSubAgents,
+  deleteAgentHierarchy,
+  queryAgentHierarchyPaginated,
+  queryAgentHierarchyAll,
+  updateUserStatus
+} from '../models/userModel.js';
 import crypto from 'crypto';
-import { updateUserStatus } from '../models/userModel.js';
 import getPool from '../utils/db.js';
 import { generateStrongPassword } from '../utils/passwordUtils.js';
 import sendEmail from '../utils/emailService.js';
@@ -143,6 +156,204 @@ export const listAgents = async (req, res) => {
         }
       }
     });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+function parseAssignedPlanIdsFromDb(str) {
+  if (!str) return [];
+  return String(str)
+    .split(',')
+    .map((x) => parseInt(x, 10))
+    .filter((n) => !Number.isNaN(n));
+}
+
+function mapHierarchyRow(r) {
+  return {
+    hierarchyRole: r.hierarchy_role,
+    id: r.id,
+    name: r.name,
+    email: r.email,
+    status: r.status,
+    forcePasswordChange: !!r.force_password_change,
+    lastLogin: r.last_login,
+    createdAt: r.created_at,
+    companyName: r.company_name,
+    partnershipType: r.partnership_type,
+    countryOfResidence: r.country_of_residence,
+    iataNumber: r.iata_number,
+    geographicalLocation: r.geographical_location,
+    workPhone: r.work_phone,
+    whatsappPhone: r.whatsapp_phone,
+    assignedPlanIds: parseAssignedPlanIdsFromDb(r.assigned_plan_ids),
+    supervisor: {
+      id: r.supervisor_id,
+      name: r.supervisor_name,
+      email: r.supervisor_email,
+      companyName: r.supervisor_company_name,
+      partnershipType: r.supervisor_partnership_type,
+      countryOfResidence: r.supervisor_country,
+      iataNumber: r.supervisor_iata,
+      geographicalLocation: r.supervisor_geo,
+      workPhone: r.supervisor_work_phone,
+      whatsappPhone: r.supervisor_whatsapp
+    },
+    agent:
+      r.agent_id == null
+        ? null
+        : {
+            id: r.agent_id,
+            name: r.agent_name,
+            email: r.agent_email,
+            companyName: r.agent_company_name,
+            partnershipType: r.agent_partnership_type,
+            countryOfResidence: r.agent_country,
+            iataNumber: r.agent_iata,
+            geographicalLocation: r.agent_geo,
+            workPhone: r.agent_work_phone,
+            whatsappPhone: r.agent_whatsapp
+          }
+  };
+}
+
+function csvEscape(val) {
+  if (val == null || val === undefined) return '';
+  const s = String(val);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+/** GET /admin/agent-hierarchy — paginated flat list: supervisors, agents, sub-agents */
+export const listAgentHierarchy = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 25;
+    const search = req.query.search || '';
+    const status = req.query.status || '';
+
+    const { rows, total, totalPages, page: p, limit: l } = await queryAgentHierarchyPaginated({
+      page,
+      limit,
+      search,
+      status
+    });
+
+    res.json({
+      success: true,
+      data: {
+        rows: rows.map(mapHierarchyRow),
+        pagination: {
+          currentPage: p,
+          totalPages,
+          totalItems: total,
+          itemsPerPage: l,
+          hasNextPage: p < totalPages,
+          hasPrevPage: p > 1
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/** GET /admin/agent-hierarchy/export — full CSV (same filters as list, no pagination) */
+export const exportAgentHierarchyCsv = async (req, res) => {
+  try {
+    const search = req.query.search || '';
+    const status = req.query.status || '';
+    const rows = await queryAgentHierarchyAll({ search, status });
+
+    const headers = [
+      'Role',
+      'User ID',
+      'Name',
+      'Email',
+      'Status',
+      'Force password change',
+      'Last login',
+      'Created at',
+      'Company',
+      'Partnership',
+      'Country of residence',
+      'IATA',
+      'Geographical location',
+      'Work phone',
+      'WhatsApp',
+      'Assigned plan IDs',
+      'Supervisor ID',
+      'Supervisor name',
+      'Supervisor email',
+      'Supervisor company',
+      'Supervisor partnership',
+      'Supervisor country',
+      'Supervisor IATA',
+      'Supervisor geo',
+      'Supervisor work phone',
+      'Supervisor WhatsApp',
+      'Agent ID',
+      'Agent name',
+      'Agent email',
+      'Agent company',
+      'Agent partnership',
+      'Agent country',
+      'Agent IATA',
+      'Agent geo',
+      'Agent work phone',
+      'Agent WhatsApp'
+    ];
+
+    const lines = [headers.map(csvEscape).join(',')];
+    for (const r of rows) {
+      const line = [
+        r.hierarchy_role,
+        r.id,
+        r.name,
+        r.email,
+        r.status,
+        r.force_password_change ? '1' : '0',
+        r.last_login,
+        r.created_at,
+        r.company_name,
+        r.partnership_type,
+        r.country_of_residence,
+        r.iata_number,
+        r.geographical_location,
+        r.work_phone,
+        r.whatsapp_phone,
+        r.assigned_plan_ids || '',
+        r.supervisor_id,
+        r.supervisor_name,
+        r.supervisor_email,
+        r.supervisor_company_name,
+        r.supervisor_partnership_type,
+        r.supervisor_country,
+        r.supervisor_iata,
+        r.supervisor_geo,
+        r.supervisor_work_phone,
+        r.supervisor_whatsapp,
+        r.agent_id,
+        r.agent_name,
+        r.agent_email,
+        r.agent_company_name,
+        r.agent_partnership_type,
+        r.agent_country,
+        r.agent_iata,
+        r.agent_geo,
+        r.agent_work_phone,
+        r.agent_whatsapp
+      ].map(csvEscape);
+      lines.push(line.join(','));
+    }
+
+    const bom = '\uFEFF';
+    const body = bom + lines.join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="agent-hierarchy.csv"');
+    res.send(body);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });

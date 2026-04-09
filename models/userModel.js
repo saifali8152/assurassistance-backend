@@ -201,6 +201,126 @@ export const getAgentDeletionOrder = async (rootUserId) => {
  * Deletes agent user(s): supervisor removes whole tree; agent removes self + sub-agents; sub-agent removes self.
  * Deletes cases by those users (cascades sales/invoices/certificates) and travellers no longer referenced.
  */
+/** Flat union: one row per supervisor, per agent under a supervisor, and per sub-agent (with context columns). */
+const AGENT_HIERARCHY_UNION_SQL = `
+  SELECT
+    'supervisor' AS hierarchy_role,
+    u.id, u.name, u.email, u.status, u.force_password_change, u.last_login, u.created_at,
+    u.company_name, u.partnership_type, u.country_of_residence, u.iata_number,
+    u.geographical_location, u.work_phone, u.whatsapp_phone,
+    (SELECT GROUP_CONCAT(catalogue_id) FROM user_assigned_plans WHERE user_id = u.id) AS assigned_plan_ids,
+    u.id AS supervisor_id, u.name AS supervisor_name, u.email AS supervisor_email,
+    u.company_name AS supervisor_company_name, u.partnership_type AS supervisor_partnership_type,
+    u.country_of_residence AS supervisor_country, u.iata_number AS supervisor_iata,
+    u.geographical_location AS supervisor_geo, u.work_phone AS supervisor_work_phone, u.whatsapp_phone AS supervisor_whatsapp,
+    NULL AS agent_id, NULL AS agent_name, NULL AS agent_email,
+    NULL AS agent_company_name, NULL AS agent_partnership_type, NULL AS agent_country, NULL AS agent_iata,
+    NULL AS agent_geo, NULL AS agent_work_phone, NULL AS agent_whatsapp
+  FROM users u
+  WHERE u.role = 'agent' AND (u.parent_agent_id IS NULL OR u.parent_agent_id = 0)
+  UNION ALL
+  SELECT
+    'agent' AS hierarchy_role,
+    a.id, a.name, a.email, a.status, a.force_password_change, a.last_login, a.created_at,
+    a.company_name, a.partnership_type, a.country_of_residence, a.iata_number,
+    a.geographical_location, a.work_phone, a.whatsapp_phone,
+    (SELECT GROUP_CONCAT(catalogue_id) FROM user_assigned_plans WHERE user_id = a.id),
+    sup.id, sup.name, sup.email,
+    sup.company_name, sup.partnership_type, sup.country_of_residence, sup.iata_number,
+    sup.geographical_location, sup.work_phone, sup.whatsapp_phone,
+    a.id, a.name, a.email,
+    a.company_name, a.partnership_type, a.country_of_residence, a.iata_number,
+    a.geographical_location, a.work_phone, a.whatsapp_phone
+  FROM users a
+  INNER JOIN users sup ON a.parent_agent_id = sup.id
+  WHERE a.role = 'agent' AND (sup.parent_agent_id IS NULL OR sup.parent_agent_id = 0)
+  UNION ALL
+  SELECT
+    'sub_agent' AS hierarchy_role,
+    sub.id, sub.name, sub.email, sub.status, sub.force_password_change, sub.last_login, sub.created_at,
+    sub.company_name, sub.partnership_type, sub.country_of_residence, sub.iata_number,
+    sub.geographical_location, sub.work_phone, sub.whatsapp_phone,
+    (SELECT GROUP_CONCAT(catalogue_id) FROM user_assigned_plans WHERE user_id = sub.id),
+    sup.id, sup.name, sup.email,
+    sup.company_name, sup.partnership_type, sup.country_of_residence, sup.iata_number,
+    sup.geographical_location, sup.work_phone, sup.whatsapp_phone,
+    ag.id, ag.name, ag.email,
+    ag.company_name, ag.partnership_type, ag.country_of_residence, ag.iata_number,
+    ag.geographical_location, ag.work_phone, ag.whatsapp_phone
+  FROM users sub
+  INNER JOIN users ag ON sub.parent_agent_id = ag.id
+  INNER JOIN users sup ON ag.parent_agent_id = sup.id
+  WHERE sub.role = 'agent' AND (sup.parent_agent_id IS NULL OR sup.parent_agent_id = 0)
+`;
+
+function buildAgentHierarchyWhere(search, status) {
+  const clauses = [];
+  const params = [];
+  if (search && String(search).trim()) {
+    const t = `%${String(search).trim()}%`;
+    clauses.push(
+      `(flat.name LIKE ? OR flat.email LIKE ? OR flat.supervisor_name LIKE ? OR flat.supervisor_email LIKE ? OR flat.agent_name LIKE ? OR flat.agent_email LIKE ?)`
+    );
+    params.push(t, t, t, t, t, t);
+  }
+  if (status && String(status).trim()) {
+    clauses.push("flat.status = ?");
+    params.push(String(status).trim());
+  }
+  const whereSql = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  return { whereSql, params };
+}
+
+const AGENT_HIERARCHY_ORDER_SQL = `
+  ORDER BY flat.supervisor_id ASC,
+    CASE flat.hierarchy_role WHEN 'supervisor' THEN 0 WHEN 'agent' THEN 1 ELSE 2 END ASC,
+    COALESCE(flat.agent_id, 0) ASC,
+    flat.id ASC
+`;
+
+/**
+ * Paginated flat hierarchy (supervisors, their agents, sub-agents) for admin.
+ * @param {{ page?: number, limit?: number, search?: string, status?: string }} opts
+ */
+export const queryAgentHierarchyPaginated = async (opts = {}) => {
+  const page = Math.max(1, parseInt(String(opts.page || 1), 10) || 1);
+  const rawLimit = parseInt(String(opts.limit || 25), 10);
+  const limit = Math.min(100, Math.max(1, Number.isNaN(rawLimit) ? 25 : rawLimit));
+  const offset = (page - 1) * limit;
+  const search = opts.search || "";
+  const status = opts.status || "";
+
+  const pool = getPool();
+  const { whereSql, params } = buildAgentHierarchyWhere(search, status);
+  const wrapped = `SELECT * FROM (${AGENT_HIERARCHY_UNION_SQL}) AS flat ${whereSql}`;
+
+  const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM (${AGENT_HIERARCHY_UNION_SQL}) AS flat ${whereSql}`, params);
+
+  const [rows] = await pool.query(`${wrapped} ${AGENT_HIERARCHY_ORDER_SQL} LIMIT ? OFFSET ?`, [...params, limit, offset]);
+
+  return {
+    rows,
+    total: Number(total) || 0,
+    page,
+    limit,
+    totalPages: Math.ceil((Number(total) || 0) / limit) || 1
+  };
+};
+
+/**
+ * Full hierarchy for CSV export (server-side, no pagination).
+ * @param {{ search?: string, status?: string }} opts
+ */
+export const queryAgentHierarchyAll = async (opts = {}) => {
+  const search = opts.search || "";
+  const status = opts.status || "";
+  const pool = getPool();
+  const { whereSql, params } = buildAgentHierarchyWhere(search, status);
+  const wrapped = `SELECT * FROM (${AGENT_HIERARCHY_UNION_SQL}) AS flat ${whereSql}`;
+  const [rows] = await pool.query(`${wrapped} ${AGENT_HIERARCHY_ORDER_SQL}`, params);
+  return rows;
+};
+
 export const deleteAgentHierarchy = async (rootUserId) => {
   const pool = getPool();
   const { error, order } = await getAgentDeletionOrder(rootUserId);

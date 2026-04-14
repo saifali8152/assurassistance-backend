@@ -652,9 +652,14 @@ export const getAdminDashboardStats = async (req, res) => {
       `SELECT SUM(received_amount) as gross_collected FROM sales`
     );
 
-    // Unpaid Balance
+    // Unpaid balance vs billable premium (plan rate + tax), not raw total / coverage figures
     const [[{ unpaid_balance = 0 } = {}]] = await pool.query(
-      `SELECT SUM(total - received_amount) as unpaid_balance FROM sales`
+      `SELECT SUM(GREATEST(0,
+        (CASE WHEN plan_price IS NOT NULL AND plan_price > 0
+          THEN plan_price + COALESCE(tax, 0)
+          ELSE \`total\`
+        END) - COALESCE(received_amount, 0)
+      )) AS unpaid_balance FROM sales`
     );
 
     // Active Users (last 7 days)
@@ -671,7 +676,10 @@ export const getAdminDashboardStats = async (req, res) => {
         s.case_id,
         s.policy_number,
         s.certificate_number,
-        s.total,
+        (CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
+          THEN s.plan_price + COALESCE(s.tax, 0)
+          ELSE s.total
+        END) AS total,
         s.received_amount,
         s.payment_status,
         s.confirmed_at,
@@ -727,7 +735,10 @@ async function buildCurrentMonthTrend(pool) {
     `SELECT 
         DAY(confirmed_at) AS day_of_month,
         COUNT(*) AS sales_count,
-        SUM(s.total) AS total_amount,
+        SUM(CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
+          THEN s.plan_price + COALESCE(s.tax, 0)
+          ELSE s.total
+        END) AS premium_amount,
         SUM(COALESCE(s.received_amount, 0)) AS collected_amount
       FROM sales s
       WHERE s.confirmed_at >= DATE_FORMAT(NOW(), '%Y-%m-01')
@@ -741,7 +752,7 @@ async function buildCurrentMonthTrend(pool) {
     const d = Number(r.day_of_month);
     byDay.set(d, {
       salesCount: Number(r.sales_count) || 0,
-      totalAmount: Number(r.total_amount) || 0,
+      premiumAmount: Number(r.premium_amount) || 0,
       collectedAmount: Number(r.collected_amount) || 0
     });
   }
@@ -750,12 +761,12 @@ async function buildCurrentMonthTrend(pool) {
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const out = [];
   for (let day = 1; day <= daysInMonth; day++) {
-    const pt = byDay.get(day) || { salesCount: 0, totalAmount: 0, collectedAmount: 0 };
+    const pt = byDay.get(day) || { salesCount: 0, premiumAmount: 0, collectedAmount: 0 };
     out.push({
       periodLabel: String(day),
       day,
       salesCount: pt.salesCount,
-      totalAmount: pt.totalAmount,
+      premiumAmount: pt.premiumAmount,
       collectedAmount: pt.collectedAmount
     });
   }
@@ -768,7 +779,10 @@ async function buildCurrentYearTrend(pool) {
     `SELECT 
         MONTH(confirmed_at) AS month_num,
         COUNT(*) AS sales_count,
-        SUM(s.total) AS total_amount,
+        SUM(CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
+          THEN s.plan_price + COALESCE(s.tax, 0)
+          ELSE s.total
+        END) AS premium_amount,
         SUM(COALESCE(s.received_amount, 0)) AS collected_amount
       FROM sales s
       WHERE YEAR(s.confirmed_at) = YEAR(NOW())
@@ -781,26 +795,26 @@ async function buildCurrentYearTrend(pool) {
     const m = Number(r.month_num);
     byMonth.set(m, {
       salesCount: Number(r.sales_count) || 0,
-      totalAmount: Number(r.total_amount) || 0,
+      premiumAmount: Number(r.premium_amount) || 0,
       collectedAmount: Number(r.collected_amount) || 0
     });
   }
 
   const out = [];
   for (let m = 1; m <= 12; m++) {
-    const pt = byMonth.get(m) || { salesCount: 0, totalAmount: 0, collectedAmount: 0 };
+    const pt = byMonth.get(m) || { salesCount: 0, premiumAmount: 0, collectedAmount: 0 };
     out.push({
       periodLabel: MONTH_SHORT[m - 1],
       month: m,
       salesCount: pt.salesCount,
-      totalAmount: pt.totalAmount,
+      premiumAmount: pt.premiumAmount,
       collectedAmount: pt.collectedAmount
     });
   }
   return out;
 }
 
-/** Sales volume, number of policies (sales count), and collections — current month (daily) and current year (monthly). */
+/** Premiums (plan rate + tax, same billable basis as ledger), policy counts, and collections — current month (daily) and current year (monthly). */
 export const getProductionTrend = async (req, res) => {
   try {
     const pool = getPool();

@@ -34,7 +34,8 @@ const INVOICE_I18N = {
     address: "Address:",
     notes: "NOTES / DISCLAIMER",
     disclaimer:
-      '"This invoice is generated for the travel insurance coverage purchased under the referenced certificate. Premium amounts reflect the applicable plan rate (not benefit coverage limits). Subject to the terms and conditions of the policy."'
+      '"This invoice is generated for the travel insurance coverage purchased under the referenced certificate. Premium amounts reflect the applicable plan rate (not benefit coverage limits). Subject to the terms and conditions of the policy."',
+    invoiceBrandLine: "Assur'Assistance"
   },
   fr: {
     invoiceNo: "N° de facture :",
@@ -61,7 +62,8 @@ const INVOICE_I18N = {
     address: "Adresse :",
     notes: "NOTES / CLAUSE DE NON-RESPONSABILITÉ",
     disclaimer:
-      "« La présente facture est établie pour la couverture d'assurance voyage souscrite sous le certificat mentionné. Les montants de prime reflètent le tarif du plan applicable (et non les plafonds de garantie). Sous réserve des conditions générales de la police. »"
+      "« La présente facture est établie pour la couverture d'assurance voyage souscrite sous le certificat mentionné. Les montants de prime reflètent le tarif du plan applicable (et non les plafonds de garantie). Sous réserve des conditions générales de la police. »",
+    invoiceBrandLine: "Assur'Assistance"
   }
 };
 
@@ -145,38 +147,54 @@ export const generateInvoicePDF = async (
     const partnerPath =
       partnerLogoFsPath && fs.existsSync(partnerLogoFsPath) ? partnerLogoFsPath : null;
 
-    doc.rect(0, 0, doc.page.width, 88).fill(white);
-
     const leftX = 50;
     const rightEdge = doc.page.width - 50;
+    const headerTop = 20;
+    const logoMaxH = 52;
+    const partnerFitW = 170;
+    /** Header band + orange rule — aligned with certificate PDF layout */
+    const headerOrangeLineY = headerTop + logoMaxH + 14;
+
+    doc.rect(0, 0, doc.page.width, headerOrangeLineY + 8).fill(white);
 
     if (mainLogo) {
       try {
-        doc.image(mainLogo, leftX, 22, { height: 38, fit: [150, 38] });
+        doc.image(mainLogo, leftX, headerTop, { height: logoMaxH, fit: [210, logoMaxH] });
       } catch {
         /* ignore */
       }
     } else {
-      doc.rect(leftX, 22, 70, 38).fill(lightGray).stroke("#cccccc");
-      doc.fillColor(darkGray).fontSize(10).text("LOGO", leftX + 22, 36);
+      doc.rect(leftX, headerTop, 80, logoMaxH).fill(lightGray).stroke("#cccccc");
+      doc.fillColor(darkGray).fontSize(10).text("LOGO", leftX + 24, headerTop + logoMaxH / 2 - 5);
     }
 
     if (partnerPath) {
       try {
-        doc.image(partnerPath, rightEdge - 120, 24, { height: 36, fit: [110, 36] });
+        doc.image(partnerPath, rightEdge - partnerFitW - 8, headerTop + 2, {
+          height: 48,
+          fit: [partnerFitW, 48]
+        });
       } catch {
         /* ignore */
       }
     }
 
-    doc.fillColor(ORANGE).fontSize(26).font("Helvetica-Bold").text(invoiceTitle, rightEdge - 200, 28, {
-      width: 200,
-      align: "right"
+    doc.fillColor(ORANGE).fontSize(22).font("Helvetica-Bold");
+    doc.text(invoiceTitle, leftX, headerTop + 10, {
+      width: rightEdge - leftX,
+      align: "center"
+    });
+    doc.fillColor("#333333").fontSize(9).font("Helvetica");
+    doc.text(L.invoiceBrandLine, leftX, headerTop + 38, {
+      width: rightEdge - leftX,
+      align: "center"
     });
 
-    doc.moveTo(50, 92).lineTo(doc.page.width - 50, 92).stroke("#cccccc");
+    doc.strokeColor(ORANGE).lineWidth(2);
+    doc.moveTo(leftX, headerOrangeLineY).lineTo(doc.page.width - leftX, headerOrangeLineY).stroke();
+    doc.strokeColor("#cccccc").lineWidth(1);
 
-    const invoiceDetailsY = 108;
+    const invoiceDetailsY = headerOrangeLineY + 20;
     doc.fillColor("black").fontSize(10).font("Helvetica");
     doc.text(`${L.invoiceNo}`, rightEdge - 250, invoiceDetailsY);
     doc.text(`${invoiceNumber}`, rightEdge - 150, invoiceDetailsY);

@@ -101,29 +101,35 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
         ? payload.partnerLogoFsPath
         : null;
 
-    const headerH = 38;
+    const headerH = 56;
+    const mainLogoH = 50;
+    const partnerLogoH = 48;
+    const partnerFitW = 170;
     if (mainLogo) {
       try {
-        doc.image(mainLogo, left, y, { height: 34, fit: [120, 34] });
+        doc.image(mainLogo, left, y, { height: mainLogoH, fit: [200, mainLogoH] });
       } catch {
         /* ignore */
       }
     }
     if (partnerLogoPath) {
       try {
-        doc.image(partnerLogoPath, right - 118, y, { height: 32, fit: [110, 32] });
+        doc.image(partnerLogoPath, right - partnerFitW - 8, y + 1, {
+          height: partnerLogoH,
+          fit: [partnerFitW, partnerLogoH]
+        });
       } catch {
         /* ignore */
       }
     }
 
-    doc.fillColor(ORANGE).font("Helvetica-Bold").fontSize(11);
-    doc.text("INSURANCE CERTIFICATE", left, y + 6, {
+    doc.fillColor(ORANGE).font("Helvetica-Bold").fontSize(12);
+    doc.text("INSURANCE CERTIFICATE", left, y + 10, {
       width: w,
       align: "center"
     });
-    doc.fillColor("#000").font("Helvetica").fontSize(7);
-    doc.text(productSubtitle(payload.productType), left, y + 20, { width: w, align: "center" });
+    doc.fillColor("#000").font("Helvetica").fontSize(7.5);
+    doc.text(productSubtitle(payload.productType), left, y + 28, { width: w, align: "center" });
 
     y += headerH;
     doc.fillColor(ORANGE).rect(left, y, w, 2).fill();

@@ -12,7 +12,8 @@ import {
   confirmSale,
   cancelCase,
   updateCase,
-  getPolicyEditMeta
+  getPolicyEditMeta,
+  getCaseById
 } from "../controllers/caseController.js";
 
 const router = express.Router();
@@ -28,5 +29,6 @@ router.post("/:caseId/confirm-sale", authenticate, confirmSale); // Admin only
 router.post("/:caseId/cancel", authenticate, cancelCase); // Admin only
 router.put("/:caseId/update", authenticate, updateCase); // Update case
 router.get("/:caseId/policy-edit-meta", authenticate, getPolicyEditMeta);
+router.get("/:caseId", authenticate, getCaseById);
 
 export default router;

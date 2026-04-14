@@ -329,6 +329,29 @@ export const cancelCase = async (req, res) => {
 };
 
 /** Who may edit what on a confirmed sale — used by the SPA */
+/** Single case for edit / resume (traveller + plan + optional sale id) */
+export const getCaseById = async (req, res) => {
+  try {
+    const { caseId } = req.params;
+    const access = await assertUserCanAccessCase(req, caseId);
+    if (access.error) return res.status(access.error).json({ message: access.message });
+
+    const row = access.caseRow;
+    const sale = await getSaleByCaseId(caseId);
+
+    res.json({
+      success: true,
+      data: {
+        ...row,
+        sale_id: sale?.id ?? null
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 export const getPolicyEditMeta = async (req, res) => {
   try {
     const { caseId } = req.params;

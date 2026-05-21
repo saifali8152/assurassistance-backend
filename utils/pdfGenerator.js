@@ -8,6 +8,13 @@ const ensureDir = (dir) => {
 
 const ORANGE = "#E4590F";
 
+/** Accepts "#RRGGBB" or "#RRGGBBAA"; falls back to brand orange. */
+function sanitizeHexColor(input, fallback = ORANGE) {
+  if (input == null) return fallback;
+  const s = String(input).trim();
+  return /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s) ? s.toUpperCase() : fallback;
+}
+
 const INVOICE_I18N = {
   en: {
     invoiceNo: "Invoice No.:",
@@ -109,12 +116,14 @@ export const generateInvoicePDF = async (
     partnerLogoFsPath = null,
     invoiceTitle = "INVOICE",
     currency = "XOF",
-    locale = "en"
+    locale = "en",
+    themeColor = ORANGE
   },
   returnBuffer = false
 ) => {
   const doc = new PDFDocument({ size: "A4", margin: 50 });
   const L = INVOICE_I18N[locale === "fr" ? "fr" : "en"];
+  const accent = sanitizeHexColor(themeColor);
 
   return new Promise((resolve, reject) => {
     let stream;
@@ -179,7 +188,7 @@ export const generateInvoicePDF = async (
       }
     }
 
-    doc.fillColor(ORANGE).fontSize(22).font("Helvetica-Bold");
+    doc.fillColor(accent).fontSize(22).font("Helvetica-Bold");
     doc.text(invoiceTitle, leftX, headerTop + 10, {
       width: rightEdge - leftX,
       align: "center"
@@ -190,7 +199,7 @@ export const generateInvoicePDF = async (
       align: "center"
     });
 
-    doc.strokeColor(ORANGE).lineWidth(2);
+    doc.strokeColor(accent).lineWidth(2);
     doc.moveTo(leftX, headerOrangeLineY).lineTo(doc.page.width - leftX, headerOrangeLineY).stroke();
     doc.strokeColor("#cccccc").lineWidth(1);
 

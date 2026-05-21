@@ -56,6 +56,8 @@ CREATE TABLE `catalogue` (
   `terms` text,
   `country_of_residence` varchar(255) DEFAULT NULL,
   `route_type` varchar(50) DEFAULT NULL,
+  `theme_color` varchar(9) NOT NULL DEFAULT '#E4590F',
+  `extra_id_fields` tinyint(1) NOT NULL DEFAULT '0',
   `active` tinyint(1) DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)

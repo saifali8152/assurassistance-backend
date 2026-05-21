@@ -222,6 +222,13 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
 
   const partnerRel = caseDetails.plan_partner_insurer_logo || null;
 
+  const rawColor = caseDetails.plan_theme_color;
+  const themeColor =
+    typeof rawColor === "string" && /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(rawColor.trim())
+      ? rawColor.trim().toUpperCase()
+      : "#E4590F";
+  const extraIdFields = !!Number(caseDetails.plan_extra_id_fields);
+
   return {
     certificateNumber: cert.certificate_number,
     policyNumber: sale.policy_number,
@@ -267,6 +274,8 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     qrDataUrl,
     partnerLogoUrl: resolvePublicUploadUrl(req, partnerRel),
     partnerLogoFsPath: partnerLogoFsFromDb(partnerRel),
+    themeColor,
+    extraIdFields,
     contact: {
       emergencyHelpline,
       generalLine,
@@ -393,7 +402,8 @@ export const downloadInvoice = async (req, res) => {
         partnerLogoFsPath: partnerFs,
         invoiceTitle: invoiceTitleFromReq(req),
         currency: sale.currency || "XOF",
-        locale: invoiceLocaleFromReq(req)
+        locale: invoiceLocaleFromReq(req),
+        themeColor: caseDetails.plan_theme_color
       },
       true
     );
@@ -477,7 +487,8 @@ async function invoicePdfBufferForSaleId(saleId, req) {
       partnerLogoFsPath: partnerFs,
       invoiceTitle: invoiceTitleFromReq(req),
       currency: saleDetails.currency || "XOF",
-      locale: invoiceLocaleFromReq(req)
+      locale: invoiceLocaleFromReq(req),
+      themeColor: caseDetails.plan_theme_color
     },
     true
   );

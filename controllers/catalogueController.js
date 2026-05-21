@@ -41,6 +41,21 @@ function publicAssetUrl(req, relativePath) {
   return `${proto}://${host}${p.startsWith("/") ? "" : "/"}${p}`;
 }
 
+const DEFAULT_THEME_COLOR = "#E4590F";
+/** Normalize incoming theme color to "#RRGGBB" or "#RRGGBBAA" (fallback to brand orange) */
+function sanitizeThemeColor(input) {
+  if (input == null) return DEFAULT_THEME_COLOR;
+  const s = String(input).trim();
+  if (!s) return DEFAULT_THEME_COLOR;
+  return /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s) ? s.toUpperCase() : DEFAULT_THEME_COLOR;
+}
+
+function toBoolFlag(v) {
+  if (v === true || v === 1 || v === "1") return 1;
+  if (typeof v === "string" && v.toLowerCase() === "true") return 1;
+  return 0;
+}
+
 // Create catalogue plan
 export const createCatalogue = async (req, res) => {
   try {
@@ -53,7 +68,9 @@ export const createCatalogue = async (req, res) => {
       flat_price,
       country_of_residence,
       route_type,
-      currency
+      currency,
+      theme_color,
+      extra_id_fields
     } = req.body;
 
     const countryValue =
@@ -67,9 +84,20 @@ export const createCatalogue = async (req, res) => {
     const coverageValue = coverage != null && String(coverage).trim() !== "" ? String(coverage).trim() : null;
 
     const [result] = await pool.query(
-      `INSERT INTO catalogue (product_type, name, coverage, pricing_rules, flat_price, country_of_residence, route_type, currency)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [product_type, name, coverageValue, JSON.stringify(pricing_rules), flat_price, countryValue, routeValue, currency || "XOF"]
+      `INSERT INTO catalogue (product_type, name, coverage, pricing_rules, flat_price, country_of_residence, route_type, currency, theme_color, extra_id_fields)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        product_type,
+        name,
+        coverageValue,
+        JSON.stringify(pricing_rules),
+        flat_price,
+        countryValue,
+        routeValue,
+        currency || "XOF",
+        sanitizeThemeColor(theme_color),
+        toBoolFlag(extra_id_fields)
+      ]
     );
     res.status(201).json({
       success: true,
@@ -106,6 +134,8 @@ export const getCatalogues = async (req, res) => {
           row.pricing_rules = null;
         }
       }
+      row.theme_color = sanitizeThemeColor(row.theme_color);
+      row.extra_id_fields = !!Number(row.extra_id_fields);
       return row;
     });
     res.json({ success: true, data: parsedRows });
@@ -129,7 +159,9 @@ export const updateCatalogue = async (req, res) => {
       active,
       country_of_residence,
       route_type,
-      currency
+      currency,
+      theme_color,
+      extra_id_fields
     } = req.body;
 
     const countryValue =
@@ -143,7 +175,7 @@ export const updateCatalogue = async (req, res) => {
     const coverageValue = coverage != null && String(coverage).trim() !== "" ? String(coverage).trim() : null;
 
     await pool.query(
-      `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=? WHERE id=?`,
+      `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=?, theme_color=?, extra_id_fields=? WHERE id=?`,
       [
         product_type,
         name,
@@ -154,6 +186,8 @@ export const updateCatalogue = async (req, res) => {
         countryValue,
         routeValue,
         currency || "XOF",
+        sanitizeThemeColor(theme_color),
+        toBoolFlag(extra_id_fields),
         id
       ]
     );

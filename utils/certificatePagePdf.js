@@ -9,6 +9,13 @@ import path from "path";
 const ORANGE = "#E4590F";
 const GRAY_LINE = "#CCCCCC";
 
+/** Accepts "#RRGGBB" or "#RRGGBBAA"; falls back to brand orange so old plans look the same. */
+function sanitizeHexColor(input, fallback = ORANGE) {
+  if (input == null) return fallback;
+  const s = String(input).trim();
+  return /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s) ? s.toUpperCase() : fallback;
+}
+
 function groupBenefits(benefits) {
   if (!Array.isArray(benefits) || !benefits.length) return [];
   const order = ["MEDICAL", "TRIP PROTECTION", "LEGAL"];
@@ -123,7 +130,10 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
       }
     }
 
-    doc.fillColor(ORANGE).font("Helvetica-Bold").fontSize(12);
+    const themeColor = sanitizeHexColor(payload.themeColor);
+    const extraIdFields = !!payload.extraIdFields;
+
+    doc.fillColor(themeColor).font("Helvetica-Bold").fontSize(12);
     doc.text("INSURANCE CERTIFICATE", left, y + 10, {
       width: w,
       align: "center"
@@ -132,7 +142,7 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
     doc.text(productSubtitle(payload.productType), left, y + 28, { width: w, align: "center" });
 
     y += headerH;
-    doc.fillColor(ORANGE).rect(left, y, w, 2).fill();
+    doc.fillColor(themeColor).rect(left, y, w, 2).fill();
     y += 8;
 
     doc.fillColor("#000").font("Helvetica").fontSize(7.5);
@@ -191,8 +201,11 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
 
     section("Insured");
     const tr = payload.traveller || {};
+    const idLabel = extraIdFields
+      ? "N° Passport / N° Laissez-passer / N° GPGL"
+      : "N° Passport";
     row2("Given Names", (tr.givenNames || "").toUpperCase(), "Surname", (tr.surname || "").toUpperCase());
-    row2("Date of Birth", tr.dateOfBirth, "N° Passport", tr.passportOrId);
+    row2("Date of Birth", tr.dateOfBirth, idLabel, tr.passportOrId);
     row2("Gender", tr.gender, "Nationality", tr.nationality);
     rowFull("Country of residence", tr.countryOfResidence);
 
@@ -369,7 +382,7 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
     );
     y = doc.y + 6;
 
-    doc.fillColor(ORANGE).rect(left, y, w, 3).fill();
+    doc.fillColor(themeColor).rect(left, y, w, 3).fill();
     y += 6;
     doc.fillColor("#444").fontSize(5.5).font("Helvetica");
     const foot =

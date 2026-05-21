@@ -19,6 +19,7 @@ import caseRoutes from "./routes/caseRoutes.js";
 import salesRoute from "./routes/salesRoute.js";
 import catalogueRoutes from './routes/catalogueRoutes.js';
 import ledgerRoutes from './routes/ledgerRoute.js';
+import invoiceLedgerRoutes from './routes/invoiceLedgerRoute.js';
 import reconciliationRoute from './routes/reconciliationRoute.js';
 import activityLogRoutes from './routes/activityLogRoute.js';
 
@@ -154,6 +155,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 app.use("/api/reconciliation", reconciliationRoute);
 app.use("/api/ledger", ledgerRoutes);
+app.use("/api/invoice-ledger", invoiceLedgerRoutes);
 app.use("/api/activity-log", activityLogRoutes);
 
 // 404 for unknown API routes (so proxy gets a response, not hang)

@@ -26,19 +26,19 @@ export const createUser = async ({
   name, email, password, role, force_password_change = 0,
   company_name = null, partnership_type = null, country_of_residence = null,
   iata_number = null, geographical_location = null, work_phone = null, whatsapp_phone = null,
-  parent_agent_id = null
+  parent_agent_id = null, created_by_id = null
 }) => {
   const pool = getPool();
   const [result] = await pool.execute(
     `INSERT INTO users (name, email, password, role, force_password_change,
       company_name, partnership_type, country_of_residence, iata_number,
-      geographical_location, work_phone, whatsapp_phone, parent_agent_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      geographical_location, work_phone, whatsapp_phone, parent_agent_id, created_by_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       name, email, password, role, force_password_change ? 1 : 0,
       company_name || null, partnership_type || null, country_of_residence || null,
       iata_number || null, geographical_location || null, work_phone || null, whatsapp_phone || null,
-      parent_agent_id || null
+      parent_agent_id || null, created_by_id || null
     ]
   );
   return result.insertId;
@@ -96,6 +96,24 @@ export const getAllUsers = async () => {
   return rows;
 };
 
+export const getSubAdmins = async () => {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.email, u.role as role_name, u.status,
+            u.force_password_change, u.last_login, u.created_at,
+            u.work_phone, u.whatsapp_phone,
+            (SELECT COUNT(*) FROM users a
+              WHERE a.role = 'agent'
+                AND a.created_by_id = u.id
+                AND (a.parent_agent_id IS NULL OR a.parent_agent_id = 0)
+            ) AS owned_agency_count
+     FROM users u
+     WHERE u.role = 'sub_admin'
+     ORDER BY u.created_at DESC`
+  );
+  return rows;
+};
+
 export const getAgents = async () => {
   const pool = getPool();
   const [rows] = await pool.query(
@@ -127,10 +145,41 @@ export const getAllDescendantIds = async (supervisorId) => {
   return [...agentIds, ...subAgentIds];
 };
 
-/** Visibility: supervisor sees self + all agents + sub-agents; agent sees self + sub-agents; sub-agent sees only self */
+/** Agency (top-level agent / supervisor) user IDs that a sub-administrator owns. */
+export const getOwnedAgencyIds = async (subAdminId) => {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT id FROM users
+     WHERE role = 'agent' AND created_by_id = ?
+       AND (parent_agent_id IS NULL OR parent_agent_id = 0)`,
+    [subAdminId]
+  );
+  return rows.map((r) => r.id);
+};
+
+/**
+ * Visibility:
+ *   - admin: returns [userId] (admin bypasses visibility filters elsewhere).
+ *   - sub_admin: every agency they created + every descendant of those agencies (+ self).
+ *   - agent (supervisor): self + all descendants.
+ *   - agent (mid-level): self + direct sub-agents.
+ *   - agent (sub-agent): self only.
+ */
 export const getAgentVisibilityIds = async (userId) => {
   const user = await findUserById(userId);
-  if (!user || user.role_name !== 'agent') return [userId];
+  if (!user) return [userId];
+
+  if (user.role_name === 'sub_admin') {
+    const agencyIds = await getOwnedAgencyIds(userId);
+    const allIds = new Set([userId, ...agencyIds]);
+    for (const aid of agencyIds) {
+      const descendants = await getAllDescendantIds(aid);
+      descendants.forEach((d) => allIds.add(d));
+    }
+    return Array.from(allIds);
+  }
+
+  if (user.role_name !== 'agent') return [userId];
   if (user.parent_agent_id == null) {
     const descendantIds = await getAllDescendantIds(userId);
     return [userId, ...descendantIds];

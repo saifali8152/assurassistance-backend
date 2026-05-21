@@ -4,9 +4,9 @@ import { getInvoiceBySaleId } from "../models/invoiceModel.js"; // optional if y
 import { format } from "@fast-csv/format";
 export const listLedger = async (req, res) => {
   try {
-    const role = req.user.role; // 'admin' or 'agent'
+    const role = req.user.role; // 'admin', 'sub_admin' or 'agent'
     let agentIds = null;
-    if (role === "agent") {
+    if (role === "agent" || role === "sub_admin") {
       const { getAgentVisibilityIds } = await import("../models/userModel.js");
       agentIds = await getAgentVisibilityIds(req.user.id);
     }
@@ -42,7 +42,7 @@ export const exportLedgerCsv = async (req, res) => {
     const role = req.user.role;
     const agentId = req.user.id;
     let agentIds = null;
-    if (role === "agent") {
+    if (role === "agent" || role === "sub_admin") {
       const { getAgentVisibilityIds } = await import("../models/userModel.js");
       agentIds = await getAgentVisibilityIds(req.user.id);
     }

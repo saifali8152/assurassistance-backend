@@ -13,7 +13,10 @@ import {
   deleteAgentHierarchy,
   queryAgentHierarchyPaginated,
   queryAgentHierarchyAll,
-  updateUserStatus
+  updateUserStatus,
+  getOwnedAgencyIds,
+  getAgentVisibilityIds,
+  getSubAdmins
 } from '../models/userModel.js';
 import crypto from 'crypto';
 import getPool from '../utils/db.js';
@@ -22,6 +25,23 @@ import sendEmail from '../utils/emailService.js';
 import { agentWelcomeTemplate, passwordResetLinkTemplate } from '../utils/emailTemplates.js';
 
 const REQUIRED_AGENT_FIELDS = ['company_name', 'partnership_type', 'country_of_residence', 'whatsapp_phone'];
+
+/**
+ * Returns the set of agency IDs (top-level agents) a sub-administrator owns, and the
+ * list of every user ID under those agencies (incl. nested sub-agents). Used to scope
+ * agency endpoints when the caller is a sub-administrator.
+ */
+async function subAdminVisibility(subAdminId) {
+  const visibility = await getAgentVisibilityIds(subAdminId);
+  const ownedAgencyIds = await getOwnedAgencyIds(subAdminId);
+  return { visibility, ownedAgencyIds };
+}
+
+/** Verify a sub-administrator may access the given agent user id (must be inside their tree). */
+async function assertSubAdminMayAccessAgent(subAdminId, targetUserId) {
+  const ids = await getAgentVisibilityIds(subAdminId);
+  return ids.includes(Number(targetUserId));
+}
 
 export const createAgent = async (req, res) => {
   try {
@@ -51,7 +71,8 @@ export const createAgent = async (req, res) => {
       company_name: company_name || null, partnership_type: partnership_type || null,
       country_of_residence: country_of_residence || null, whatsapp_phone: whatsapp_phone || null,
       iata_number: iata_number || null, geographical_location: geographical_location || null,
-      work_phone: work_phone || null
+      work_phone: work_phone || null,
+      created_by_id: req.user?.id ?? null
     });
 
     if (assigned_plan_ids && Array.isArray(assigned_plan_ids) && assigned_plan_ids.length > 0) {
@@ -102,12 +123,18 @@ export const listAgents = async (req, res) => {
     // Build WHERE clause for filtering (only main agents; sub-agents have parent_agent_id set)
     let whereClause = "WHERE u.role = 'agent' AND (u.parent_agent_id IS NULL OR u.parent_agent_id = 0)";
     const params = [];
-    
+
+    // Sub-administrators only see the agencies they created themselves.
+    if (req.user?.role === 'sub_admin') {
+      whereClause += " AND u.created_by_id = ?";
+      params.push(req.user.id);
+    }
+
     if (search) {
       whereClause += " AND (u.name LIKE ? OR u.email LIKE ?)";
       params.push(`%${search}%`, `%${search}%`);
     }
-    
+
     if (status) {
       whereClause += " AND u.status = ?";
       params.push(status);
@@ -378,6 +405,9 @@ export const getAgent = async (req, res) => {
     if (!user || user.role_name !== 'agent') {
       return res.status(404).json({ message: 'Agent not found' });
     }
+    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
+      return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
+    }
     const assigned_plan_ids = await getAgentAssignedPlanIds(parseInt(id, 10));
     const isSupervisor = user.parent_agent_id == null;
     let userType = 'supervisor';
@@ -432,6 +462,9 @@ export const updateAgent = async (req, res) => {
     if (!user || user.role_name !== 'agent') {
       return res.status(404).json({ message: 'Agent not found' });
     }
+    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
+      return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
+    }
     const {
       name, company_name, partnership_type, country_of_residence, whatsapp_phone,
       iata_number, geographical_location, work_phone, assigned_plan_ids
@@ -465,6 +498,9 @@ export const listSubAgents = async (req, res) => {
     if (!parent || parent.role_name !== 'agent') {
       return res.status(404).json({ message: 'Agent not found' });
     }
+    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
+      return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
+    }
     const subAgents = await getSubAgents(parseInt(id, 10));
     const withPlanIds = await Promise.all(
       subAgents.map(async (s) => {
@@ -497,6 +533,9 @@ export const createSubAgent = async (req, res) => {
     if (!parent || parent.role_name !== 'agent') {
       return res.status(404).json({ message: 'Agent not found' });
     }
+    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
+      return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
+    }
     const { first_name, last_name, email, work_phone, whatsapp_phone, assigned_plan_ids } = req.body;
     const name = [first_name, last_name].filter(Boolean).map((s) => (s || '').trim()).join(' ').trim();
     if (!name || !email || !whatsapp_phone) {
@@ -525,7 +564,8 @@ export const createSubAgent = async (req, res) => {
       geographical_location: null,
       work_phone: (work_phone && work_phone.trim()) || null,
       whatsapp_phone: whatsapp_phone.trim(),
-      parent_agent_id: agentId
+      parent_agent_id: agentId,
+      created_by_id: req.user?.id ?? null
     });
 
     await setAgentAssignedPlans(userId, assigned_plan_ids.map((x) => parseInt(x, 10)));
@@ -549,10 +589,110 @@ export const createSubAgent = async (req, res) => {
   }
 };
 
+const REQUIRED_SUB_ADMIN_FIELDS = ['first_name', 'last_name', 'email'];
+
+/**
+ * Admin creates a sub-administrator (field sales representative). Sub-administrators
+ * can create their own travel-agency accounts and see/edit only those cases.
+ */
+export const createSubAdmin = async (req, res) => {
+  try {
+    const { first_name, last_name, email, work_phone, whatsapp_phone, tempPassword } = req.body;
+    for (const field of REQUIRED_SUB_ADMIN_FIELDS) {
+      const val = req.body[field];
+      if (val == null || (typeof val === 'string' && val.trim() === '')) {
+        return res.status(400).json({ message: `${field.replace(/_/g, ' ')} is required` });
+      }
+    }
+    const name = [first_name, last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ');
+    if (!name) return res.status(400).json({ message: 'Name is required' });
+
+    const exists = await findUserByEmail(String(email).trim());
+    if (exists) return res.status(400).json({ message: 'User with this email already exists' });
+
+    const password = (tempPassword && String(tempPassword).trim()) || generateStrongPassword(12);
+    const hashed = await bcrypt.hash(password, 10);
+
+    const userId = await createUser({
+      name,
+      email: String(email).trim(),
+      password: hashed,
+      role: 'sub_admin',
+      force_password_change: 1,
+      work_phone: (work_phone && String(work_phone).trim()) || null,
+      whatsapp_phone: (whatsapp_phone && String(whatsapp_phone).trim()) || null,
+      created_by_id: req.user?.id ?? null
+    });
+
+    try {
+      const loginUrl = `${process.env.FRONTEND_URL || 'https://acareeracademy.com'}/login`;
+      const emailTemplate = agentWelcomeTemplate(name, password, loginUrl);
+      await sendEmail(String(email).trim(), emailTemplate.subject, emailTemplate.text, emailTemplate.html);
+    } catch (emailErr) {
+      console.error('Failed to send welcome email to sub-administrator:', emailErr);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: { id: userId, email: String(email).trim(), tempPassword: password },
+      message: 'Sub-administrator created successfully. Welcome email sent.'
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/** Admin lists every sub-administrator with how many agencies they currently own. */
+export const listSubAdmins = async (req, res) => {
+  try {
+    const rows = await getSubAdmins();
+    res.json({
+      success: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        status: r.status,
+        force_password_change: !!r.force_password_change,
+        last_login: r.last_login,
+        created_at: r.created_at,
+        work_phone: r.work_phone,
+        whatsapp_phone: r.whatsapp_phone,
+        owned_agency_count: Number(r.owned_agency_count) || 0
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/** Admin removes a sub-administrator. Agencies they created are kept (created_by_id is set NULL via FK). */
+export const deleteSubAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await findUserById(id);
+    if (!user || user.role_name !== 'sub_admin') {
+      return res.status(404).json({ message: 'Sub-administrator not found' });
+    }
+    const pool = getPool();
+    await pool.execute('DELETE FROM user_activity WHERE user_id = ?', [user.id]);
+    await pool.execute('DELETE FROM users WHERE id = ? AND role = ?', [user.id, 'sub_admin']);
+    res.json({ success: true, message: 'Sub-administrator deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 /** DELETE /admin/agents/:id — delete supervisor (whole tree), agent (+ sub-agents), or sub-agent only */
 export const deleteAgentOrHierarchy = async (req, res) => {
   try {
     const { id } = req.params;
+    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
+      return res.status(403).json({ success: false, message: 'Forbidden: agent is outside your scope' });
+    }
     const result = await deleteAgentHierarchy(id);
     if (!result.ok) {
       return res.status(404).json({ success: false, message: result.message || 'Agent not found or cannot be deleted' });
@@ -586,14 +726,18 @@ export const sendPasswordResetLink = async (req, res) => {
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ message: "User ID required" });
 
+    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, userId))) {
+      return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
+    }
+
     const pool = getPool();
-    
+
     // Get user details
     const [users] = await pool.query(
       'SELECT id, name, email FROM users WHERE id = ? AND role = "agent"',
       [userId]
     );
-    
+
     if (users.length === 0) {
       return res.status(404).json({ message: "Agent not found" });
     }

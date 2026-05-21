@@ -21,7 +21,7 @@ CREATE TABLE `users` (
   `name` varchar(255) NOT NULL,
   `email` varchar(255) NOT NULL,
   `password` varchar(255) NOT NULL,
-  `role` enum('admin','agent') NOT NULL DEFAULT 'agent',
+  `role` enum('admin','sub_admin','agent') NOT NULL DEFAULT 'agent',
   `status` enum('active','inactive') NOT NULL DEFAULT 'active',
   `force_password_change` tinyint(1) DEFAULT '0',
   `last_login` datetime DEFAULT NULL,

@@ -33,6 +33,11 @@ async function assertUserCanAccessCase(req, caseId) {
   return { caseRow: row };
 }
 
+/** Sub-administrators have admin-grade policy-edit powers within their visibility. */
+function hasAdminEditPowers(user) {
+  return user?.role === "admin" || user?.role === "sub_admin";
+}
+
 function normalizeDestinationInput(dest) {
   if (dest == null) return "";
   if (Array.isArray(dest)) return dest.map((x) => String(x).trim()).filter(Boolean).join(", ");
@@ -235,14 +240,22 @@ export const changeCaseStatus = async (req, res) => {
   }
 };
 
-// Get all cases with pagination (admin only)
+// Get all cases with pagination. Admin → unfiltered; sub-admin → only cases in their scope.
 export const getAllCases = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    
-    const result = await getAllCasesWithPagination(page, limit);
-    res.json(result);
+
+    if (req.user.role === "admin") {
+      const result = await getAllCasesWithPagination(page, limit);
+      return res.json(result);
+    }
+    if (req.user.role === "sub_admin") {
+      const agentIds = await getAgentVisibilityIds(req.user.id);
+      const result = await getCasesByAgentIdsWithPagination(agentIds, page, limit);
+      return res.json(result);
+    }
+    return res.status(403).json({ message: "Forbidden" });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -360,8 +373,7 @@ export const getPolicyEditMeta = async (req, res) => {
 
     const ex = access.caseRow;
     const sale = await getSaleByCaseId(caseId);
-    const role = req.user.role;
-    const isAdmin = role === "admin";
+    const isAdmin = hasAdminEditPowers(req.user);
     const count = sale ? Number(sale.policy_edit_count) || 0 : 0;
     const start = ex.start_date;
     const opWindow = operatorLimitedEditOpen(start);
@@ -410,15 +422,14 @@ export const updateCase = async (req, res) => {
 
     const existing = access.caseRow;
     const sale = await getSaleByCaseId(caseId);
-    const role = req.user.role;
-    const isAdmin = role === "admin";
+    const isAdmin = hasAdminEditPowers(req.user);
 
     let shouldIncrementOperatorEdit = false;
 
     if (sale) {
       if (isAdmin) {
-        // Admin may edit all fields any time while case exists (including within 24h of departure)
-        // Pass body through unchanged
+        // Admin (or sub-administrator within their scope) may edit all fields at any time.
+        // Pass body through unchanged.
       } else {
         // Agent / operator
         if (operatorTriedForbiddenChange(traveller, caseData, existing)) {

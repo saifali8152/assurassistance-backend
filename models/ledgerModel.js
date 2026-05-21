@@ -8,8 +8,8 @@ export const getLedger = async ({ role, agentId, agentIds, startDate, endDate, s
   const params = [];
   let whereClauses = [];
 
-  // If agent role, limit to their sales (and sub-agents' if main agent)
-  if (role === "agent") {
+  // For agents or sub-administrators, limit to their visibility set (self + descendants / owned agencies).
+  if (role === "agent" || role === "sub_admin") {
     const ids = agentIds && agentIds.length > 0 ? agentIds : [agentId];
     if (ids.length === 1) {
       whereClauses.push("c.created_by = ?");

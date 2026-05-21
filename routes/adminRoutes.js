@@ -1,27 +1,49 @@
 // src/routes/adminRoutes.js
 import express from 'express';
-import { createAgent, listAgents, getAgent, updateAgent, listSubAgents, createSubAgent, deleteAgentOrHierarchy, changeUserStatus, getAdminDashboardStats, getProductionTrend, sendPasswordResetLink, listAgentHierarchy, exportAgentHierarchyCsv } from '../controllers/adminController.js';
+import {
+  createAgent,
+  listAgents,
+  getAgent,
+  updateAgent,
+  listSubAgents,
+  createSubAgent,
+  deleteAgentOrHierarchy,
+  changeUserStatus,
+  getAdminDashboardStats,
+  getProductionTrend,
+  sendPasswordResetLink,
+  listAgentHierarchy,
+  exportAgentHierarchyCsv,
+  createSubAdmin,
+  listSubAdmins,
+  deleteSubAdmin
+} from '../controllers/adminController.js';
 import authenticate from '../middlewares/authMiddleware.js';
-import { adminOnly } from '../middlewares/roleMiddleware.js';
+import { adminOnly, adminOrSubAdmin } from '../middlewares/roleMiddleware.js';
 import { findUserById } from '../models/userModel.js';
 import getPool from '../utils/db.js';
 
 const router = express.Router();
 
-// adminRoutes.js
-router.post('/create-agent', authenticate, adminOnly, createAgent);
-router.get('/list-agents', authenticate, adminOnly, listAgents);
+// Agency-management endpoints are usable by admin or sub-administrators (field sales reps).
+router.post('/create-agent', authenticate, adminOrSubAdmin, createAgent);
+router.get('/list-agents', authenticate, adminOrSubAdmin, listAgents);
 router.get('/agent-hierarchy/export', authenticate, adminOnly, exportAgentHierarchyCsv);
 router.get('/agent-hierarchy', authenticate, adminOnly, listAgentHierarchy);
-router.get('/agents/:id', authenticate, adminOnly, getAgent);
-router.patch('/agents/:id', authenticate, adminOnly, updateAgent);
-router.delete('/agents/:id', authenticate, adminOnly, deleteAgentOrHierarchy);
-router.get('/agents/:id/sub-agents', authenticate, adminOnly, listSubAgents);
-router.post('/agents/:id/sub-agents', authenticate, adminOnly, createSubAgent);
+router.get('/agents/:id', authenticate, adminOrSubAdmin, getAgent);
+router.patch('/agents/:id', authenticate, adminOrSubAdmin, updateAgent);
+router.delete('/agents/:id', authenticate, adminOrSubAdmin, deleteAgentOrHierarchy);
+router.get('/agents/:id/sub-agents', authenticate, adminOrSubAdmin, listSubAgents);
+router.post('/agents/:id/sub-agents', authenticate, adminOrSubAdmin, createSubAgent);
 router.patch('/users/status', changeUserStatus);
-router.post('/send-reset-link', authenticate, adminOnly, sendPasswordResetLink);
-router.get("/dashboard", getAdminDashboardStats);
-router.get("/production-trend", authenticate, adminOnly, getProductionTrend);
+router.post('/send-reset-link', authenticate, adminOrSubAdmin, sendPasswordResetLink);
+router.get('/dashboard', getAdminDashboardStats);
+router.get('/production-trend', authenticate, adminOnly, getProductionTrend);
+
+// Sub-administrator management is admin-only.
+router.post('/create-sub-admin', authenticate, adminOnly, createSubAdmin);
+router.get('/sub-admins', authenticate, adminOnly, listSubAdmins);
+router.delete('/sub-admins/:id', authenticate, adminOnly, deleteSubAdmin);
 
 // Get admin profile
 router.get('/profile', authenticate, async (req, res) => {

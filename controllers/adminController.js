@@ -712,7 +712,15 @@ export const changeUserStatus = async (req, res) => {
   try {
     const { userId, status } = req.body;
     if (!userId || !status) return res.status(400).json({ message: "User ID and status required" });
-
+    if (!['active', 'inactive'].includes(String(status))) {
+      return res.status(400).json({ message: "status must be 'active' or 'inactive'" });
+    }
+    if (Number(userId) === Number(req.user?.id)) {
+      return res.status(400).json({ message: "You cannot change your own status" });
+    }
+    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, userId))) {
+      return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
+    }
     await updateUserStatus(userId, status);
     res.json({ message: `User status updated to ${status}` });
   } catch (err) {

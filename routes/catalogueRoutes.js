@@ -10,14 +10,15 @@ import {
   uploadPartnerLogoMiddleware
 } from '../controllers/catalogueController.js';
 import authenticate from '../middlewares/authMiddleware.js';
+import { authenticateAny, requireScope } from '../middlewares/apiKeyMiddleware.js';
 
 import { adminOnly } from '../middlewares/roleMiddleware.js';
 
-// Admin creates a new plan
+// Admin creates a new plan (internal only — JWT required, no API key path).
 router.post('/', authenticate, adminOnly, createCatalogue);
 
-// Get all catalogues (Admin sees all, Agent sees only active)
-router.get('/', authenticate, getCatalogues);
+// List plans. Available to 3rd parties with `catalogue:read`.
+router.get('/', authenticateAny, requireScope('catalogue:read'), getCatalogues);
 
 router.post(
   '/:id/partner-logo',

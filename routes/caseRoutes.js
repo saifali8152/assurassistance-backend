@@ -1,11 +1,11 @@
 //src/routes/caseRoute.js
 import express from "express";
-import authenticate from "../middlewares/authMiddleware.js";
-import { 
+import { authenticateAny, requireScope } from "../middlewares/apiKeyMiddleware.js";
+import {
   createCaseWithTraveller,
   createGroupCasesWithTravellers,
-  getMyCases, 
-  getPendingSales, 
+  getMyCases,
+  getPendingSales,
   changeCaseStatus,
   getAllCases,
   getMyCasesWithPagination,
@@ -18,17 +18,17 @@ import {
 
 const router = express.Router();
 
-router.post("/group", authenticate, createGroupCasesWithTravellers);
-router.post("/", authenticate, createCaseWithTraveller);
-router.get("/", authenticate, getMyCases);
-router.get("/all", authenticate, getAllCases); // Admin only - all cases with pagination
-router.get("/my-cases", authenticate, getMyCasesWithPagination); // Agent cases with pagination
-router.get("/pending-sales", authenticate, getPendingSales);
-router.patch("/:id/status", authenticate, changeCaseStatus);
-router.post("/:caseId/confirm-sale", authenticate, confirmSale); // Admin only
-router.post("/:caseId/cancel", authenticate, cancelCase); // Admin only
-router.put("/:caseId/update", authenticate, updateCase); // Update case
-router.get("/:caseId/policy-edit-meta", authenticate, getPolicyEditMeta);
-router.get("/:caseId", authenticate, getCaseById);
+router.post("/group", authenticateAny, requireScope("cases:write"), createGroupCasesWithTravellers);
+router.post("/", authenticateAny, requireScope("cases:write"), createCaseWithTraveller);
+router.get("/", authenticateAny, requireScope("cases:read"), getMyCases);
+router.get("/all", authenticateAny, requireScope("cases:read"), getAllCases);
+router.get("/my-cases", authenticateAny, requireScope("cases:read"), getMyCasesWithPagination);
+router.get("/pending-sales", authenticateAny, requireScope("cases:read"), getPendingSales);
+router.patch("/:id/status", authenticateAny, requireScope("cases:write"), changeCaseStatus);
+router.post("/:caseId/confirm-sale", authenticateAny, requireScope("sales:write"), confirmSale);
+router.post("/:caseId/cancel", authenticateAny, requireScope("cases:write"), cancelCase);
+router.put("/:caseId/update", authenticateAny, requireScope("cases:write"), updateCase);
+router.get("/:caseId/policy-edit-meta", authenticateAny, requireScope("cases:read"), getPolicyEditMeta);
+router.get("/:caseId", authenticateAny, requireScope("cases:read"), getCaseById);
 
 export default router;

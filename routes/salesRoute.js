@@ -1,6 +1,6 @@
 //src/routes/salesRoute.js
 import express from "express";
-import authenticate from "../middlewares/authMiddleware.js";
+import { authenticateAny, requireScope } from "../middlewares/apiKeyMiddleware.js";
 import {
   createSaleController,
   getAllSalesController,
@@ -18,18 +18,18 @@ import {
 
 const router = express.Router();
 
-router.post("/", authenticate, createSaleController);
-router.get("/", authenticate, getAllSalesController);
+router.post("/", authenticateAny, requireScope("sales:write"), createSaleController);
+router.get("/", authenticateAny, requireScope("sales:read"), getAllSalesController);
 
 // download links (must come before /:id route)
-router.get("/group/:groupId/certificates-zip", authenticate, downloadGroupCertificatesZip);
-router.get("/group/:groupId/invoices-zip", authenticate, downloadGroupInvoicesZip);
-router.get("/invoice/:id", authenticate, downloadInvoice);
-/** Public certificate JSON (QR link) — no auth */
+router.get("/group/:groupId/certificates-zip", authenticateAny, requireScope("sales:read"), downloadGroupCertificatesZip);
+router.get("/group/:groupId/invoices-zip", authenticateAny, requireScope("sales:read"), downloadGroupInvoicesZip);
+router.get("/invoice/:id", authenticateAny, requireScope("sales:read"), downloadInvoice);
+/** Public certificate JSON (QR link) — intentionally no auth (public token). */
 router.get("/certificate/public/:token", getCertificatePageDataPublic);
-router.get("/certificate/:id/page", authenticate, getCertificatePageData);
-router.get("/certificate/:id", authenticate, downloadCertificate);
+router.get("/certificate/:id/page", authenticateAny, requireScope("sales:read"), getCertificatePageData);
+router.get("/certificate/:id", authenticateAny, requireScope("sales:read"), downloadCertificate);
 
-router.get("/:id", authenticate, getSaleByIdController);
-router.patch("/:id/payment", authenticate, updatePaymentStatusController);
+router.get("/:id", authenticateAny, requireScope("sales:read"), getSaleByIdController);
+router.patch("/:id/payment", authenticateAny, requireScope("sales:payment"), updatePaymentStatusController);
 export default router;

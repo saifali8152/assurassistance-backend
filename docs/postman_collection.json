@@ -1,0 +1,260 @@
+{
+  "info": {
+    "name": "AssurAssistance API",
+    "description": "3rd-party integration collection. Set the {{baseUrl}} and {{apiKey}} (or {{jwt}}) collection variables in Postman before running. See /docs/INTEGRATION_GUIDE.md and /api/docs for the interactive reference.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "aas-public-api"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://backend.acareeracademy.com/api", "type": "string" },
+    { "key": "apiKey",  "value": "aas_live_REPLACE_ME", "type": "string" },
+    { "key": "jwt",     "value": "REPLACE_ME", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login (in-house web app)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"agent@example.com\",\n  \"password\": \"...\"\n}" },
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/forgot-password", "host": ["{{baseUrl}}"], "path": ["auth","forgot-password"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"email\": \"agent@example.com\" }" },
+            "auth": { "type": "noauth" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalogue",
+      "item": [
+        {
+          "name": "List plans",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/catalogue", "host": ["{{baseUrl}}"], "path": ["catalogue"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cases",
+      "item": [
+        {
+          "name": "List cases",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/cases", "host": ["{{baseUrl}}"], "path": ["cases"] }
+          }
+        },
+        {
+          "name": "Create case",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cases", "host": ["{{baseUrl}}"], "path": ["cases"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"traveller\": {\n    \"first_name\": \"Aïcha\",\n    \"last_name\": \"Diallo\",\n    \"date_of_birth\": \"1992-03-14\",\n    \"country_of_residence\": \"Ivory Coast\",\n    \"gender\": \"Female\",\n    \"nationality\": \"Ivorian\",\n    \"passport_or_id\": \"CI0123456\",\n    \"phone\": \"+225 07 12 34 56 78\",\n    \"email\": \"aicha@example.com\"\n  },\n  \"caseData\": {\n    \"destination\": \"France, Spain\",\n    \"start_date\": \"2026-06-01\",\n    \"end_date\": \"2026-06-15\",\n    \"selected_plan_id\": 12\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Create group case",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cases/group", "host": ["{{baseUrl}}"], "path": ["cases","group"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"travellers\": [\n    { \"first_name\": \"Jean\",  \"last_name\": \"Kouassi\", \"date_of_birth\": \"1985-01-15\", \"country_of_residence\": \"Ivory Coast\", \"gender\": \"Male\",   \"nationality\": \"Ivorian\", \"passport_or_id\": \"CI001\", \"phone\": \"+225...\" },\n    { \"first_name\": \"Marie\", \"last_name\": \"Kouassi\", \"date_of_birth\": \"1987-09-02\", \"country_of_residence\": \"Ivory Coast\", \"gender\": \"Female\", \"nationality\": \"Ivorian\", \"passport_or_id\": \"CI002\", \"phone\": \"+225...\" }\n  ],\n  \"caseData\": {\n    \"destination\": \"France\",\n    \"start_date\": \"2026-07-01\",\n    \"end_date\": \"2026-07-21\",\n    \"selected_plan_id\": 12\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Get case",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/cases/4821", "host": ["{{baseUrl}}"], "path": ["cases","4821"] }
+          }
+        },
+        {
+          "name": "Confirm sale",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cases/4821/confirm-sale", "host": ["{{baseUrl}}"], "path": ["cases","4821","confirm-sale"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"premium_amount\": 25000, \"tax\": 0, \"total\": 25000 }" }
+          }
+        },
+        {
+          "name": "Cancel case",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/cases/4821/cancel", "host": ["{{baseUrl}}"], "path": ["cases","4821","cancel"] }
+          }
+        },
+        {
+          "name": "Update case",
+          "request": {
+            "method": "PUT",
+            "url": { "raw": "{{baseUrl}}/cases/4821/update", "host": ["{{baseUrl}}"], "path": ["cases","4821","update"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"traveller\": { \"first_name\": \"Aïcha\", \"last_name\": \"Diallo\", \"phone\": \"+225...\", \"date_of_birth\": \"1992-03-14\", \"country_of_residence\": \"Ivory Coast\", \"gender\": \"Female\", \"nationality\": \"Ivorian\", \"passport_or_id\": \"CI0123456\" },\n  \"caseData\": { \"destination\": \"France, Spain, Italy\", \"start_date\": \"2026-06-01\", \"end_date\": \"2026-06-15\", \"selected_plan_id\": 12 }\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sales",
+      "item": [
+        {
+          "name": "List sales",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] } }
+        },
+        {
+          "name": "Get sale",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/7912", "host": ["{{baseUrl}}"], "path": ["sales","7912"] } }
+        },
+        {
+          "name": "Update payment status",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/sales/7912/payment", "host": ["{{baseUrl}}"], "path": ["sales","7912","payment"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"payment_status\": \"Paid\", \"received_amount\": 25000, \"payment_notes\": \"Wire transfer ABC\" }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "Download invoice PDF",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/invoice/7912", "host": ["{{baseUrl}}"], "path": ["sales","invoice","7912"] } }
+        },
+        {
+          "name": "Download certificate PDF",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/certificate/7912", "host": ["{{baseUrl}}"], "path": ["sales","certificate","7912"] } }
+        },
+        {
+          "name": "Group invoices (ZIP)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/group/grp_abc/invoices-zip", "host": ["{{baseUrl}}"], "path": ["sales","group","grp_abc","invoices-zip"] } }
+        },
+        {
+          "name": "Group certificates (ZIP)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/group/grp_abc/certificates-zip", "host": ["{{baseUrl}}"], "path": ["sales","group","grp_abc","certificates-zip"] } }
+        },
+        {
+          "name": "Public certificate (no auth)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/sales/certificate/public/PUBLIC_TOKEN", "host": ["{{baseUrl}}"], "path": ["sales","certificate","public","PUBLIC_TOKEN"] },
+            "auth": { "type": "noauth" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Sales ledger",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/ledger?startDate=2026-01-01&endDate=2026-06-30&page=1&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["ledger"],
+              "query": [
+                { "key": "startDate", "value": "2026-01-01" },
+                { "key": "endDate", "value": "2026-06-30" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "50" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sales ledger — CSV",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/ledger/export?startDate=2026-01-01&endDate=2026-06-30", "host": ["{{baseUrl}}"], "path": ["ledger","export"], "query": [{"key":"startDate","value":"2026-01-01"},{"key":"endDate","value":"2026-06-30"}] }
+          }
+        },
+        {
+          "name": "Invoices by region",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/invoice-ledger?regionBy=residence&startDate=2026-01-01&page=1&limit=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoice-ledger"],
+              "query": [
+                { "key": "regionBy", "value": "residence" },
+                { "key": "startDate", "value": "2026-01-01" },
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "25" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Invoices by region — CSV",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/invoice-ledger/export?regionBy=residence", "host": ["{{baseUrl}}"], "path": ["invoice-ledger","export"], "query": [{"key":"regionBy","value":"residence"}] } }
+        }
+      ]
+    },
+    {
+      "name": "Admin — API keys",
+      "description": "JWT-only (admin role). Uses {{jwt}} for auth.",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "List scopes",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/api-keys/scopes", "host": ["{{baseUrl}}"], "path": ["admin","api-keys","scopes"] } }
+        },
+        {
+          "name": "List keys",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/api-keys", "host": ["{{baseUrl}}"], "path": ["admin","api-keys"] } }
+        },
+        {
+          "name": "Mint key",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/admin/api-keys", "host": ["{{baseUrl}}"], "path": ["admin","api-keys"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme Travel — production\",\n  \"owner_user_id\": 42,\n  \"scopes\": [\"catalogue:read\",\"cases:read\",\"cases:write\",\"sales:read\",\"sales:write\"],\n  \"ip_allowlist\": \"185.10.20.30, 185.10.20.0/24\",\n  \"rate_limit_per_min\": 240\n}" }
+          }
+        },
+        {
+          "name": "Rotate key",
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/admin/api-keys/9/rotate", "host": ["{{baseUrl}}"], "path": ["admin","api-keys","9","rotate"] } }
+        },
+        {
+          "name": "Revoke key",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/admin/api-keys/9", "host": ["{{baseUrl}}"], "path": ["admin","api-keys","9"] } }
+        }
+      ]
+    }
+  ]
+}

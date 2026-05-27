@@ -1,6 +1,6 @@
 // src/routes/invoiceLedgerRoute.js
 import express from "express";
-import authenticate from "../middlewares/authMiddleware.js";
+import { authenticateAny, requireScope } from "../middlewares/apiKeyMiddleware.js";
 import {
   listInvoiceLedger,
   exportInvoiceLedgerCsv
@@ -9,7 +9,7 @@ import {
 const router = express.Router();
 
 // Visibility is enforced in the controller (admin = all, sub_admin/agent scoped).
-router.get("/", authenticate, listInvoiceLedger);
-router.get("/export", authenticate, exportInvoiceLedgerCsv);
+router.get("/", authenticateAny, requireScope("invoices:read"), listInvoiceLedger);
+router.get("/export", authenticateAny, requireScope("invoices:read"), exportInvoiceLedgerCsv);
 
 export default router;

@@ -35,9 +35,9 @@ router.patch('/agents/:id', authenticate, adminOrSubAdmin, updateAgent);
 router.delete('/agents/:id', authenticate, adminOrSubAdmin, deleteAgentOrHierarchy);
 router.get('/agents/:id/sub-agents', authenticate, adminOrSubAdmin, listSubAgents);
 router.post('/agents/:id/sub-agents', authenticate, adminOrSubAdmin, createSubAgent);
-router.patch('/users/status', changeUserStatus);
+router.patch('/users/status', authenticate, adminOrSubAdmin, changeUserStatus);
 router.post('/send-reset-link', authenticate, adminOrSubAdmin, sendPasswordResetLink);
-router.get('/dashboard', getAdminDashboardStats);
+router.get('/dashboard', authenticate, adminOrSubAdmin, getAdminDashboardStats);
 router.get('/production-trend', authenticate, adminOnly, getProductionTrend);
 
 // Sub-administrator management is admin-only.

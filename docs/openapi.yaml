@@ -1,0 +1,1079 @@
+openapi: 3.1.0
+info:
+  title: AssurAssistance Public API
+  version: "1.0.0"
+  summary: Travel insurance issuance, certificates, invoices and reporting.
+  description: |
+    Programmatic access to AssurAssistance for travel agencies, partner
+    insurers, and field-sales tooling. Use this API to:
+
+      * List the travel-insurance plans available to sell.
+      * Create travellers and travel cases, then confirm a sale.
+      * Download invoice and certificate PDFs.
+      * Mark invoices as paid and reconcile.
+      * Pull ledger and "invoices by region" reports.
+
+    The same JSON shapes are used by the in-house AssurAssistance web app, so
+    anything the web app can do, a 3rd-party integration can do — within the
+    permission scopes granted to its API key.
+
+  contact:
+    name: AssurAssistance Integration Support
+    email: support@assurassistancepro.org
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://backend.acareeracademy.com/api
+    description: Production
+  - url: http://localhost:3000/api
+    description: Local development
+
+tags:
+  - name: Authentication
+    description: Login / password / session endpoints. Used by the in-house web app; 3rd parties use API keys (see "API keys").
+  - name: API keys
+    description: Admin-only endpoints to mint, rotate, and revoke 3rd-party API keys.
+  - name: Catalogue
+    description: Travel-insurance plans available to sell.
+  - name: Cases
+    description: A "case" represents one (or many, via groups) travellers + a chosen plan + travel window. Selling a policy = confirming a sale on a case.
+  - name: Sales
+    description: A case becomes a sale once confirmed. Sales expose the policy/certificate numbers, invoice download, and payment status.
+  - name: Documents
+    description: PDFs (invoice, certificate, group ZIP) generated on demand from the sale data.
+  - name: Reports
+    description: Aggregated ledger and "invoices by region" views.
+  - name: Agents
+    description: Agency-management endpoints (used by AssurAssistance staff and field-sales sub-administrators).
+
+security:
+  - bearerJWT: []
+  - bearerApiKey: []
+
+components:
+  securitySchemes:
+    bearerJWT:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT issued by `POST /auth/login`. **Used by the in-house web app only.**
+        3rd-party integrations should use the `bearerApiKey` scheme.
+    bearerApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: |
+        API key issued by an AssurAssistance admin via `POST /admin/api-keys`.
+        Keys look like `aas_live_…`. Pass them as:
+
+        ```
+        Authorization: Bearer aas_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
+        ```
+
+        Each request must satisfy the scopes the key was issued with (see the
+        `scopes` table in the Integration Guide).
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      description: 1-indexed page number.
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      description: Page size (max 200).
+      schema: { type: integer, minimum: 1, maximum: 200, default: 25 }
+    Search:
+      name: search
+      in: query
+      schema: { type: string }
+    StartDate:
+      name: startDate
+      in: query
+      description: Inclusive lower bound (YYYY-MM-DD).
+      schema: { type: string, format: date }
+    EndDate:
+      name: endDate
+      in: query
+      description: Inclusive upper bound (YYYY-MM-DD).
+      schema: { type: string, format: date }
+    PaymentStatus:
+      name: paymentStatus
+      in: query
+      schema:
+        type: string
+        enum: [Paid, Unpaid, Partial]
+
+  schemas:
+    Error:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: invalid_token }
+            message: { type: string, example: Invalid or expired token }
+            requiredScope: { type: string, nullable: true }
+            availableScopes:
+              type: array
+              items: { type: string }
+    Pagination:
+      type: object
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT to send in the Authorization Bearer header.
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [admin, sub_admin, agent]
+        force_password_change: { type: boolean }
+
+    Plan:
+      type: object
+      description: A travel-insurance plan in the catalogue.
+      properties:
+        id: { type: integer }
+        product_type:
+          type: string
+          enum: [Travel, "Travel Inbound", Bank, "Health Evacuation", "Road travel"]
+        name: { type: string }
+        coverage: { type: string, nullable: true }
+        eligible_destinations: { type: string, nullable: true }
+        durations: { type: string, nullable: true }
+        pricing_rules: { type: object, nullable: true }
+        flat_price: { type: number, nullable: true }
+        terms: { type: string, nullable: true }
+        country_of_residence: { type: string, nullable: true }
+        route_type: { type: string, nullable: true }
+        currency: { type: string, default: XOF }
+        theme_color: { type: string, example: "#E4590F" }
+        extra_id_fields: { type: boolean }
+        partner_insurer_logo: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [active, inactive]
+
+    Traveller:
+      type: object
+      properties:
+        first_name: { type: string }
+        last_name: { type: string }
+        date_of_birth: { type: string, format: date }
+        country_of_residence: { type: string }
+        gender:
+          type: string
+          enum: [Male, Female, Other]
+        nationality: { type: string }
+        passport_or_id: { type: string }
+        phone: { type: string }
+        email: { type: string, format: email, nullable: true }
+        address: { type: string, nullable: true }
+
+    Case:
+      type: object
+      properties:
+        id: { type: integer }
+        traveller_id: { type: integer }
+        destination: { type: string, description: Comma-separated list of destination countries. }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        duration_days: { type: integer }
+        selected_plan_id: { type: integer }
+        status:
+          type: string
+          enum: [Pending, Confirmed, Cancelled]
+        created_by: { type: integer }
+        group_id: { type: string, nullable: true }
+
+    CreateCaseRequest:
+      type: object
+      required: [traveller, caseData]
+      properties:
+        traveller:
+          $ref: '#/components/schemas/Traveller'
+        caseData:
+          type: object
+          required: [destination, start_date, end_date, selected_plan_id]
+          properties:
+            destination: { type: string, description: One country or a comma-separated list. }
+            start_date: { type: string, format: date }
+            end_date: { type: string, format: date }
+            selected_plan_id: { type: integer }
+            duration_days: { type: integer, nullable: true }
+
+    Sale:
+      type: object
+      properties:
+        id: { type: integer }
+        case_id: { type: integer }
+        policy_number: { type: string }
+        certificate_number: { type: string }
+        currency: { type: string, default: XOF }
+        plan_price: { type: number }
+        premium_amount: { type: number }
+        tax: { type: number }
+        total: { type: number }
+        received_amount: { type: number }
+        payment_status:
+          type: string
+          enum: [Unpaid, Paid, Partial]
+        payment_notes: { type: string, nullable: true }
+        confirmed_at: { type: string, format: date-time }
+
+    CreateSaleRequest:
+      type: object
+      required: [case_id, premium_amount, total]
+      properties:
+        case_id: { type: integer }
+        premium_amount: { type: number }
+        tax: { type: number, default: 0 }
+        total: { type: number }
+        currency: { type: string, default: XOF }
+        plan_price: { type: number, nullable: true }
+        guarantees_total: { type: number, nullable: true }
+        guarantees_details: { type: object, nullable: true }
+
+    UpdatePaymentRequest:
+      type: object
+      required: [payment_status]
+      properties:
+        payment_status:
+          type: string
+          enum: [Paid, Unpaid, Partial]
+        payment_notes: { type: string, nullable: true }
+        received_amount: { type: number, nullable: true }
+
+    LedgerRow:
+      type: object
+      properties:
+        sale_id: { type: integer }
+        case_id: { type: integer }
+        agent_id: { type: integer }
+        created_by_name: { type: string }
+        traveller_name: { type: string }
+        traveller_phone: { type: string }
+        plan_name: { type: string }
+        product_type: { type: string }
+        policy_number: { type: string }
+        certificate_number: { type: string }
+        plan_price: { type: number }
+        premium_amount: { type: number }
+        tax: { type: number }
+        total: { type: number }
+        received_amount: { type: number }
+        payment_status: { type: string }
+        confirmed_at: { type: string, format: date-time }
+
+    InvoiceLedgerRow:
+      type: object
+      properties:
+        invoice_id: { type: integer }
+        invoice_number: { type: string }
+        issue_date: { type: string, format: date-time }
+        subtotal: { type: number }
+        tax: { type: number }
+        total: { type: number }
+        payment_status: { type: string }
+        sale_id: { type: integer }
+        policy_number: { type: string, nullable: true }
+        traveller_name: { type: string }
+        traveller_country: { type: string, nullable: true }
+        destination: { type: string, nullable: true }
+        plan_name: { type: string, nullable: true }
+        product_type: { type: string, nullable: true }
+        currency: { type: string, nullable: true }
+        created_by_id: { type: integer, nullable: true }
+        created_by_name: { type: string, nullable: true }
+        agent_country: { type: string, nullable: true }
+        agent_geo: { type: string, nullable: true }
+        region: { type: string }
+
+    RegionSummaryRow:
+      type: object
+      properties:
+        region: { type: string }
+        invoice_count: { type: integer }
+        total_amount: { type: number }
+        paid_amount: { type: number }
+        unpaid_amount: { type: number }
+
+    Agent:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        company_name: { type: string, nullable: true }
+        partnership_type: { type: string, nullable: true }
+        country_of_residence: { type: string, nullable: true }
+        whatsapp_phone: { type: string, nullable: true }
+        work_phone: { type: string, nullable: true }
+        iata_number: { type: string, nullable: true }
+        geographical_location: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [active, inactive]
+        parent_agent_id: { type: integer, nullable: true }
+        last_login: { type: string, format: date-time, nullable: true }
+
+    ApiKey:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        key_prefix:
+          type: string
+          example: "aas_live_4f9a"
+          description: First ~12 characters of the secret. Use to identify the key visually.
+        scopes:
+          type: array
+          items:
+            type: string
+            enum:
+              - catalogue:read
+              - cases:read
+              - cases:write
+              - sales:read
+              - sales:write
+              - sales:payment
+              - ledger:read
+              - invoices:read
+              - agents:read
+              - agents:write
+        ip_allowlist: { type: string, nullable: true }
+        rate_limit_per_min: { type: integer, nullable: true }
+        status:
+          type: string
+          enum: [active, revoked]
+        expires_at: { type: string, format: date-time, nullable: true }
+        last_used_at: { type: string, format: date-time, nullable: true }
+        last_used_ip: { type: string, nullable: true }
+        owner:
+          type: object
+          properties:
+            id: { type: integer }
+            email: { type: string, format: email }
+            name: { type: string }
+            role: { type: string }
+        created_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time, nullable: true }
+
+    ApiKeyCreated:
+      allOf:
+        - $ref: '#/components/schemas/ApiKey'
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: |
+                The full plaintext secret. **Returned ONLY at creation/rotation.**
+                Copy it immediately — it cannot be retrieved later.
+
+paths:
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Exchange email + password for a JWT.
+      description: |
+        For 3rd parties, **do not call this** — use an API key from the admin
+        instead. The login endpoint is meant for the in-house web app.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        "200":
+          description: Authenticated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        "401":
+          description: Wrong credentials or revoked account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /catalogue:
+    get:
+      tags: [Catalogue]
+      summary: List available plans.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [catalogue:read]
+      responses:
+        "200":
+          description: Plan list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Plan' }
+
+  /cases:
+    get:
+      tags: [Cases]
+      summary: List cases visible to the caller.
+      description: |
+        Visibility follows the caller's role:
+          * **admin** — every case.
+          * **sub_admin** — cases under agencies the sub_admin owns.
+          * **agent** — own cases + sub-agents' cases.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:read]
+      responses:
+        "200":
+          description: Cases array.
+    post:
+      tags: [Cases]
+      summary: Create a single case (one traveller).
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCaseRequest'
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  caseId: { type: integer }
+        "400":
+          description: Validation error.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /cases/group:
+    post:
+      tags: [Cases]
+      summary: Create a group of cases (one shared travel window, many travellers).
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [travellers, caseData]
+              properties:
+                travellers:
+                  type: array
+                  items: { $ref: '#/components/schemas/Traveller' }
+                caseData:
+                  $ref: '#/components/schemas/CreateCaseRequest/properties/caseData'
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  groupId: { type: string }
+                  caseIds:
+                    type: array
+                    items: { type: integer }
+
+  /cases/{caseId}:
+    get:
+      tags: [Cases]
+      summary: Fetch a case's full payload (traveller + plan + sale-if-any).
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:read]
+      parameters:
+        - { name: caseId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+        "404":
+          description: Not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /cases/{caseId}/confirm-sale:
+    post:
+      tags: [Cases, Sales]
+      summary: Confirm a case as a sale (issues policy + certificate numbers).
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [sales:write]
+      parameters:
+        - { name: caseId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [premium_amount, total]
+              properties:
+                premium_amount: { type: number }
+                tax: { type: number, default: 0 }
+                total: { type: number }
+      responses:
+        "200":
+          description: Confirmed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  saleId: { type: integer }
+                  policyNumber: { type: string }
+                  certificateNumber: { type: string }
+
+  /cases/{caseId}/cancel:
+    post:
+      tags: [Cases]
+      summary: Cancel an unsold case.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:write]
+      parameters:
+        - { name: caseId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Cancelled. }
+
+  /cases/{caseId}/update:
+    put:
+      tags: [Cases]
+      summary: Update a case (and its traveller).
+      description: |
+        Agents: limited to 3 edits and not within 24h of the travel start.
+        Admins / sub-administrators (within scope): unlimited.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:write]
+      parameters:
+        - { name: caseId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCaseRequest'
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  policyEditCount: { type: integer }
+                  policyEditsRemaining: { type: integer }
+
+  /cases/{caseId}/policy-edit-meta:
+    get:
+      tags: [Cases]
+      summary: Inspect remaining policy edits + whether the case is locked.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:read]
+      parameters:
+        - { name: caseId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      hasSale: { type: boolean }
+                      policyEditCount: { type: integer }
+                      maxEdits: { type: integer }
+                      editsRemaining: { type: integer }
+                      lockReason:
+                        type: string
+                        nullable: true
+                        enum: [too_close_to_travel, max_edits_reached, no_sale, null]
+
+  /sales:
+    post:
+      tags: [Sales]
+      summary: Create a sale from a confirmed case (alternative to /cases/{id}/confirm-sale).
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [sales:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSaleRequest' }
+      responses:
+        "201": { description: Created. }
+    get:
+      tags: [Sales]
+      summary: List sales visible to the caller.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [sales:read]
+      responses:
+        "200":
+          description: Sales array.
+
+  /sales/{id}:
+    get:
+      tags: [Sales]
+      summary: Fetch a single sale.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [sales:read]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Sale.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sale' }
+
+  /sales/{id}/payment:
+    patch:
+      tags: [Sales]
+      summary: Update payment status (Paid / Unpaid / Partial).
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [sales:payment]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePaymentRequest' }
+      responses:
+        "200": { description: Updated. }
+
+  /sales/invoice/{id}:
+    get:
+      tags: [Documents]
+      summary: Download invoice PDF for a sale.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [sales:read]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Invoice PDF (binary).
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  /sales/certificate/{id}:
+    get:
+      tags: [Documents]
+      summary: Download certificate PDF for a sale.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [sales:read]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Certificate PDF (binary).
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  /sales/certificate/{id}/page:
+    get:
+      tags: [Documents]
+      summary: Fetch the structured JSON used to render the certificate page.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [sales:read]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Certificate JSON payload.
+
+  /sales/certificate/public/{token}:
+    get:
+      tags: [Documents]
+      summary: Public certificate page (no auth, token-gated).
+      description: |
+        Generated by the QR code on the printed certificate. The token is
+        unique per certificate; anyone with the URL can read the payload.
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Certificate JSON. }
+        "404":
+          description: Token not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /sales/group/{groupId}/invoices-zip:
+    get:
+      tags: [Documents]
+      summary: Download a ZIP containing every invoice PDF in a group.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [sales:read]
+      parameters:
+        - { name: groupId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: ZIP archive.
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+
+  /sales/group/{groupId}/certificates-zip:
+    get:
+      tags: [Documents]
+      summary: Download a ZIP containing every certificate PDF in a group.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [sales:read]
+      parameters:
+        - { name: groupId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: ZIP archive.
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+
+  /ledger:
+    get:
+      tags: [Reports]
+      summary: Paginated sales ledger.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [ledger:read]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/PaymentStatus'
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Ledger page + total.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/LedgerRow' }
+                  meta:
+                    $ref: '#/components/schemas/Pagination'
+
+  /ledger/export:
+    get:
+      tags: [Reports]
+      summary: CSV export of the ledger (same filters as `/ledger`).
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [ledger:read]
+      responses:
+        "200":
+          description: CSV file.
+          content:
+            text/csv:
+              schema: { type: string }
+
+  /invoice-ledger:
+    get:
+      tags: [Reports]
+      summary: Paginated invoices, grouped by region.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [invoices:read]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+        - $ref: '#/components/parameters/PaymentStatus'
+        - name: region
+          in: query
+          description: Filter to a single region value (country name or destination string).
+          schema: { type: string }
+        - name: regionBy
+          in: query
+          description: Which dimension drives the "region" column.
+          schema:
+            type: string
+            enum: [residence, destination, agent]
+            default: residence
+      responses:
+        "200":
+          description: Paginated rows + region summary.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/InvoiceLedgerRow' }
+                  meta:
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      page: { type: integer }
+                      limit: { type: integer }
+                      regionBy: { type: string }
+                  regionSummary:
+                    type: array
+                    items: { $ref: '#/components/schemas/RegionSummaryRow' }
+
+  /invoice-ledger/export:
+    get:
+      tags: [Reports]
+      summary: CSV export of the region-tagged invoice list.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [invoices:read]
+      responses:
+        "200":
+          description: CSV.
+          content:
+            text/csv:
+              schema: { type: string }
+
+  /admin/list-agents:
+    get:
+      tags: [Agents]
+      summary: List agencies (admin / sub-administrator only).
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: Agency list.
+
+  /admin/agents/{id}:
+    get:
+      tags: [Agents]
+      summary: Fetch one agency + its sub-agents.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Agent. }
+
+  /admin/api-keys:
+    post:
+      tags: [API keys]
+      summary: Mint a new API key.
+      description: |
+        **Admin only.** Returns the full `secret` exactly once — store it
+        securely. Subsequent reads will only show the prefix.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, owner_user_id, scopes]
+              properties:
+                name: { type: string, example: "Partner Travel Co. — production" }
+                owner_user_id:
+                  type: integer
+                  description: |
+                    The user the key acts on behalf of. Inherits that user's
+                    visibility scope (a key owned by an agent only sees that
+                    agent's cases).
+                scopes:
+                  type: array
+                  items: { type: string }
+                  example: [catalogue:read, cases:read, cases:write, sales:read, sales:write]
+                ip_allowlist:
+                  type: string
+                  nullable: true
+                  description: Comma-separated list of IPs / CIDRs the key is allowed from.
+                rate_limit_per_min:
+                  type: integer
+                  nullable: true
+                  description: Override the default per-key requests-per-minute limit.
+                expires_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+      responses:
+        "201":
+          description: Created (full secret returned once).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/ApiKeyCreated' }
+                  message: { type: string }
+    get:
+      tags: [API keys]
+      summary: List API keys.
+      security:
+        - bearerJWT: []
+      parameters:
+        - name: owner_user_id
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Keys array.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ApiKey' }
+
+  /admin/api-keys/{id}:
+    get:
+      tags: [API keys]
+      summary: Inspect a key + its recent usage.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK }
+    patch:
+      tags: [API keys]
+      summary: Update key metadata.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                scopes:
+                  type: array
+                  items: { type: string }
+                ip_allowlist: { type: string, nullable: true }
+                rate_limit_per_min: { type: integer, nullable: true }
+                expires_at: { type: string, format: date-time, nullable: true }
+      responses:
+        "200": { description: Updated. }
+    delete:
+      tags: [API keys]
+      summary: Revoke a key (status → `revoked`, no new requests accepted).
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Revoked. }
+
+  /admin/api-keys/{id}/rotate:
+    post:
+      tags: [API keys]
+      summary: Rotate the secret — revokes the old one and mints a fresh key with the same scopes.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: New secret returned once.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/ApiKeyCreated' }
+                  message: { type: string }
+
+  /admin/api-keys/scopes:
+    get:
+      tags: [API keys]
+      summary: Canonical scope catalogue.
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: List of every available scope string.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { type: string }

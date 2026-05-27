@@ -1,4 +1,5 @@
 import getPool from "../utils/db.js";
+import { isPrivilegedRole } from "../middlewares/roleMiddleware.js";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
@@ -110,13 +111,13 @@ export const createCatalogue = async (req, res) => {
   }
 };
 
-// Get all catalogues (Admin: all plans; Agent/Sub-agent: only assigned plans)
+// Get all catalogues (Admin / sub-admin: all plans; Agent: only assigned plans)
 export const getCatalogues = async (req, res) => {
   try {
     const pool = getPool();
     let query;
     const params = [];
-    if (req.user.role === "admin") {
+    if (isPrivilegedRole(req.user.role)) {
       query = "SELECT * FROM catalogue";
     } else {
       query = `SELECT c.* FROM catalogue c

@@ -243,16 +243,18 @@ export const changeCaseStatus = async (req, res) => {
 // Get all cases with pagination. Admin → unfiltered; sub-admin → only cases in their scope.
 export const getAllCases = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 25;
+    const { search, status, startDate, endDate } = req.query;
+    const listOpts = { page, limit, search, status, startDate, endDate };
 
     if (req.user.role === "admin") {
-      const result = await getAllCasesWithPagination(page, limit);
+      const result = await getAllCasesWithPagination(listOpts);
       return res.json(result);
     }
     if (req.user.role === "sub_admin") {
       const agentIds = await getAgentVisibilityIds(req.user.id);
-      const result = await getCasesByAgentIdsWithPagination(agentIds, page, limit);
+      const result = await getCasesByAgentIdsWithPagination(agentIds, listOpts);
       return res.json(result);
     }
     return res.status(403).json({ message: "Forbidden" });
@@ -265,10 +267,18 @@ export const getAllCases = async (req, res) => {
 // Get cases for agent with pagination (agent + sub-agents)
 export const getMyCasesWithPagination = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 25;
+    const { search, status, startDate, endDate } = req.query;
     const agentIds = await getAgentVisibilityIds(req.user.id);
-    const result = await getCasesByAgentIdsWithPagination(agentIds, page, limit);
+    const result = await getCasesByAgentIdsWithPagination(agentIds, {
+      page,
+      limit,
+      search,
+      status,
+      startDate,
+      endDate
+    });
     res.json(result);
   } catch (err) {
     console.error(err);

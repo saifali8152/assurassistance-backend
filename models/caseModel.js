@@ -118,75 +118,123 @@ export const getCaseDetailsById = async (caseId) => {
   return rows[0];
 };
 
-// Get all cases with pagination (for admin)
-export const getAllCasesWithPagination = async (page = 1, limit = 10) => {
-  const pool = getPool();
-  const offset = (page - 1) * limit;
-  
-  // Get total count
-  const [countResult] = await pool.query('SELECT COUNT(*) as total FROM cases');
-  const totalCases = countResult[0].total;
-  
-  // Get cases with pagination
-  const [rows] = await pool.query(
-    `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, t.phone, t.email, t.address, t.passport_or_id, CONCAT(t.first_name, ' ', t.last_name) as full_name, cat.name as plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules, cat.currency, cat.country_of_residence as plan_country_of_residence, cat.route_type, s.id as sale_id, u.name as created_by_name, c.duration_days
-     FROM cases c
-     JOIN travellers t ON c.traveller_id = t.id
-     JOIN catalogue cat ON c.selected_plan_id = cat.id
-     LEFT JOIN sales s ON c.id = s.case_id
-     LEFT JOIN users u ON c.created_by = u.id
-     ORDER BY c.created_at DESC
-     LIMIT ? OFFSET ?`,
-    [limit, offset]
-  );
-  
-  return {
-    cases: rows,
-    totalCases,
-    totalPages: Math.ceil(totalCases / limit),
-    currentPage: page
-  };
-};
+const CASE_LIST_FROM = `
+  FROM cases c
+  JOIN travellers t ON c.traveller_id = t.id
+  JOIN catalogue cat ON c.selected_plan_id = cat.id
+  LEFT JOIN sales s ON c.id = s.case_id
+  LEFT JOIN users u ON c.created_by = u.id
+`;
 
-// Get cases by agent with pagination (single id - backward compatible)
-export const getCasesByAgentWithPagination = async (agentId, page = 1, limit = 10) => {
-  return getCasesByAgentIdsWithPagination([agentId], page, limit);
-};
+const CASE_LIST_SELECT = `
+  SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality,
+         t.phone, t.email, t.address, t.passport_or_id,
+         CONCAT(t.first_name, ' ', t.last_name) AS full_name,
+         cat.name AS plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules,
+         cat.currency, cat.country_of_residence AS plan_country_of_residence, cat.route_type,
+         s.id AS sale_id, u.name AS created_by_name, c.duration_days
+`;
 
-// Get cases by agent ids with pagination (self + sub-agents)
-export const getCasesByAgentIdsWithPagination = async (agentIds, page = 1, limit = 10) => {
-  if (!agentIds || agentIds.length === 0) {
-    return { cases: [], totalCases: 0, totalPages: 0, currentPage: page };
+/** Shared WHERE builder for paginated case listings (admin, sub-admin scope, agents). */
+function buildCaseListFilters({ agentIds, status, startDate, endDate, search }) {
+  const params = [];
+  const whereClauses = [];
+
+  if (agentIds && agentIds.length > 0) {
+    whereClauses.push(`c.created_by IN (${agentIds.map(() => "?").join(",")})`);
+    params.push(...agentIds);
   }
+  if (status && String(status).trim()) {
+    whereClauses.push("c.status = ?");
+    params.push(String(status).trim());
+  }
+  if (startDate) {
+    whereClauses.push("c.created_at >= ?");
+    params.push(startDate + " 00:00:00");
+  }
+  if (endDate) {
+    whereClauses.push("c.created_at <= ?");
+    params.push(endDate + " 23:59:59");
+  }
+  if (search && String(search).trim()) {
+    const term = `%${String(search).trim()}%`;
+    whereClauses.push(`(
+      CONCAT(t.first_name, ' ', t.last_name) LIKE ?
+      OR t.email LIKE ?
+      OR t.phone LIKE ?
+      OR c.destination LIKE ?
+      OR cat.name LIKE ?
+      OR CAST(c.id AS CHAR) LIKE ?
+      OR u.name LIKE ?
+      OR s.policy_number LIKE ?
+      OR s.certificate_number LIKE ?
+    )`);
+    params.push(term, term, term, term, term, term, term, term, term);
+  }
+
+  const whereSQL = whereClauses.length ? "WHERE " + whereClauses.join(" AND ") : "";
+  return { whereSQL, params };
+}
+
+async function queryCasesPaginated({ agentIds, page, limit, status, startDate, endDate, search }) {
   const pool = getPool();
-  const offset = (page - 1) * limit;
-  const placeholders = agentIds.map(() => '?').join(',');
-  
-  const [countResult] = await pool.query(
-    `SELECT COUNT(*) as total FROM cases WHERE created_by IN (${placeholders})`,
-    agentIds
+  const pageNum = Math.max(1, Number(page) || 1);
+  const limitNum = Math.min(200, Math.max(1, Number(limit) || 25));
+  const offset = (pageNum - 1) * limitNum;
+
+  if (agentIds && agentIds.length === 0) {
+    return { cases: [], totalCases: 0, totalPages: 0, currentPage: pageNum, limit: limitNum };
+  }
+
+  const { whereSQL, params } = buildCaseListFilters({
+    agentIds,
+    status,
+    startDate,
+    endDate,
+    search
+  });
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) AS total ${CASE_LIST_FROM} ${whereSQL}`,
+    params
   );
-  const totalCases = countResult[0].total;
-  
+  const totalCases = Number(countRows[0]?.total) || 0;
+
   const [rows] = await pool.query(
-    `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, t.phone, t.email, t.address, t.passport_or_id, CONCAT(t.first_name, ' ', t.last_name) as full_name, cat.name as plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules, cat.currency, cat.country_of_residence as plan_country_of_residence, cat.route_type, s.id as sale_id, c.duration_days
-     FROM cases c
-     JOIN travellers t ON c.traveller_id = t.id
-     JOIN catalogue cat ON c.selected_plan_id = cat.id
-     LEFT JOIN sales s ON c.id = s.case_id
-     WHERE c.created_by IN (${placeholders})
+    `${CASE_LIST_SELECT} ${CASE_LIST_FROM} ${whereSQL}
      ORDER BY c.created_at DESC
      LIMIT ? OFFSET ?`,
-    [...agentIds, limit, offset]
+    [...params, limitNum, offset]
   );
-  
+
   return {
     cases: rows,
     totalCases,
-    totalPages: Math.ceil(totalCases / limit),
-    currentPage: page
+    totalPages: Math.max(1, Math.ceil(totalCases / limitNum) || 1),
+    currentPage: pageNum,
+    limit: limitNum
   };
+}
+
+// Get all cases with pagination + filters (admin: no agent scope)
+export const getAllCasesWithPagination = async ({
+  page = 1,
+  limit = 25,
+  search,
+  status,
+  startDate,
+  endDate
+} = {}) => {
+  return queryCasesPaginated({ page, limit, search, status, startDate, endDate });
 };
+
+// Get cases by agent with pagination (single id)
+export const getCasesByAgentWithPagination = async (agentId, opts = {}) =>
+  getCasesByAgentIdsWithPagination([agentId], opts);
+
+// Get cases by agent ids with pagination (self + sub-agents / sub-admin scope)
+export const getCasesByAgentIdsWithPagination = async (agentIds, opts = {}) =>
+  queryCasesPaginated({ agentIds, ...opts });
 
 // Update case and traveller
 export const updateCaseAndTraveller = async (caseId, travellerData, caseData) => {

@@ -440,9 +440,11 @@ Certificate QR codes point to `{FRONTEND}/certificate-public/{token}`. The API s
    ```
    Alternatively you can set `FRONTEND_URL` to the same value. If neither is set, the server builds the link from the incoming request host (works when the API and the SPA are served from the same hostname).
 
-4. **Optional — printed certificate defaults** (emergency line and website on the certificate; general line and WhatsApp come from the main/supervisor agent’s `work_phone` and `whatsapp_phone` in the database):
+4. **Certificate contact lines** (printed on every certificate — set in backend `.env` only):
 
    ```env
+   CERTIFICATE_GENERAL_PHONE=+225 27 22 22 82 60
+   CERTIFICATE_WHATSAPP_PHONE=+225 07 18 92 31 94
    CERTIFICATE_EMERGENCY_PHONE=+91 62916 62954
    CERTIFICATE_WEBSITE_URL=https://www.assurassistance.org
    ```

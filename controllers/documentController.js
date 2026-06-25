@@ -8,7 +8,7 @@ import { generateInvoicePDF } from "../utils/pdfGenerator.js";
 import { generateCertificatePdfFromPagePayload } from "../utils/certificatePagePdf.js";
 import { getCaseDetailsById } from "../models/caseModel.js";
 import { getSaleById, getSalesByGroupIdForAgents } from "../models/salesModel.js";
-import { findUserById, getAgentVisibilityIds } from "../models/userModel.js";
+import { getAgentVisibilityIds } from "../models/userModel.js";
 import archiver from "archiver";
 import QRCode from "qrcode";
 import {
@@ -112,24 +112,6 @@ function formatDateDMY(d) {
 }
 
 /** Absolute URL for the public certificate page (QR). Set PUBLIC_CERTIFICATE_FRONTEND_URL or FRONTEND_URL in production if API and SPA use different hosts. */
-/** Main agent = top of parent chain (supervisor); if no parent, the case creator. */
-async function resolveMainAgentContact(createdByUserId) {
-  if (!createdByUserId) {
-    return { generalPhone: "", whatsapp: "" };
-  }
-  let current = await findUserById(createdByUserId);
-  if (!current) return { generalPhone: "", whatsapp: "" };
-  while (current.parent_agent_id) {
-    const parent = await findUserById(current.parent_agent_id);
-    if (!parent) break;
-    current = parent;
-  }
-  return {
-    generalPhone: current.work_phone ? String(current.work_phone).trim() : "",
-    whatsapp: current.whatsapp_phone ? String(current.whatsapp_phone).trim() : ""
-  };
-}
-
 function resolvePublicCertificateUrl(req, token) {
   const base = (process.env.PUBLIC_CERTIFICATE_FRONTEND_URL || process.env.FRONTEND_URL || "").trim();
   const path = `/certificate-public/${encodeURIComponent(token)}`;
@@ -207,18 +189,11 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     console.error("QR generation failed:", e);
   }
 
-  const agentContact = await resolveMainAgentContact(caseDetails.created_by);
   const emergencyHelpline =
     (process.env.CERTIFICATE_EMERGENCY_PHONE || "+91 62916 62954").trim();
   const websiteUrl = (process.env.CERTIFICATE_WEBSITE_URL || "https://www.assurassistance.org").trim();
-  const generalLine =
-    agentContact.generalPhone && String(agentContact.generalPhone).trim() !== ""
-      ? String(agentContact.generalPhone).trim()
-      : DEFAULT_GENERAL_PHONE;
-  const whatsappLine =
-    agentContact.whatsapp && String(agentContact.whatsapp).trim() !== ""
-      ? String(agentContact.whatsapp).trim()
-      : DEFAULT_WHATSAPP_PHONE;
+  const generalLine = DEFAULT_GENERAL_PHONE;
+  const whatsappLine = DEFAULT_WHATSAPP_PHONE;
 
   const partnerRel = caseDetails.plan_partner_insurer_logo || null;
 

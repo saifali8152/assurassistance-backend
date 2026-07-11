@@ -4,7 +4,7 @@ This is the practical guide for building against the AssurAssistance backend
 from a 3rd-party application. If you only want a flat reference of every
 endpoint, see [`API.md`](./API.md). For the security model, see
 [`SECURITY.md`](./SECURITY.md). For an interactive playground, browse
-[`/api/docs`](https://backend.acareeracademy.com/api/docs) (Swagger UI).
+[`/api/docs`](https://backend-api.assurassistancepro.org/api/docs) (Swagger UI).
 
 > **Audience:** developers at partner travel agencies, insurers, or internal
 > AssurAssistance tooling teams who need programmatic access.
@@ -59,7 +59,7 @@ Secrets Manager, etc.). It will never be shown again.
 Every authenticated call carries the key in the `Authorization` header:
 
 ```bash
-curl https://backend.acareeracademy.com/api/catalogue \
+curl https://backend-api.assurassistancepro.org/api/catalogue \
   -H "Authorization: Bearer aas_live_4f9aB5kT3mP8s9eD2gQ1cZ..."
 ```
 
@@ -150,7 +150,7 @@ Selling a travel-insurance policy is a **3-step** flow.
 ### Step 1 — Pick a plan
 
 ```bash
-curl https://backend.acareeracademy.com/api/catalogue \
+curl https://backend-api.assurassistancepro.org/api/catalogue \
   -H "Authorization: Bearer $AAS_KEY" \
   | jq '.data[] | {id, name, flat_price, currency, country_of_residence}'
 ```
@@ -160,7 +160,7 @@ Pick the `id` of the plan you want to sell.
 ### Step 2 — Create the case
 
 ```bash
-curl -X POST https://backend.acareeracademy.com/api/cases \
+curl -X POST https://backend-api.assurassistancepro.org/api/cases \
   -H "Authorization: Bearer $AAS_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -193,7 +193,7 @@ You get back:
 ### Step 3 — Confirm the sale
 
 ```bash
-curl -X POST https://backend.acareeracademy.com/api/cases/4821/confirm-sale \
+curl -X POST https://backend-api.assurassistancepro.org/api/cases/4821/confirm-sale \
   -H "Authorization: Bearer $AAS_KEY" \
   -H "Content-Type: application/json" \
   -d '{ "premium_amount": 25000, "tax": 0, "total": 25000 }'
@@ -220,11 +220,11 @@ The system has now:
 
 ```bash
 # Invoice (PDF binary):
-curl -fOJ "https://backend.acareeracademy.com/api/sales/invoice/7912" \
+curl -fOJ "https://backend-api.assurassistancepro.org/api/sales/invoice/7912" \
   -H "Authorization: Bearer $AAS_KEY"
 
 # Certificate (PDF binary):
-curl -fOJ "https://backend.acareeracademy.com/api/sales/certificate/7912" \
+curl -fOJ "https://backend-api.assurassistancepro.org/api/sales/certificate/7912" \
   -H "Authorization: Bearer $AAS_KEY"
 ```
 
@@ -237,7 +237,7 @@ own document vault.
 When you receive payment:
 
 ```bash
-curl -X PATCH https://backend.acareeracademy.com/api/sales/7912/payment \
+curl -X PATCH https://backend-api.assurassistancepro.org/api/sales/7912/payment \
   -H "Authorization: Bearer $AAS_KEY" \
   -H "Content-Type: application/json" \
   -d '{ "payment_status": "Paid", "received_amount": 25000, "payment_notes": "Wire transfer ABC" }'
@@ -250,7 +250,7 @@ curl -X PATCH https://backend.acareeracademy.com/api/sales/7912/payment \
 Sell one plan to many travellers at once (a family, a tour group):
 
 ```bash
-curl -X POST https://backend.acareeracademy.com/api/cases/group \
+curl -X POST https://backend-api.assurassistancepro.org/api/cases/group \
   -H "Authorization: Bearer $AAS_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -281,8 +281,8 @@ Each case can be confirmed individually with `/cases/{id}/confirm-sale`, or
 you can download every invoice/certificate in one go:
 
 ```bash
-curl -fOJ "https://backend.acareeracademy.com/api/sales/group/grp_8f0c1a…/invoices-zip"   -H "Authorization: Bearer $AAS_KEY"
-curl -fOJ "https://backend.acareeracademy.com/api/sales/group/grp_8f0c1a…/certificates-zip" -H "Authorization: Bearer $AAS_KEY"
+curl -fOJ "https://backend-api.assurassistancepro.org/api/sales/group/grp_8f0c1a…/invoices-zip"   -H "Authorization: Bearer $AAS_KEY"
+curl -fOJ "https://backend-api.assurassistancepro.org/api/sales/group/grp_8f0c1a…/certificates-zip" -H "Authorization: Bearer $AAS_KEY"
 ```
 
 ---
@@ -292,7 +292,7 @@ curl -fOJ "https://backend.acareeracademy.com/api/sales/group/grp_8f0c1a…/cert
 ### Sales ledger
 
 ```bash
-curl "https://backend.acareeracademy.com/api/ledger?startDate=2026-01-01&endDate=2026-06-30&page=1&limit=50" \
+curl "https://backend-api.assurassistancepro.org/api/ledger?startDate=2026-01-01&endDate=2026-06-30&page=1&limit=50" \
   -H "Authorization: Bearer $AAS_KEY"
 ```
 
@@ -315,7 +315,7 @@ GET /ledger/export?startDate=…&endDate=…
 ### Invoices by region
 
 ```bash
-curl "https://backend.acareeracademy.com/api/invoice-ledger?regionBy=residence&startDate=2026-01-01" \
+curl "https://backend-api.assurassistancepro.org/api/invoice-ledger?regionBy=residence&startDate=2026-01-01" \
   -H "Authorization: Bearer $AAS_KEY"
 ```
 
@@ -449,7 +449,7 @@ if (res.status === 429) {
 import axios from 'axios';
 
 export const aas = axios.create({
-  baseURL: 'https://backend.acareeracademy.com/api',
+  baseURL: 'https://backend-api.assurassistancepro.org/api',
   headers: { Authorization: `Bearer ${process.env.AAS_KEY}` },
   timeout: 30_000
 });
@@ -474,7 +474,7 @@ fs.writeFileSync(`invoice-${sale.data.saleId}.pdf`, pdf.data);
 ```python
 import os, requests
 
-AAS = "https://backend.acareeracademy.com/api"
+AAS = "https://backend-api.assurassistancepro.org/api"
 H = {"Authorization": f"Bearer {os.environ['AAS_KEY']}"}
 
 plans = requests.get(f"{AAS}/catalogue", headers=H).json()["data"]
@@ -517,7 +517,7 @@ production cleanly.
 ## 13. Support
 
 - **Email:** [support@assurassistancepro.org](mailto:support@assurassistancepro.org)
-- **Swagger UI:** [https://backend.acareeracademy.com/api/docs](https://backend.acareeracademy.com/api/docs)
+- **Swagger UI:** [https://backend-api.assurassistancepro.org/api/docs](https://backend-api.assurassistancepro.org/api/docs)
 - **Status:** [TBD]
 
 Please include your key prefix (e.g. `aas_live_4f9a…`) and a request ID (if

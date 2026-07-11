@@ -24,7 +24,7 @@ info:
     name: Proprietary
 
 servers:
-  - url: https://backend.acareeracademy.com/api
+  - url: https://backend-api.assurassistancepro.org/api
     description: Production
   - url: http://localhost:3000/api
     description: Local development

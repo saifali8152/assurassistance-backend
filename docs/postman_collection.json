@@ -6,7 +6,7 @@
     "_postman_id": "aas-public-api"
   },
   "variable": [
-    { "key": "baseUrl", "value": "https://backend.acareeracademy.com/api", "type": "string" },
+    { "key": "baseUrl", "value": "https://backend-api.assurassistancepro.org/api", "type": "string" },
     { "key": "apiKey",  "value": "aas_live_REPLACE_ME", "type": "string" },
     { "key": "jwt",     "value": "REPLACE_ME", "type": "string" }
   ],

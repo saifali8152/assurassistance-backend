@@ -5,7 +5,7 @@ Flat reference of every backend endpoint. For a tutorial start with the
 see [`openapi.yaml`](./openapi.yaml) (also served at `/api/openapi.json`
 and rendered as Swagger UI at `/api/docs`).
 
-- **Base URL:** `https://backend.acareeracademy.com/api`
+- **Base URL:** `https://backend-api.assurassistancepro.org/api`
 - **Local:** `http://localhost:3000/api`
 - **Auth:** `Authorization: Bearer <jwt|api-key>` (see [SECURITY.md](./SECURITY.md))
 

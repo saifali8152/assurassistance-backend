@@ -46,6 +46,12 @@ tags:
     description: Aggregated ledger and "invoices by region" views.
   - name: Agents
     description: Agency-management endpoints (used by AssurAssistance staff and field-sales sub-administrators).
+  - name: Users
+    description: Self-service profile, dashboard, and password endpoints for the logged-in user (JWT only).
+  - name: Reconciliation
+    description: Monthly agent reconciliation view and CSV export (JWT only).
+  - name: Activity log
+    description: Admin-only audit trail of user activity (JWT only).
 
 security:
   - bearerJWT: []
@@ -179,6 +185,23 @@ components:
         status:
           type: string
           enum: [active, inactive]
+
+    CreatePlanRequest:
+      type: object
+      required: [product_type, name]
+      properties:
+        product_type:
+          type: string
+          enum: [Travel, "Travel Inbound", Bank, "Health Evacuation", "Road travel"]
+        name: { type: string }
+        coverage: { type: string, nullable: true }
+        pricing_rules: { type: object, nullable: true }
+        flat_price: { type: number, nullable: true }
+        country_of_residence: { type: string, nullable: true }
+        route_type: { type: string, nullable: true }
+        currency: { type: string, default: XOF }
+        theme_color: { type: string, example: "#1E4D8B" }
+        extra_id_fields: { type: boolean }
 
     Traveller:
       type: object
@@ -444,6 +467,109 @@ paths:
                   data:
                     type: array
                     items: { $ref: '#/components/schemas/Plan' }
+    post:
+      tags: [Catalogue]
+      summary: Create a plan (admin only).
+      description: Internal admin endpoint. No API-key scope grants access.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePlanRequest' }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  id: { type: integer }
+        "500":
+          description: Server error.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /catalogue/{id}:
+    put:
+      tags: [Catalogue]
+      summary: Update a plan (admin only).
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePlanRequest' }
+      responses:
+        "200": { description: Updated. }
+    delete:
+      tags: [Catalogue]
+      summary: Delete a plan (admin only).
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted. }
+
+  /catalogue/{id}/partner-logo:
+    post:
+      tags: [Catalogue]
+      summary: Upload the partner-insurer logo for a plan (admin only).
+      description: |
+        Multipart upload. Field name **`partner_logo`**. Accepts image types
+        only (png/jpg/jpeg/gif/svg/webp), max 2 MB. The stored path is returned
+        and appears on customer-facing certificates.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [partner_logo]
+              properties:
+                partner_logo:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Uploaded.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      partner_insurer_logo: { type: string }
+        "400":
+          description: No file or invalid upload.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [Catalogue]
+      summary: Remove the partner-insurer logo for a plan (admin only).
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Removed. }
 
   /cases:
     get:
@@ -521,6 +647,70 @@ paths:
                   caseIds:
                     type: array
                     items: { type: integer }
+
+  /cases/all:
+    get:
+      tags: [Cases]
+      summary: Paginated list of all cases visible to the caller.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:read]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        "200":
+          description: Paginated cases.
+
+  /cases/my-cases:
+    get:
+      tags: [Cases]
+      summary: Paginated list of the caller's own cases.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:read]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        "200":
+          description: Paginated cases.
+
+  /cases/pending-sales:
+    get:
+      tags: [Cases]
+      summary: Cases not yet confirmed as sales.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:read]
+      responses:
+        "200":
+          description: Pending cases array.
+
+  /cases/{caseId}/status:
+    patch:
+      tags: [Cases]
+      summary: Change a case's status.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: [cases:write]
+      parameters:
+        - { name: caseId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [Pending, Confirmed, Cancelled]
+      responses:
+        "200": { description: Status updated. }
 
   /cases/{caseId}:
     get:
@@ -922,6 +1112,56 @@ paths:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "200": { description: Agent. }
+    patch:
+      tags: [Agents]
+      summary: Update an agency's profile + assigned plans.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                company_name: { type: string, nullable: true }
+                partnership_type: { type: string, nullable: true }
+                country_of_residence: { type: string, nullable: true }
+                whatsapp_phone: { type: string, nullable: true }
+                iata_number: { type: string, nullable: true }
+                geographical_location: { type: string, nullable: true }
+                work_phone: { type: string, nullable: true }
+                assigned_plan_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "200": { description: Updated. }
+        "403":
+          description: Agent outside a sub-administrator's scope.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [Agents]
+      summary: Delete an agency, agent (+ sub-agents), or a single sub-agent.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  deletedCount: { type: integer }
 
   /admin/api-keys:
     post:
@@ -1077,3 +1317,583 @@ paths:
                   data:
                     type: array
                     items: { type: string }
+
+  # --- Authentication (session / password management) -----------------------
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Log out the current session (records a Logout activity).
+      security:
+        - bearerJWT: []
+      responses:
+        "200": { description: Logged out. }
+
+  /auth/change-password:
+    post:
+      tags: [Authentication]
+      summary: Change the password of the logged-in user.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [oldPassword, newPassword, confirmPassword]
+              properties:
+                oldPassword: { type: string }
+                newPassword: { type: string }
+                confirmPassword: { type: string }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  user: { $ref: '#/components/schemas/User' }
+        "400":
+          description: Validation error (mismatch, weak/compromised, or wrong current password).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/forgot-password:
+    post:
+      tags: [Authentication]
+      summary: Send a 6-digit password-reset OTP by email.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "200": { description: OTP sent. }
+        "404":
+          description: User not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/verify-reset-code:
+    post:
+      tags: [Authentication]
+      summary: Verify a password-reset OTP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string, description: The 6-digit OTP. }
+      responses:
+        "200": { description: Code verified. }
+        "400":
+          description: Invalid or expired code.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/reset-password:
+    post:
+      tags: [Authentication]
+      summary: Set a new password using a verified OTP.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, code, newPassword, confirmPassword]
+              properties:
+                email: { type: string, format: email }
+                code: { type: string, description: The 6-digit OTP. }
+                newPassword: { type: string }
+                confirmPassword: { type: string }
+      responses:
+        "200": { description: Password reset. }
+        "400":
+          description: Invalid OTP or weak/compromised password.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # --- Agents / agency management (JWT: admin or sub-administrator) ----------
+
+  /admin/create-agent:
+    post:
+      tags: [Agents]
+      summary: Create an agency (top-level agent). Emails a welcome message with a temp password.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, company_name, partnership_type, country_of_residence, whatsapp_phone]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                tempPassword: { type: string, nullable: true, description: Optional; a strong password is generated when omitted. }
+                company_name: { type: string }
+                partnership_type: { type: string }
+                country_of_residence: { type: string }
+                whatsapp_phone: { type: string }
+                iata_number: { type: string, nullable: true }
+                geographical_location: { type: string, nullable: true }
+                work_phone: { type: string, nullable: true }
+                assigned_plan_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  email: { type: string }
+                  tempPassword: { type: string }
+                  message: { type: string }
+        "400":
+          description: Missing required field or email already exists.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/agents/{id}/sub-agents:
+    get:
+      tags: [Agents]
+      summary: List sub-agents under an agency.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Sub-agents array. }
+    post:
+      tags: [Agents]
+      summary: Create a sub-agent under an agency (emails a welcome message).
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name, email, whatsapp_phone, assigned_plan_ids]
+              properties:
+                first_name: { type: string }
+                last_name: { type: string }
+                email: { type: string, format: email }
+                work_phone: { type: string, nullable: true }
+                whatsapp_phone: { type: string }
+                assigned_plan_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      email: { type: string }
+                      tempPassword: { type: string }
+                  message: { type: string }
+
+  /admin/users/status:
+    patch:
+      tags: [Agents]
+      summary: Activate or deactivate a user.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, status]
+              properties:
+                userId: { type: integer }
+                status:
+                  type: string
+                  enum: [active, inactive]
+      responses:
+        "200": { description: Status updated. }
+        "400":
+          description: Missing fields, bad status, or attempt to change own status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/send-reset-link:
+    post:
+      tags: [Agents]
+      summary: Reset an agent's password to a new temp password and email it.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: integer }
+      responses:
+        "200":
+          description: Sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  tempPassword: { type: string }
+
+  /admin/dashboard:
+    get:
+      tags: [Agents]
+      summary: Dashboard KPIs (total sales, gross collected, unpaid balance, active users, recent sales).
+      security:
+        - bearerJWT: []
+      responses:
+        "200": { description: KPI payload. }
+
+  /admin/production-trend:
+    get:
+      tags: [Agents]
+      summary: Current-month (daily) and current-year (monthly) production trend (admin only).
+      security:
+        - bearerJWT: []
+      responses:
+        "200": { description: Trend payload. }
+
+  /admin/agent-hierarchy:
+    get:
+      tags: [Agents]
+      summary: Paginated flat list of supervisors, agents, and sub-agents (admin only).
+      security:
+        - bearerJWT: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - { name: status, in: query, schema: { type: string } }
+      responses:
+        "200": { description: Hierarchy page. }
+
+  /admin/agent-hierarchy/export:
+    get:
+      tags: [Agents]
+      summary: CSV export of the full agent hierarchy (admin only).
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: CSV.
+          content:
+            text/csv:
+              schema: { type: string }
+
+  /admin/create-sub-admin:
+    post:
+      tags: [Agents]
+      summary: Create a sub-administrator / field-sales rep (admin only).
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name, email]
+              properties:
+                first_name: { type: string }
+                last_name: { type: string }
+                email: { type: string, format: email }
+                work_phone: { type: string, nullable: true }
+                whatsapp_phone: { type: string, nullable: true }
+                tempPassword: { type: string, nullable: true }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      email: { type: string }
+                      tempPassword: { type: string }
+                  message: { type: string }
+
+  /admin/sub-admins:
+    get:
+      tags: [Agents]
+      summary: List sub-administrators with owned-agency counts (admin only).
+      security:
+        - bearerJWT: []
+      responses:
+        "200": { description: Sub-administrators array. }
+
+  /admin/sub-admins/{id}:
+    delete:
+      tags: [Agents]
+      summary: Delete a sub-administrator (admin only). Agencies they created are kept.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted. }
+
+  /admin/profile:
+    get:
+      tags: [Agents]
+      summary: Current user's profile (admin variant).
+      security:
+        - bearerJWT: []
+      responses:
+        "200": { description: Profile. }
+    patch:
+      tags: [Agents]
+      summary: Update the current user's name.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "200": { description: Updated. }
+
+  /admin/change-password:
+    patch:
+      tags: [Agents]
+      summary: Change the current user's password (admin variant).
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 6 }
+      responses:
+        "200": { description: Changed. }
+
+  # --- Users (self-service, JWT only) ----------------------------------------
+
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Profile of the current JWT user.
+      security:
+        - bearerJWT: []
+      responses:
+        "200": { description: Profile. }
+
+  /users/dashboard:
+    get:
+      tags: [Users]
+      summary: KPIs scoped to the current user.
+      security:
+        - bearerJWT: []
+      responses:
+        "200": { description: Dashboard payload. }
+
+  /users/profile:
+    get:
+      tags: [Users]
+      summary: Current user's profile (admin-style payload).
+      security:
+        - bearerJWT: []
+      responses:
+        "200": { description: Profile. }
+    patch:
+      tags: [Users]
+      summary: Update the current user's profile.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+      responses:
+        "200": { description: Updated. }
+
+  /users/change-password:
+    patch:
+      tags: [Users]
+      summary: Change the current user's password.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 6 }
+      responses:
+        "200": { description: Changed. }
+
+  # --- Reconciliation (JWT only) ---------------------------------------------
+
+  /reconciliation:
+    get:
+      tags: [Reconciliation]
+      summary: Monthly agent reconciliation.
+      security:
+        - bearerJWT: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          description: Three-letter month label (e.g. Jan, Sep).
+          schema:
+            type: string
+            enum: [Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec]
+        - name: year
+          in: query
+          required: true
+          schema: { type: integer, example: 2026 }
+      responses:
+        "200":
+          description: Reconciliation rows.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { type: object }
+        "400":
+          description: Missing or invalid month/year.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /reconciliation/export:
+    get:
+      tags: [Reconciliation]
+      summary: CSV export of the monthly reconciliation.
+      security:
+        - bearerJWT: []
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec]
+        - name: year
+          in: query
+          required: true
+          schema: { type: integer, example: 2026 }
+      responses:
+        "200":
+          description: CSV.
+          content:
+            text/csv:
+              schema: { type: string }
+
+  # --- Activity log (JWT: admin only) ----------------------------------------
+
+  /activity-log:
+    get:
+      tags: [Activity log]
+      summary: Paginated user-activity audit log (admin only).
+      security:
+        - bearerJWT: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/StartDate'
+        - $ref: '#/components/parameters/EndDate'
+      responses:
+        "200":
+          description: Activity page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { type: object }
+                  meta:
+                    $ref: '#/components/schemas/Pagination'
+
+  /activity-log/{id}:
+    delete:
+      tags: [Activity log]
+      summary: Delete a single activity-log entry (admin only).
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted. }
+        "404":
+          description: Activity not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }

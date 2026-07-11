@@ -37,6 +37,44 @@
             "body": { "mode": "raw", "raw": "{ \"email\": \"agent@example.com\" }" },
             "auth": { "type": "noauth" }
           }
+        },
+        {
+          "name": "Verify reset code",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/verify-reset-code", "host": ["{{baseUrl}}"], "path": ["auth","verify-reset-code"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"email\": \"agent@example.com\", \"code\": \"123456\" }" },
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/reset-password", "host": ["{{baseUrl}}"], "path": ["auth","reset-password"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"agent@example.com\",\n  \"code\": \"123456\",\n  \"newPassword\": \"NewPass#2026\",\n  \"confirmPassword\": \"NewPass#2026\"\n}" },
+            "auth": { "type": "noauth" }
+          }
+        },
+        {
+          "name": "Change password (logged in)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/change-password", "host": ["{{baseUrl}}"], "path": ["auth","change-password"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"oldPassword\": \"OldPass#2026\",\n  \"newPassword\": \"NewPass#2026\",\n  \"confirmPassword\": \"NewPass#2026\"\n}" },
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth","logout"] },
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+          }
         }
       ]
     },
@@ -49,6 +87,51 @@
             "method": "GET",
             "url": { "raw": "{{baseUrl}}/catalogue", "host": ["{{baseUrl}}"], "path": ["catalogue"] }
           }
+        },
+        {
+          "name": "Create plan (admin JWT)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/catalogue", "host": ["{{baseUrl}}"], "path": ["catalogue"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"product_type\": \"Travel\",\n  \"name\": \"AGICO Worldwide 30 Days\",\n  \"coverage\": \"Medical: 60,000 EUR\",\n  \"flat_price\": 25000,\n  \"country_of_residence\": \"Burundi\",\n  \"route_type\": \"Outbound\",\n  \"currency\": \"XOF\",\n  \"theme_color\": \"#1E4D8B\",\n  \"extra_id_fields\": false\n}" },
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+          }
+        },
+        {
+          "name": "Update plan (admin JWT)",
+          "request": {
+            "method": "PUT",
+            "url": { "raw": "{{baseUrl}}/catalogue/12", "host": ["{{baseUrl}}"], "path": ["catalogue","12"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"product_type\": \"Travel\",\n  \"name\": \"AGICO Worldwide 45 Days\",\n  \"flat_price\": 30000,\n  \"currency\": \"XOF\"\n}" },
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+          }
+        },
+        {
+          "name": "Delete plan (admin JWT)",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/catalogue/12", "host": ["{{baseUrl}}"], "path": ["catalogue","12"] },
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+          }
+        },
+        {
+          "name": "Upload partner logo (admin JWT)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/catalogue/12/partner-logo", "host": ["{{baseUrl}}"], "path": ["catalogue","12","partner-logo"] },
+            "body": { "mode": "formdata", "formdata": [{ "key": "partner_logo", "type": "file", "src": [] }] },
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+          }
+        },
+        {
+          "name": "Delete partner logo (admin JWT)",
+          "request": {
+            "method": "DELETE",
+            "url": { "raw": "{{baseUrl}}/catalogue/12/partner-logo", "host": ["{{baseUrl}}"], "path": ["catalogue","12","partner-logo"] },
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+          }
         }
       ]
     },
@@ -60,6 +143,53 @@
           "request": {
             "method": "GET",
             "url": { "raw": "{{baseUrl}}/cases", "host": ["{{baseUrl}}"], "path": ["cases"] }
+          }
+        },
+        {
+          "name": "List all cases (paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/cases/all?page=1&limit=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["cases","all"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "25" }]
+            }
+          }
+        },
+        {
+          "name": "My cases (paginated)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/cases/my-cases?page=1&limit=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["cases","my-cases"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "25" }]
+            }
+          }
+        },
+        {
+          "name": "Pending sales",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/cases/pending-sales", "host": ["{{baseUrl}}"], "path": ["cases","pending-sales"] }
+          }
+        },
+        {
+          "name": "Change case status",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/cases/4821/status", "host": ["{{baseUrl}}"], "path": ["cases","4821","status"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"status\": \"Cancelled\" }" }
+          }
+        },
+        {
+          "name": "Policy edit meta",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/cases/4821/policy-edit-meta", "host": ["{{baseUrl}}"], "path": ["cases","4821","policy-edit-meta"] }
           }
         },
         {
@@ -127,6 +257,15 @@
       "name": "Sales",
       "item": [
         {
+          "name": "Create sale (from confirmed case)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"case_id\": 4821,\n  \"premium_amount\": 25000,\n  \"tax\": 0,\n  \"total\": 25000,\n  \"currency\": \"XOF\",\n  \"plan_price\": 25000\n}" }
+          }
+        },
+        {
           "name": "List sales",
           "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] } }
         },
@@ -155,6 +294,10 @@
         {
           "name": "Download certificate PDF",
           "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/certificate/7912", "host": ["{{baseUrl}}"], "path": ["sales","certificate","7912"] } }
+        },
+        {
+          "name": "Certificate page data (JSON)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/certificate/7912/page", "host": ["{{baseUrl}}"], "path": ["sales","certificate","7912","page"] } }
         },
         {
           "name": "Group invoices (ZIP)",
@@ -221,6 +364,236 @@
         {
           "name": "Invoices by region — CSV",
           "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/invoice-ledger/export?regionBy=residence", "host": ["{{baseUrl}}"], "path": ["invoice-ledger","export"], "query": [{"key":"regionBy","value":"residence"}] } }
+        }
+      ]
+    },
+    {
+      "name": "Agents (admin / sub-admin JWT)",
+      "description": "Agency-management endpoints. JWT only — no API-key scope grants access. Uses {{jwt}}.",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "Create agent",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/admin/create-agent", "host": ["{{baseUrl}}"], "path": ["admin","create-agent"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme Travel\",\n  \"email\": \"agency@example.com\",\n  \"company_name\": \"Acme Travel Ltd\",\n  \"partnership_type\": \"Agency\",\n  \"country_of_residence\": \"Ivory Coast\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12]\n}" }
+          }
+        },
+        {
+          "name": "List agents",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/list-agents?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin","list-agents"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }]
+            }
+          }
+        },
+        {
+          "name": "Get agent",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/agents/42", "host": ["{{baseUrl}}"], "path": ["admin","agents","42"] } }
+        },
+        {
+          "name": "Update agent",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/admin/agents/42", "host": ["{{baseUrl}}"], "path": ["admin","agents","42"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme Travel\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12, 13]\n}" }
+          }
+        },
+        {
+          "name": "Delete agent / hierarchy",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/admin/agents/42", "host": ["{{baseUrl}}"], "path": ["admin","agents","42"] } }
+        },
+        {
+          "name": "List sub-agents",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/agents/42/sub-agents", "host": ["{{baseUrl}}"], "path": ["admin","agents","42","sub-agents"] } }
+        },
+        {
+          "name": "Create sub-agent",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/admin/agents/42/sub-agents", "host": ["{{baseUrl}}"], "path": ["admin","agents","42","sub-agents"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Kofi\",\n  \"last_name\": \"Mensah\",\n  \"email\": \"subagent@example.com\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12]\n}" }
+          }
+        },
+        {
+          "name": "Change user status",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/admin/users/status", "host": ["{{baseUrl}}"], "path": ["admin","users","status"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"userId\": 42, \"status\": \"inactive\" }" }
+          }
+        },
+        {
+          "name": "Send reset link",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/admin/send-reset-link", "host": ["{{baseUrl}}"], "path": ["admin","send-reset-link"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"userId\": 42 }" }
+          }
+        },
+        {
+          "name": "Dashboard KPIs",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/dashboard", "host": ["{{baseUrl}}"], "path": ["admin","dashboard"] } }
+        },
+        {
+          "name": "Production trend (admin)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/production-trend", "host": ["{{baseUrl}}"], "path": ["admin","production-trend"] } }
+        },
+        {
+          "name": "Agent hierarchy (admin)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/agent-hierarchy?page=1&limit=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin","agent-hierarchy"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "25" }]
+            }
+          }
+        },
+        {
+          "name": "Agent hierarchy — CSV (admin)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/agent-hierarchy/export", "host": ["{{baseUrl}}"], "path": ["admin","agent-hierarchy","export"] } }
+        },
+        {
+          "name": "Create sub-administrator (admin)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/admin/create-sub-admin", "host": ["{{baseUrl}}"], "path": ["admin","create-sub-admin"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Fatou\",\n  \"last_name\": \"Bah\",\n  \"email\": \"subadmin@example.com\",\n  \"whatsapp_phone\": \"+225...\"\n}" }
+          }
+        },
+        {
+          "name": "List sub-administrators (admin)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/sub-admins", "host": ["{{baseUrl}}"], "path": ["admin","sub-admins"] } }
+        },
+        {
+          "name": "Delete sub-administrator (admin)",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/admin/sub-admins/7", "host": ["{{baseUrl}}"], "path": ["admin","sub-admins","7"] } }
+        },
+        {
+          "name": "Get admin profile",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/profile", "host": ["{{baseUrl}}"], "path": ["admin","profile"] } }
+        },
+        {
+          "name": "Update admin profile",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/admin/profile", "host": ["{{baseUrl}}"], "path": ["admin","profile"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"name\": \"New Name\" }" }
+          }
+        },
+        {
+          "name": "Change admin password",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/admin/change-password", "host": ["{{baseUrl}}"], "path": ["admin","change-password"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"currentPassword\": \"OldPass#2026\", \"newPassword\": \"NewPass#2026\" }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (JWT)",
+      "description": "Self-service profile / dashboard for the logged-in user. Uses {{jwt}}.",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "Me",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users","me"] } }
+        },
+        {
+          "name": "Dashboard",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users/dashboard", "host": ["{{baseUrl}}"], "path": ["users","dashboard"] } }
+        },
+        {
+          "name": "Profile",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users/profile", "host": ["{{baseUrl}}"], "path": ["users","profile"] } }
+        },
+        {
+          "name": "Update profile",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/users/profile", "host": ["{{baseUrl}}"], "path": ["users","profile"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"name\": \"New Name\" }" }
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/users/change-password", "host": ["{{baseUrl}}"], "path": ["users","change-password"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"currentPassword\": \"OldPass#2026\", \"newPassword\": \"NewPass#2026\" }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reconciliation (JWT)",
+      "description": "Monthly agent reconciliation. Uses {{jwt}}.",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "Monthly reconciliation",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/reconciliation?month=Sep&year=2026",
+              "host": ["{{baseUrl}}"],
+              "path": ["reconciliation"],
+              "query": [{ "key": "month", "value": "Sep" }, { "key": "year", "value": "2026" }]
+            }
+          }
+        },
+        {
+          "name": "Monthly reconciliation — CSV",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/reconciliation/export?month=Sep&year=2026",
+              "host": ["{{baseUrl}}"],
+              "path": ["reconciliation","export"],
+              "query": [{ "key": "month", "value": "Sep" }, { "key": "year", "value": "2026" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Activity log (admin JWT)",
+      "description": "Admin-only audit trail. Uses {{jwt}}.",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "List activity",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/activity-log?page=1&limit=25",
+              "host": ["{{baseUrl}}"],
+              "path": ["activity-log"],
+              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "25" }]
+            }
+          }
+        },
+        {
+          "name": "Delete activity entry",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/activity-log/100", "host": ["{{baseUrl}}"], "path": ["activity-log","100"] } }
         }
       ]
     },

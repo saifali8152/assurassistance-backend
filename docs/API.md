@@ -423,7 +423,20 @@ These endpoints are part of the staff/admin surface. They are reachable via
 
 ---
 
-## 11. Health & docs
+## 11. Partner invoices — `/api/partner-invoices` (admin / sub-admin JWT)
+
+Periodic premium invoices per partner (travel agency, corporate desk, …). Sub-administrators only see the agencies under their supervision. Commissions are applied per coverage-duration tier (10/45/93/180/365 days) and deducted from the premium total; they appear only on these invoices, never on individual sales.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/partner-invoices/partners` | Partners the caller may invoice. |
+| GET | `/partner-invoices/summary?startDate&endDate` | Period totals: premiums, collected, commissions, net to transfer. |
+| GET | `/partner-invoices/:partnerId?startDate&endDate` | Invoice preview (JSON): per-sale lines with commissions + totals. |
+| GET | `/partner-invoices/:partnerId/pdf?startDate&endDate` | Invoice PDF in the official format (logos, addresses, premium breakdown). `Accept-Language: fr` for French labels. |
+
+---
+
+## 12. Health & docs
 
 | Method | Path | Description |
 |---|---|---|

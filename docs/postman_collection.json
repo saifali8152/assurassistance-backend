@@ -598,6 +598,54 @@
       ]
     },
     {
+      "name": "Partner invoices (admin / sub-admin JWT)",
+      "description": "Periodic premium invoices per partner (travel agency, corporate, …) with commission deductions. Sub-admins only see the agencies they supervise. Uses {{jwt}}.",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "List invoiceable partners",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/partner-invoices/partners", "host": ["{{baseUrl}}"], "path": ["partner-invoices","partners"] } }
+        },
+        {
+          "name": "Period summary (premiums / collected / commissions)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/partner-invoices/summary?startDate=2026-06-01&endDate=2026-06-30",
+              "host": ["{{baseUrl}}"],
+              "path": ["partner-invoices","summary"],
+              "query": [{ "key": "startDate", "value": "2026-06-01" }, { "key": "endDate", "value": "2026-06-30" }]
+            }
+          }
+        },
+        {
+          "name": "Invoice preview (JSON)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/partner-invoices/12?startDate=2026-06-01&endDate=2026-06-30",
+              "host": ["{{baseUrl}}"],
+              "path": ["partner-invoices","12"],
+              "query": [{ "key": "startDate", "value": "2026-06-01" }, { "key": "endDate", "value": "2026-06-30" }]
+            }
+          }
+        },
+        {
+          "name": "Invoice PDF",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept-Language", "value": "fr" }],
+            "url": {
+              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30",
+              "host": ["{{baseUrl}}"],
+              "path": ["partner-invoices","12","pdf"],
+              "query": [{ "key": "startDate", "value": "2026-06-01" }, { "key": "endDate", "value": "2026-06-30" }]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "Admin — API keys",
       "description": "JWT-only (admin role). Uses {{jwt}} for auth.",
       "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },

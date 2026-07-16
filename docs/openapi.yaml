@@ -1989,13 +1989,14 @@ paths:
   /partner-invoices/{partnerId}/pdf:
     get:
       tags: [Partner invoices]
-      summary: Invoice PDF in the official format (logos, addresses, premium breakdown, commissions deducted). Accept-Language "fr" switches labels to French.
+      summary: Invoice PDF in the official format (logos, addresses, premium breakdown, commissions deducted). Accept-Language "fr" switches labels to French. Amounts are stored in XOF and converted for display via the currency query (XOF, USD, EUR).
       security:
         - bearerJWT: []
       parameters:
         - { name: partnerId, in: path, required: true, schema: { type: integer } }
         - { name: startDate, in: query, required: true, schema: { type: string, format: date } }
         - { name: endDate, in: query, required: true, schema: { type: string, format: date } }
+        - { name: currency, in: query, required: false, schema: { type: string, enum: [XOF, USD, EUR], default: XOF }, description: "Display currency. Amounts are converted from XOF (database base)." }
       responses:
         "200":
           description: PDF file.

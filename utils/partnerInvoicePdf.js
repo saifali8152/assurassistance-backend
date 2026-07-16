@@ -1,6 +1,12 @@
 import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
+import {
+  normalizeCurrency,
+  currencyLabel,
+  formatFromXof,
+  formatAmountCell,
+} from "./currencyDisplay.js";
 
 const ORANGE = "#E4590F";
 const DARK = "#333333";
@@ -104,14 +110,6 @@ function fmtShortDate(d) {
   return `${x.getMonth() + 1}/${x.getDate()}/${x.getFullYear()}`;
 }
 
-function fmtInt(n) {
-  return String(Math.round(Number(n) || 0));
-}
-
-function fmtGrouped(n) {
-  return Math.round(Number(n) || 0).toLocaleString("fr-FR").replace(/\u202f|\u00a0/g, " ");
-}
-
 /**
  * Period label: full-month periods become "JUIN 2026", anything else a date range.
  */
@@ -156,14 +154,14 @@ const COLUMNS = [
   { key: "commission", w: 34, align: "right" },
 ];
 
-function cellText(line, key) {
+function cellText(line, key, currency, locale) {
   switch (key) {
     case "plan_premium":
     case "tax":
     case "total":
     case "received_amount":
     case "commission":
-      return fmtInt(line[key]);
+      return formatAmountCell(line[key], currency, locale);
     case "confirmed_at":
       return fmtShortDate(line.confirmed_at);
     default:
@@ -173,19 +171,23 @@ function cellText(line, key) {
 
 /**
  * Generate the partner (travel agency) premium invoice PDF.
+ * Amounts in `lines` / `totals` are stored in XOF and converted for display via `currency`.
  * Returns a Buffer.
  */
 export const generatePartnerInvoicePDF = async ({
   invoiceNumber,
   partner,          // { name, company_name, geographical_location, work_phone, whatsapp_phone, email }
-  lines,            // rows from getPartnerSalesForPeriod
-  totals,           // { totalPremiums, totalCommissions, netToTransfer }
+  lines,            // rows from getPartnerSalesForPeriod (amounts in XOF)
+  totals,           // { totalPremiums, totalCommissions, netToTransfer } in XOF
   startDate,
   endDate,
   partnerLogoFsPath = null,
   locale = "fr",
+  currency = "XOF",
 }) => {
   const L = I18N[locale === "fr" ? "fr" : "en"];
+  const displayCurrency = normalizeCurrency(currency);
+  const curLabel = currencyLabel(displayCurrency);
   const margin = 25;
   const doc = new PDFDocument({ size: "A4", margin });
 
@@ -288,7 +290,8 @@ export const generatePartnerInvoicePDF = async ({
     y += 18;
 
     // ---------- Premium breakdown table ----------
-    doc.fillColor(DARK).font("Helvetica-Bold").fontSize(11).text(L.detailTitle, blockX, y);
+    doc.fillColor(DARK).font("Helvetica-Bold").fontSize(11)
+      .text(`${L.detailTitle} (${curLabel})`, blockX, y);
     y += 20;
 
     const rowH = 11;
@@ -330,7 +333,7 @@ export const generatePartnerInvoicePDF = async ({
       let x = leftX;
       doc.fillColor(DARK).font("Helvetica").fontSize(tableFont);
       for (const col of COLUMNS) {
-        doc.text(cellText(line, col.key), x + 1, y, {
+        doc.text(cellText(line, col.key, displayCurrency, locale), x + 1, y, {
           width: col.w - 2, height: 7, align: col.align || "left", lineBreak: false, ellipsis: true,
         });
         x += col.w;
@@ -354,8 +357,10 @@ export const generatePartnerInvoicePDF = async ({
         doc.restore();
       }
       doc.fillColor(DARK).font("Helvetica-Bold").fontSize(8);
-      doc.text(label, totalsLabelX, y, { width: 165, lineBreak: false });
-      doc.text(fmtGrouped(value), totalsValueX, y, { width: 80, align: "right", lineBreak: false });
+      doc.text(label, totalsLabelX, y, { width: 150, lineBreak: false });
+      doc.text(formatFromXof(value, displayCurrency, locale), totalsValueX - 20, y, {
+        width: 100, align: "right", lineBreak: false,
+      });
       y += 20;
     };
     totalsRow(L.totalIssued, totals.totalPremiums, false);

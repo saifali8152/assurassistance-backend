@@ -432,7 +432,7 @@ Periodic premium invoices per partner (travel agency, corporate desk, …). Sub-
 | GET | `/partner-invoices/partners` | Partners the caller may invoice. |
 | GET | `/partner-invoices/summary?startDate&endDate` | Period totals: premiums, collected, commissions, net to transfer. |
 | GET | `/partner-invoices/:partnerId?startDate&endDate` | Invoice preview (JSON): per-sale lines with commissions + totals. |
-| GET | `/partner-invoices/:partnerId/pdf?startDate&endDate` | Invoice PDF in the official format (logos, addresses, premium breakdown). `Accept-Language: fr` for French labels. |
+| GET | `/partner-invoices/:partnerId/pdf?startDate&endDate&currency` | Invoice PDF in the official format (logos, addresses, premium breakdown). `Accept-Language: fr` for French labels. `currency` = `XOF` \| `USD` \| `EUR` (amounts convert from XOF base). |
 
 ---
 

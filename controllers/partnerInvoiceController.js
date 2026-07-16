@@ -8,6 +8,7 @@ import {
 } from "../models/partnerInvoiceModel.js";
 import { generatePartnerInvoicePDF } from "../utils/partnerInvoicePdf.js";
 import { COMMISSION_TIERS } from "../utils/commissionRules.js";
+import { normalizeCurrency } from "../utils/currencyDisplay.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -23,6 +24,10 @@ function parsePeriod(req) {
 function localeFromReq(req) {
   const al = (req.get("Accept-Language") || "").toLowerCase();
   return al.startsWith("fr") ? "fr" : "en";
+}
+
+function currencyFromReq(req) {
+  return normalizeCurrency(req.query.currency);
 }
 
 function partnerLogoFsFromDb(rel) {
@@ -192,6 +197,7 @@ export const downloadPartnerInvoicePdf = async (req, res) => {
       endDate: period.endDate,
       partnerLogoFsPath: partnerLogoFsFromDb(insurerLogoRel),
       locale: localeFromReq(req),
+      currency: currencyFromReq(req),
     });
 
     const fileSlug = invoiceNumber.replace(/[^\w-]+/g, "-").replace(/-+/g, "-");

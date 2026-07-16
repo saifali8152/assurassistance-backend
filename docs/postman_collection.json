@@ -636,10 +636,14 @@
             "method": "GET",
             "header": [{ "key": "Accept-Language", "value": "fr" }],
             "url": {
-              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30",
+              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF",
               "host": ["{{baseUrl}}"],
               "path": ["partner-invoices","12","pdf"],
-              "query": [{ "key": "startDate", "value": "2026-06-01" }, { "key": "endDate", "value": "2026-06-30" }]
+              "query": [
+                { "key": "startDate", "value": "2026-06-01" },
+                { "key": "endDate", "value": "2026-06-30" },
+                { "key": "currency", "value": "XOF", "description": "XOF | USD | EUR — amounts convert from XOF base" }
+              ]
             }
           }
         }

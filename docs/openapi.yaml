@@ -52,6 +52,8 @@ tags:
     description: Monthly agent reconciliation view and CSV export (JWT only).
   - name: Activity log
     description: Admin-only audit trail of user activity (JWT only).
+  - name: Partner invoices
+    description: Periodic premium invoices per partner (travel agency, corporate, …) with commission deductions. Admin or sub-admin JWT; sub-admins only see the agencies they supervise.
 
 security:
   - bearerJWT: []
@@ -1897,3 +1899,106 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+
+  # --- Partner invoices (JWT: admin or sub-admin) ----------------------------
+
+  /partner-invoices/partners:
+    get:
+      tags: [Partner invoices]
+      summary: Partners selectable for invoicing (sub-admins only see their supervised agencies).
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: Top-level partner accounts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        email: { type: string }
+                        company_name: { type: string, nullable: true }
+                        partnership_type: { type: string, nullable: true }
+
+  /partner-invoices/summary:
+    get:
+      tags: [Partner invoices]
+      summary: Period totals (premiums, collected, commissions) for the caller's whole scope.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: startDate, in: query, required: true, schema: { type: string, format: date } }
+        - { name: endDate, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Dashboard reminder totals.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      totalSales: { type: integer }
+                      totalPremiums: { type: number }
+                      totalCollected: { type: number }
+                      totalCommissions: { type: number }
+                      netToTransfer: { type: number }
+
+  /partner-invoices/{partnerId}:
+    get:
+      tags: [Partner invoices]
+      summary: Invoice preview (line items with per-sale commissions and totals) for a partner and period.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: partnerId, in: path, required: true, schema: { type: integer } }
+        - { name: startDate, in: query, required: true, schema: { type: string, format: date } }
+        - { name: endDate, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: Invoice data — lines carry the commission per coverage-duration tier; totals include netToTransfer (premiums minus commissions).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: object }
+        "403":
+          description: Partner not under the sub-admin's supervision.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Partner not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /partner-invoices/{partnerId}/pdf:
+    get:
+      tags: [Partner invoices]
+      summary: Invoice PDF in the official format (logos, addresses, premium breakdown, commissions deducted). Accept-Language "fr" switches labels to French.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: partnerId, in: path, required: true, schema: { type: integer } }
+        - { name: startDate, in: query, required: true, schema: { type: string, format: date } }
+        - { name: endDate, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        "200":
+          description: PDF file.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }

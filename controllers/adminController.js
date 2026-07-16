@@ -109,6 +109,187 @@ export const createAgent = async (req, res) => {
 
 
 
+/**
+ * Superadmin partners-by-type view.
+ *
+ * A "partner" is a top-level agency account (role=agent, parent_agent_id IS NULL).
+ * Multiple agent / sub-agent logins may sit under that partner via parent_agent_id;
+ * this endpoint lists each partner once and reports how many descendant accounts
+ * act on its behalf — independent of which individual login is used day-to-day.
+ *
+ * Query: page, limit, search, status, partnership_type
+ * Response includes typeSummary (counts per partnership_type, unfiltered by type).
+ */
+export const listPartners = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 25, 200);
+    const search = (req.query.search || "").trim();
+    const status = (req.query.status || "").trim();
+    const partnershipType = (req.query.partnership_type || "").trim();
+    const offset = (page - 1) * limit;
+
+    const pool = getPool();
+
+    // Base: top-level partners only (supervisors / agencies).
+    let whereClause =
+      "WHERE u.role = 'agent' AND (u.parent_agent_id IS NULL OR u.parent_agent_id = 0)";
+    const params = [];
+
+    if (search) {
+      whereClause +=
+        " AND (u.name LIKE ? OR u.email LIKE ? OR u.company_name LIKE ? OR u.iata_number LIKE ?)";
+      const like = `%${search}%`;
+      params.push(like, like, like, like);
+    }
+
+    if (status) {
+      whereClause += " AND u.status = ?";
+      params.push(status);
+    }
+
+    if (partnershipType) {
+      if (partnershipType === "Unspecified") {
+        whereClause +=
+          " AND (u.partnership_type IS NULL OR TRIM(u.partnership_type) = '')";
+      } else {
+        whereClause += " AND u.partnership_type = ?";
+        params.push(partnershipType);
+      }
+    }
+
+    // Type summary across all top-level partners (honours search/status, not type filter),
+    // so the type chips always show global counts for the current search/status.
+    let summaryWhere =
+      "WHERE u.role = 'agent' AND (u.parent_agent_id IS NULL OR u.parent_agent_id = 0)";
+    const summaryParams = [];
+    if (search) {
+      summaryWhere +=
+        " AND (u.name LIKE ? OR u.email LIKE ? OR u.company_name LIKE ? OR u.iata_number LIKE ?)";
+      const like = `%${search}%`;
+      summaryParams.push(like, like, like, like);
+    }
+    if (status) {
+      summaryWhere += " AND u.status = ?";
+      summaryParams.push(status);
+    }
+
+    const [typeSummaryRows] = await pool.query(
+      `SELECT
+         COALESCE(NULLIF(TRIM(u.partnership_type), ''), 'Unspecified') AS partnership_type,
+         COUNT(*) AS partner_count
+       FROM users u
+       ${summaryWhere}
+       GROUP BY COALESCE(NULLIF(TRIM(u.partnership_type), ''), 'Unspecified')
+       ORDER BY partner_count DESC, partnership_type ASC`,
+      summaryParams
+    );
+
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM users u ${whereClause}`,
+      params
+    );
+
+    // Descendant accounts = any agent/sub-agent whose parent chain reaches this partner.
+    // Direct children OR grandchildren (parent's parent = partner).
+    const [partners] = await pool.query(
+      `SELECT
+         u.id,
+         u.name,
+         u.email,
+         u.status,
+         u.created_at,
+         u.last_login,
+         u.company_name,
+         u.partnership_type,
+         u.country_of_residence,
+         u.iata_number,
+         u.geographical_location,
+         u.work_phone,
+         u.whatsapp_phone,
+         (
+           SELECT COUNT(*)
+           FROM users d
+           WHERE d.role = 'agent'
+             AND (
+               d.parent_agent_id = u.id
+               OR d.parent_agent_id IN (
+                 SELECT c.id FROM users c
+                 WHERE c.parent_agent_id = u.id AND c.role = 'agent'
+               )
+             )
+         ) AS account_count,
+         (
+           SELECT COUNT(*)
+           FROM users d
+           WHERE d.role = 'agent' AND d.parent_agent_id = u.id
+         ) AS direct_agent_count,
+         (
+           SELECT COUNT(*)
+           FROM cases c
+           WHERE c.created_by = u.id
+              OR c.created_by IN (
+                SELECT d.id FROM users d
+                WHERE d.role = 'agent'
+                  AND (
+                    d.parent_agent_id = u.id
+                    OR d.parent_agent_id IN (
+                      SELECT c2.id FROM users c2
+                      WHERE c2.parent_agent_id = u.id AND c2.role = 'agent'
+                    )
+                  )
+              )
+         ) AS total_cases
+       FROM users u
+       ${whereClause}
+       ORDER BY u.company_name IS NULL, u.company_name ASC, u.name ASC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    res.json({
+      success: true,
+      data: {
+        partners: partners.map((p) => ({
+          id: p.id,
+          name: p.name,
+          email: p.email,
+          status: p.status,
+          created_at: p.created_at,
+          last_login: p.last_login,
+          company_name: p.company_name,
+          partnership_type: p.partnership_type,
+          country_of_residence: p.country_of_residence,
+          iata_number: p.iata_number,
+          geographical_location: p.geographical_location,
+          work_phone: p.work_phone,
+          whatsapp_phone: p.whatsapp_phone,
+          account_count: Number(p.account_count) || 0,
+          direct_agent_count: Number(p.direct_agent_count) || 0,
+          total_cases: Number(p.total_cases) || 0
+        })),
+        typeSummary: typeSummaryRows.map((r) => ({
+          partnership_type: r.partnership_type,
+          partner_count: Number(r.partner_count) || 0
+        })),
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalItems: total,
+          itemsPerPage: limit,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        }
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 export const listAgents = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;

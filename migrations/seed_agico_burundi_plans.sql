@@ -68,7 +68,7 @@ SET @road_pricing := CAST('{
 UPDATE `catalogue`
 SET
   `product_type` = 'Travel',
-  `coverage` = 'Agico Retail Burundi — duration-based travel premiums (fixed table).',
+  `coverage` = 'AGICO Retail Burundi — duration-based travel premiums (fixed table).',
   `durations` = '10,32,45,63,93,180,365',
   `pricing_rules` = @retail_pricing,
   `flat_price` = NULL,
@@ -79,7 +79,7 @@ SET
   `extra_id_fields` = 0,
   `fixed_duration_premiums` = 1,
   `active` = 1
-WHERE `name` IN ('Agico Retail Burundi', 'AGICO Retail Burundi');
+WHERE `name` IN ('AGICO Retail Burundi', 'AGICO Retail Burundi');
 
 INSERT INTO `catalogue` (
   `product_type`, `name`, `coverage`, `durations`, `pricing_rules`, `flat_price`,
@@ -88,8 +88,8 @@ INSERT INTO `catalogue` (
 )
 SELECT
   'Travel',
-  'Agico Retail Burundi',
-  'Agico Retail Burundi — duration-based travel premiums (fixed table).',
+  'AGICO Retail Burundi',
+  'AGICO Retail Burundi — duration-based travel premiums (fixed table).',
   '10,32,45,63,93,180,365',
   @retail_pricing,
   NULL,
@@ -102,14 +102,14 @@ SELECT
   1
 WHERE NOT EXISTS (
   SELECT 1 FROM `catalogue`
-  WHERE `name` IN ('Agico Retail Burundi', 'AGICO Retail Burundi')
+  WHERE `name` IN ('AGICO Retail Burundi', 'AGICO Retail Burundi')
 );
 
 -- ---- Agico Road Travel Burundi (Road travel) ----
 UPDATE `catalogue`
 SET
   `product_type` = 'Road travel',
-  `coverage` = 'Agico Road Travel Burundi — duration-based road travel premiums (fixed table).',
+  `coverage` = 'AGICO Road Travel Burundi — duration-based road travel premiums (fixed table).',
   `durations` = '10,32,45,63,93,180,365',
   `pricing_rules` = @road_pricing,
   `flat_price` = NULL,
@@ -120,7 +120,7 @@ SET
   `extra_id_fields` = 1,
   `fixed_duration_premiums` = 1,
   `active` = 1
-WHERE `name` IN ('Agico Road Travel Burundi', 'AGICO Road Travel Burundi');
+WHERE `name` IN ('AGICO Road Travel Burundi', 'AGICO Road Travel Burundi');
 
 INSERT INTO `catalogue` (
   `product_type`, `name`, `coverage`, `durations`, `pricing_rules`, `flat_price`,
@@ -129,8 +129,8 @@ INSERT INTO `catalogue` (
 )
 SELECT
   'Road travel',
-  'Agico Road Travel Burundi',
-  'Agico Road Travel Burundi — duration-based road travel premiums (fixed table).',
+  'AGICO Road Travel Burundi',
+  'AGICO Road Travel Burundi — duration-based road travel premiums (fixed table).',
   '10,32,45,63,93,180,365',
   @road_pricing,
   NULL,
@@ -143,5 +143,5 @@ SELECT
   1
 WHERE NOT EXISTS (
   SELECT 1 FROM `catalogue`
-  WHERE `name` IN ('Agico Road Travel Burundi', 'AGICO Road Travel Burundi')
+  WHERE `name` IN ('AGICO Road Travel Burundi', 'AGICO Road Travel Burundi')
 );

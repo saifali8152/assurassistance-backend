@@ -47,13 +47,13 @@ async function main() {
               JSON_EXTRACT(pricing_rules, '$.pricing[0].columns') AS sample_10_days
        FROM catalogue
        WHERE name IN (
-         'Agico Retail Burundi', 'AGICO Retail Burundi',
-         'Agico Road Travel Burundi', 'AGICO Road Travel Burundi'
+         'AGICO Retail Burundi', 'AGICO Retail Burundi',
+         'AGICO Road Travel Burundi', 'AGICO Road Travel Burundi'
        )
        ORDER BY id`
     );
 
-    console.log("Agico Burundi plans:");
+    console.log("AGICO Burundi plans:");
     console.table(rows);
     console.log("Done.");
   } finally {

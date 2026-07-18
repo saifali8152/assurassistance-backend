@@ -224,9 +224,19 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
     row2("Plan", cov.planName, "Currency", currencyLabel(cov.currency));
 
     const pr = payload.pricing || {};
+    if (pr.showPremium) {
+      const amount = Number(pr.planPremium) || 0;
+      const cur = currencyLabel(cov.currency);
+      rowFull(
+        "Premium",
+        `${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${cur}`
+      );
+    }
+
     if (
-      pr.ageMultiplier != null ||
-      (pr.ageBand != null && String(pr.ageBand).trim() !== "")
+      !pr.fixedDurationPremiums &&
+      (pr.ageMultiplier != null ||
+        (pr.ageBand != null && String(pr.ageBand).trim() !== ""))
     ) {
       section("Age");
       const mult = pr.ageMultiplier ?? 1;

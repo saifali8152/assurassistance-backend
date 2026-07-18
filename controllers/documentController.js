@@ -13,6 +13,7 @@ import archiver from "archiver";
 import QRCode from "qrcode";
 import {
   stayDaysToValidityTier,
+  extractValidityTiersFromPricing,
   computeTravelPlanPremium
 } from "../utils/travelPricing.js";
 import path from "path";
@@ -131,7 +132,9 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
 
   const pricingRules = parsePricingRules(caseDetails.pricing_rules);
   const stayDays = Number(caseDetails.duration_days) || 1;
-  const validityDays = stayDaysToValidityTier(stayDays);
+  const fixedDurationPremiums = !!Number(caseDetails.plan_fixed_duration_premiums);
+  const tiers = extractValidityTiersFromPricing(pricingRules);
+  const validityDays = stayDaysToValidityTier(stayDays, tiers);
 
   let basePremium = null;
   let ageInfo = null;
@@ -140,7 +143,9 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
 
   const travelLike = ["Travel", "Travel Inbound", "Road travel"].includes(caseDetails.product_type);
   if (travelLike && pricingRules?.pricing?.length) {
-    const comp = computeTravelPlanPremium(pricingRules, stayDays, caseDetails.date_of_birth);
+    const comp = computeTravelPlanPremium(pricingRules, stayDays, caseDetails.date_of_birth, {
+      fixedDurationPremiums,
+    });
     if (comp.error === "age_ineligible") {
       pricingNote = "Age over 85 — travel coverage not available under current rules.";
     } else if (comp.planPremium != null) {
@@ -150,8 +155,14 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     }
   }
 
+  // Issued sale price is authoritative; recompute is only a fallback for older rows.
+  const storedPlanPrice = Number(sale.plan_price);
   const planPremiumDisplay =
-    computedPlanPremium != null ? computedPlanPremium : Number(sale.plan_price) || 0;
+    Number.isFinite(storedPlanPrice) && storedPlanPrice > 0
+      ? storedPlanPrice
+      : computedPlanPremium != null
+        ? computedPlanPremium
+        : Number(sale.premium_amount) || 0;
 
   let guaranteesList = [];
   if (pricingRules?.guarantees?.length) {
@@ -235,15 +246,18 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     },
     pricing: {
       basePremium,
-      ageBand: ageInfo?.band || null,
-      ageMultiplier: ageInfo?.multiplier ?? null,
+      ageBand: fixedDurationPremiums ? null : ageInfo?.band || null,
+      ageMultiplier: fixedDurationPremiums ? null : ageInfo?.multiplier ?? null,
       planPremium: planPremiumDisplay,
       guaranteesTotal: Number(sale.guarantees_total) || 0,
       premiumAmount: Number(sale.premium_amount) || 0,
       tax: Number(sale.tax) || 0,
       total: Number(sale.total) || 0,
       storedPlanPrice: Number(sale.plan_price) || 0,
-      pricingNote
+      pricingNote,
+      /** Print the premium on the certificate (Agico Burundi fixed-table plans). */
+      showPremium: fixedDurationPremiums,
+      fixedDurationPremiums,
     },
     benefits: guaranteesList,
     qrDataUrl,

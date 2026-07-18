@@ -71,7 +71,8 @@ export const createCatalogue = async (req, res) => {
       route_type,
       currency,
       theme_color,
-      extra_id_fields
+      extra_id_fields,
+      fixed_duration_premiums
     } = req.body;
 
     const countryValue =
@@ -85,8 +86,8 @@ export const createCatalogue = async (req, res) => {
     const coverageValue = coverage != null && String(coverage).trim() !== "" ? String(coverage).trim() : null;
 
     const [result] = await pool.query(
-      `INSERT INTO catalogue (product_type, name, coverage, pricing_rules, flat_price, country_of_residence, route_type, currency, theme_color, extra_id_fields)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO catalogue (product_type, name, coverage, pricing_rules, flat_price, country_of_residence, route_type, currency, theme_color, extra_id_fields, fixed_duration_premiums)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         product_type,
         name,
@@ -97,7 +98,8 @@ export const createCatalogue = async (req, res) => {
         routeValue,
         currency || "XOF",
         sanitizeThemeColor(theme_color),
-        toBoolFlag(extra_id_fields)
+        toBoolFlag(extra_id_fields),
+        toBoolFlag(fixed_duration_premiums)
       ]
     );
     res.status(201).json({
@@ -137,6 +139,7 @@ export const getCatalogues = async (req, res) => {
       }
       row.theme_color = sanitizeThemeColor(row.theme_color);
       row.extra_id_fields = !!Number(row.extra_id_fields);
+      row.fixed_duration_premiums = !!Number(row.fixed_duration_premiums);
       return row;
     });
     res.json({ success: true, data: parsedRows });
@@ -162,7 +165,8 @@ export const updateCatalogue = async (req, res) => {
       route_type,
       currency,
       theme_color,
-      extra_id_fields
+      extra_id_fields,
+      fixed_duration_premiums
     } = req.body;
 
     const countryValue =
@@ -176,7 +180,7 @@ export const updateCatalogue = async (req, res) => {
     const coverageValue = coverage != null && String(coverage).trim() !== "" ? String(coverage).trim() : null;
 
     await pool.query(
-      `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=?, theme_color=?, extra_id_fields=? WHERE id=?`,
+      `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=?, theme_color=?, extra_id_fields=?, fixed_duration_premiums=? WHERE id=?`,
       [
         product_type,
         name,
@@ -189,6 +193,7 @@ export const updateCatalogue = async (req, res) => {
         currency || "XOF",
         sanitizeThemeColor(theme_color),
         toBoolFlag(extra_id_fields),
+        toBoolFlag(fixed_duration_premiums),
         id
       ]
     );

@@ -1,17 +1,5 @@
-/** GNA Retail-style validity tiers (days of cover purchased) */
+/** Default GNA Retail-style validity tiers (days of cover purchased). */
 export const VALIDITY_TIERS = [10, 45, 93, 180, 365];
-
-/**
- * Map actual stay length to the smallest plan duration that covers it.
- * e.g. 1–10 → 10, 11–45 → 45, …
- */
-export function stayDaysToValidityTier(stayDays) {
-  const d = Math.max(1, Math.floor(Number(stayDays)) || 1);
-  for (const tier of VALIDITY_TIERS) {
-    if (d <= tier) return tier;
-  }
-  return VALIDITY_TIERS[VALIDITY_TIERS.length - 1];
-}
 
 export function parseDaysFromPricingLabel(label) {
   if (label == null) return null;
@@ -22,9 +10,31 @@ export function parseDaysFromPricingLabel(label) {
   return null;
 }
 
+/** Prefer the plan's own pricing-row durations; fall back to the GNA defaults. */
+export function extractValidityTiersFromPricing(pricingTables) {
+  if (!pricingTables || !Array.isArray(pricingTables.pricing) || pricingTables.pricing.length === 0) {
+    return [...VALIDITY_TIERS];
+  }
+  const days = pricingTables.pricing
+    .map((row) => parseDaysFromPricingLabel(row.label))
+    .filter((d) => d != null && d > 0);
+  const unique = [...new Set(days)].sort((a, b) => a - b);
+  return unique.length ? unique : [...VALIDITY_TIERS];
+}
+
 /**
- * Base premium for a fixed validity tier: exact row match on label days, else first row with that parsed day.
+ * Map actual stay length to the smallest plan duration that covers it.
+ * Tiers default to VALIDITY_TIERS; pass the plan's own rows for Agico Burundi (32/63, …).
  */
+export function stayDaysToValidityTier(stayDays, tiers = VALIDITY_TIERS) {
+  const list = tiers?.length ? tiers : VALIDITY_TIERS;
+  const d = Math.max(1, Math.floor(Number(stayDays)) || 1);
+  for (const tier of list) {
+    if (d <= tier) return tier;
+  }
+  return list[list.length - 1];
+}
+
 function pickPriceFromRow(row, columns) {
   if (!row?.columns) return null;
   for (const col of columns) {
@@ -105,10 +115,34 @@ export function roundMoney(n) {
   return Math.round(Number(n) * 100) / 100;
 }
 
-export function computeTravelPlanPremium(pricingTables, stayDays, dateOfBirth) {
-  const validityDays = stayDaysToValidityTier(stayDays);
+/**
+ * @param {object} [opts]
+ * @param {boolean} [opts.fixedDurationPremiums] — exact table price, no age multipliers (Agico Burundi).
+ */
+export function computeTravelPlanPremium(pricingTables, stayDays, dateOfBirth, opts = {}) {
+  const tiers = extractValidityTiersFromPricing(pricingTables);
+  const validityDays = stayDaysToValidityTier(stayDays, tiers);
   const base = getBasePremiumForValidityTier(pricingTables, validityDays);
-  if (base === null) return { error: "no_price_for_tier", validityDays, planPremium: null };
+  if (base === null) {
+    return {
+      error: "no_price_for_tier",
+      validityDays,
+      planPremium: null,
+      fixedDurationPremiums: !!opts.fixedDurationPremiums,
+    };
+  }
+
+  if (opts.fixedDurationPremiums) {
+    return {
+      validityDays,
+      basePremium: base,
+      age: getAgeFromDateString(dateOfBirth),
+      ageInfo: { multiplier: 1, eligible: true, band: "fixed_table" },
+      planPremium: roundMoney(base),
+      fixedDurationPremiums: true,
+    };
+  }
+
   const age = getAgeFromDateString(dateOfBirth);
   const ageInfo = getAgePremiumMultiplier(age);
   if (!ageInfo.eligible) {
@@ -118,15 +152,16 @@ export function computeTravelPlanPremium(pricingTables, stayDays, dateOfBirth) {
       basePremium: base,
       age,
       ageInfo,
-      planPremium: null
+      planPremium: null,
+      fixedDurationPremiums: false,
     };
   }
-  const planPremium = roundMoney(base * ageInfo.multiplier);
   return {
     validityDays,
     basePremium: base,
     age,
     ageInfo,
-    planPremium
+    planPremium: roundMoney(base * ageInfo.multiplier),
+    fixedDurationPremiums: false,
   };
 }

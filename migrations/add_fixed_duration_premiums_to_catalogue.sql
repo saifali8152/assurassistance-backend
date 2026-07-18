@@ -12,6 +12,8 @@ UPDATE `catalogue`
 SET `fixed_duration_premiums` = 1,
     `active` = 1
 WHERE `name` IN (
+  'Agico Retail Burundi',
   'AGICO Retail Burundi',
+  'Agico Road Travel Burundi',
   'AGICO Road Travel Burundi'
 );

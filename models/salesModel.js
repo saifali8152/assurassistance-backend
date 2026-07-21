@@ -74,6 +74,36 @@ export const incrementPolicyEditCount = async (saleId) => {
   );
 };
 
+/** Persist recalculated premium after a confirmed-policy date/DOB/plan change. */
+export const updateSalePricing = async (
+  saleId,
+  { premium_amount, tax = 0, total, plan_price, guarantees_total = 0 }
+) => {
+  const pool = getPool();
+  const MAX_AMOUNT = 999999999999.99;
+  const toAmount = (v) => {
+    if (v == null || v === "") return 0;
+    const n = Number(v);
+    if (Number.isNaN(n) || !Number.isFinite(n)) return 0;
+    const rounded = Math.round(n * 100) / 100;
+    return Math.max(-MAX_AMOUNT, Math.min(MAX_AMOUNT, rounded));
+  };
+  const [result] = await pool.execute(
+    `UPDATE sales
+     SET premium_amount = ?, tax = ?, total = ?, plan_price = ?, guarantees_total = ?
+     WHERE id = ?`,
+    [
+      toAmount(premium_amount),
+      toAmount(tax),
+      toAmount(total),
+      toAmount(plan_price),
+      toAmount(guarantees_total),
+      saleId,
+    ]
+  );
+  return result.affectedRows;
+};
+
 /** Sales for a group subscription (cases.group_id), scoped to allowed agent ids */
 export const getSalesByGroupIdForAgents = async (groupId, agentIds) => {
   if (!groupId || !agentIds || agentIds.length === 0) return [];

@@ -21,6 +21,25 @@ function parsePeriod(req) {
   return { startDate, endDate };
 }
 
+/** Optional invoice options: selected sale ids + percentage discount (0–100). */
+function parseInvoiceOptions(req) {
+  let discountPct = Number(req.query.discountPct);
+  if (!Number.isFinite(discountPct) || discountPct < 0) discountPct = 0;
+  if (discountPct > 100) discountPct = 100;
+
+  let saleIds = null;
+  const raw = req.query.saleIds;
+  if (raw != null && String(raw).trim() !== "") {
+    saleIds = String(raw)
+      .split(",")
+      .map((s) => Number(String(s).trim()))
+      .filter((n) => Number.isInteger(n) && n > 0);
+  } else if (raw != null && String(raw).trim() === "") {
+    saleIds = [];
+  }
+  return { discountPct, saleIds };
+}
+
 function localeFromReq(req) {
   const al = (req.get("Accept-Language") || "").toLowerCase();
   return al.startsWith("fr") ? "fr" : "en";
@@ -67,10 +86,14 @@ async function resolvePartner(req, partnerId) {
   return { partner: rows[0] };
 }
 
-async function loadInvoiceData(partner, startDate, endDate) {
+async function loadInvoiceData(partner, startDate, endDate, { saleIds = null, discountPct = 0 } = {}) {
   const accountIds = [partner.id, ...(await getAllDescendantIds(partner.id))];
-  const lines = await getPartnerSalesForPeriod({ accountIds, startDate, endDate });
-  return { lines, totals: computeInvoiceTotals(lines) };
+  let lines = await getPartnerSalesForPeriod({ accountIds, startDate, endDate });
+  if (saleIds != null) {
+    const allowed = new Set(saleIds);
+    lines = lines.filter((l) => allowed.has(l.sale_id));
+  }
+  return { lines, totals: computeInvoiceTotals(lines, { discountPct }) };
 }
 
 function buildInvoiceNumber(partner, startDate) {
@@ -144,7 +167,8 @@ export const getPartnerInvoice = async (req, res) => {
     const { partner, error } = await resolvePartner(req, req.params.partnerId);
     if (error) return res.status(error.status).json({ success: false, message: error.message });
 
-    const { lines, totals } = await loadInvoiceData(partner, period.startDate, period.endDate);
+    const options = parseInvoiceOptions(req);
+    const { lines, totals } = await loadInvoiceData(partner, period.startDate, period.endDate, options);
     res.json({
       success: true,
       data: {
@@ -184,7 +208,8 @@ export const downloadPartnerInvoicePdf = async (req, res) => {
     const { partner, error } = await resolvePartner(req, req.params.partnerId);
     if (error) return res.status(error.status).json({ success: false, message: error.message });
 
-    const { lines, totals } = await loadInvoiceData(partner, period.startDate, period.endDate);
+    const options = parseInvoiceOptions(req);
+    const { lines, totals } = await loadInvoiceData(partner, period.startDate, period.endDate, options);
     const insurerLogoRel = lines.find((l) => l.partner_insurer_logo)?.partner_insurer_logo || null;
     const invoiceNumber = buildInvoiceNumber(partner, period.startDate);
 

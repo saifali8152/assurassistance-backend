@@ -14,7 +14,8 @@ import QRCode from "qrcode";
 import {
   stayDaysToValidityTier,
   extractValidityTiersFromPricing,
-  computeTravelPlanPremium
+  computeTravelPlanPremium,
+  AGE_EXEMPTION_MESSAGE,
 } from "../utils/travelPricing.js";
 import path from "path";
 import fs from "fs";
@@ -147,7 +148,7 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
       fixedDurationPremiums,
     });
     if (comp.error === "age_ineligible") {
-      pricingNote = "Age over 85 — travel coverage not available under current rules.";
+      pricingNote = AGE_EXEMPTION_MESSAGE;
     } else if (comp.planPremium != null) {
       basePremium = comp.basePremium;
       ageInfo = comp.ageInfo;
@@ -155,13 +156,14 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     }
   }
 
-  // Issued sale price is authoritative; recompute is only a fallback for older rows.
+  // Prefer live plan pricing so catalogue rate/coverage edits flow through to certificates.
+  // Fall back to the issued sale amounts when the plan no longer has a matching tier.
   const storedPlanPrice = Number(sale.plan_price);
   const planPremiumDisplay =
-    Number.isFinite(storedPlanPrice) && storedPlanPrice > 0
-      ? storedPlanPrice
-      : computedPlanPremium != null
-        ? computedPlanPremium
+    computedPlanPremium != null
+      ? computedPlanPremium
+      : Number.isFinite(storedPlanPrice) && storedPlanPrice > 0
+        ? storedPlanPrice
         : Number(sale.premium_amount) || 0;
 
   let guaranteesList = [];
@@ -246,10 +248,10 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     },
     pricing: {
       basePremium,
-      ageBand: fixedDurationPremiums ? null : ageInfo?.band || null,
-      ageMultiplier: fixedDurationPremiums ? null : ageInfo?.multiplier ?? null,
+      ageBand: ageInfo?.band || null,
+      ageMultiplier: ageInfo?.multiplier ?? null,
       planPremium: planPremiumDisplay,
-      guaranteesTotal: Number(sale.guarantees_total) || 0,
+      guaranteesTotal: 0,
       premiumAmount: Number(sale.premium_amount) || 0,
       tax: Number(sale.tax) || 0,
       total: Number(sale.total) || 0,

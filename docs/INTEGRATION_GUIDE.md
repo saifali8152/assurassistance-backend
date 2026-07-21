@@ -190,13 +190,32 @@ You get back:
 { "message": "Case created", "caseId": 4821 }
 ```
 
+### Step 2b — Compute the premium correctly
+
+Stay length is inclusive (`end − start + 1`). Map it to the smallest catalogue
+tier that covers the stay (default **10 / 45 / 93 / 180 / 365** days). Then apply
+age:
+
+| Age | Premium factor |
+|-----|----------------|
+| Under 16 | × 0.5 |
+| 16 – 75 | × 1 |
+| 76 – 80 | × 2 |
+| 81 – 85 | × 4 |
+| Over 85 | reject — customer must request a specific exemption |
+
+Do **not** add guarantee/coverage limit amounts into the billable total.
+`guarantees_total` is always stored as `0`.
+
+Example: 26-day stay, traveller under 16 → 45-day tier 30 500 × 0.5 = **15 250**.
+
 ### Step 3 — Confirm the sale
 
 ```bash
 curl -X POST https://backend-api.assurassistancepro.org/api/cases/4821/confirm-sale \
   -H "Authorization: Bearer $AAS_KEY" \
   -H "Content-Type: application/json" \
-  -d '{ "premium_amount": 25000, "tax": 0, "total": 25000 }'
+  -d '{ "premium_amount": 15250, "tax": 0, "total": 15250 }'
 ```
 
 Response:
@@ -215,6 +234,19 @@ The system has now:
 - Stored the sale, invoice, and certificate metadata.
 - Made the invoice + certificate PDFs available on demand.
 - Generated a public certificate URL with a unique token (used by the QR code on the printed certificate).
+
+### Step 3b — Editing a confirmed policy
+
+`PUT /cases/{id}/update` (scope `cases:write`) updates traveller/case fields.
+**When a sale already exists, the API recalculates `plan_price` / `premium_amount` /
+`total` from the new dates and date of birth** and syncs the linked invoice.
+
+Agency/operator keys: only first/last name, destination, and travel dates; at most
+3 edits; only while more than 24 hours before departure (`start_date`). Check
+`GET /cases/{id}/policy-edit-meta` first.
+
+The update response includes a `pricing` object — always replace any locally
+cached premium with those values.
 
 ### Step 4 — Hand the documents to your customer
 
@@ -240,7 +272,7 @@ When you receive payment:
 curl -X PATCH https://backend-api.assurassistancepro.org/api/sales/7912/payment \
   -H "Authorization: Bearer $AAS_KEY" \
   -H "Content-Type: application/json" \
-  -d '{ "payment_status": "Paid", "received_amount": 25000, "payment_notes": "Wire transfer ABC" }'
+  -d '{ "payment_status": "Paid", "received_amount": 15250, "payment_notes": "Wire transfer ABC" }'
 ```
 
 ---

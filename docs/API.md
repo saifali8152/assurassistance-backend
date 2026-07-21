@@ -105,11 +105,75 @@ Errors: `400` (missing fields), `401` (bad credentials / revoked account).
 | GET    | `/cases/my-cases` | JWT or KEY | `cases:read` | Caller's cases, paginated. |
 | GET    | `/cases/pending-sales` | JWT or KEY | `cases:read` | Cases not yet confirmed as sales. |
 | GET    | `/cases/:caseId` | JWT or KEY | `cases:read` | Single case + traveller + plan + sale. |
-| PUT    | `/cases/:caseId/update` | JWT or KEY | `cases:write` | Update case + traveller (limits apply for agents). |
+| PUT    | `/cases/:caseId/update` | JWT or KEY | `cases:write` | Update case + traveller. On a confirmed sale, **premium is recalculated** (duration tiers + age) and written to the sale (and invoice if any). Agents: limited fields, max 3 edits, only while more than 24h before departure. |
 | POST   | `/cases/:caseId/cancel` | JWT or KEY | `cases:write` | Cancel a case. |
 | PATCH  | `/cases/:caseId/status` | JWT or KEY | `cases:write` | Change status. |
 | POST   | `/cases/:caseId/confirm-sale` | JWT or KEY | `sales:write` | Confirm sale (issues policy/cert numbers). |
-| GET    | `/cases/:caseId/policy-edit-meta` | JWT or KEY | `cases:read` | Remaining edits + lock reason. |
+| GET    | `/cases/:caseId/policy-edit-meta` | JWT or KEY | `cases:read` | Remaining edits + lock flags for operators. |
+
+### Premium rules (all travel plans)
+
+Duration is inclusive stay days (`end_date − start_date + 1`). Map stay length to the smallest plan tier that covers it (default GNA tiers: **10 / 45 / 93 / 180 / 365** days; Agico fixed-duration plans use their own row labels such as 32 / 63).
+
+**Age multipliers (premium)** — same for every package:
+
+| Age | Premium |
+|-----|---------|
+| Under 16 | ÷ 2 |
+| 16 – 75 | standard (tier rate) |
+| 76 – 80 | × 2 |
+| 81 – 85 | × 4 |
+| Over 85 | not eligible — `"The customer must request a specific exemption"` |
+
+**Commission** (partner invoices only; never stored on the sale): under 16 → commission ÷ 2; senior premium surcharges do **not** increase commission.
+
+**Coverage limits** (`guarantees_details`) are benefit ceilings — they are **not** added to `premium_amount` / `total`. `guarantees_total` is always stored as `0`.
+
+### PUT /cases/:caseId/update — confirmed policy
+
+Request body same shape as create (`traveller` + `caseData`). After a successful update when a sale exists:
+
+```json
+{
+  "message": "Case updated successfully",
+  "policyEditCount": 2,
+  "policyEditsRemaining": 1,
+  "pricing": {
+    "plan_price": 15250,
+    "premium_amount": 15250,
+    "tax": 0,
+    "total": 15250,
+    "validityDays": 45,
+    "ageBand": "child",
+    "commission": 3500
+  }
+}
+```
+
+`pricing.commission` is informational (what a partner invoice would deduct under current rules). Integrations that previously kept a local copy of the premium **must** refresh it from `pricing` after every update.
+
+### GET /cases/:caseId/policy-edit-meta — response
+
+```json
+{
+  "success": true,
+  "data": {
+    "hasSale": true,
+    "saleId": 7912,
+    "policyEditCount": 1,
+    "policyEditsRemaining": 2,
+    "departureDate": "2026-06-01",
+    "operatorLimitedEditOpen": true,
+    "inLast24HoursBeforeDeparture": false,
+    "hasDeparted": false,
+    "agentMayEditLimitedFields": true,
+    "adminMayEditAllFields": false,
+    "agentBlockedFromEditing": false
+  }
+}
+```
+
+Operators (agency / corporate API keys with agent role) may edit first name, last name, destination, and travel dates while `agentMayEditLimitedFields` is true.
 
 ### POST /cases — request
 
@@ -159,25 +223,6 @@ Same body shape as `/cases`, but `travellers` is an array:
 { "message": "Group created", "groupId": "grp_8f0c1a…", "caseIds": [4822, 4823] }
 ```
 
-### GET /cases/:caseId/policy-edit-meta — response
-
-```json
-{
-  "success": true,
-  "data": {
-    "hasSale": true,
-    "policyEditCount": 1,
-    "maxEdits": 3,
-    "editsRemaining": 2,
-    "lockReason": null,
-    "travelStartsAt": "2026-06-01T00:00:00.000Z",
-    "hoursToTravel": 720
-  }
-}
-```
-
-`lockReason` is one of `too_close_to_travel`, `max_edits_reached`, `no_sale`, or `null`.
-
 ---
 
 ## 4. Sales — `/api/sales`
@@ -191,18 +236,28 @@ Same body shape as `/cases`, but `travellers` is an array:
 
 ### POST /sales — request
 
+Compute `premium_amount` / `plan_price` / `total` with the [premium rules](#premium-rules-all-travel-plans) above (duration tier × age). Do **not** add coverage-limit amounts into the total.
+
 ```json
 {
   "case_id": 4821,
-  "premium_amount": 25000,
+  "premium_amount": 15250,
   "tax": 0,
-  "total": 25000,
+  "total": 15250,
   "currency": "XOF",
-  "plan_price": 25000,
+  "plan_price": 15250,
   "guarantees_total": 0,
-  "guarantees_details": null
+  "guarantees_details": [
+    { "category": "MEDICAL", "coverageType": "medicalEmergencies", "amount": 60000000 }
+  ]
 }
 ```
+
+Notes:
+
+- `guarantees_total` is ignored / forced to `0` server-side (coverage limits are not billable).
+- `guarantees_details` may still be sent for certificate benefit rows.
+- Travellers over 85 → **400** with message `The customer must request a specific exemption`.
 
 **201 Created**
 
@@ -218,7 +273,7 @@ Same body shape as `/cases`, but `travellers` is an array:
 ### PATCH /sales/:id/payment
 
 ```json
-{ "payment_status": "Paid", "received_amount": 25000, "payment_notes": "Wire transfer ABC" }
+{ "payment_status": "Paid", "received_amount": 15250, "payment_notes": "Wire transfer ABC" }
 ```
 
 `payment_status` ∈ `Paid | Unpaid | Partial`. Only the `sales:payment` scope (or an admin JWT) may call this.
@@ -425,14 +480,27 @@ These endpoints are part of the staff/admin surface. They are reachable via
 
 ## 11. Partner invoices — `/api/partner-invoices` (admin / sub-admin JWT)
 
-Periodic premium invoices per partner (travel agency, corporate desk, …). Sub-administrators only see the agencies under their supervision. Commissions are applied per coverage-duration tier (10/45/93/180/365 days) and deducted from the premium total; they appear only on these invoices, never on individual sales.
+Periodic premium invoices per partner (travel agency, corporate desk, …). Sub-administrators only see the agencies under their supervision. Commissions are applied per coverage-duration tier (10/45/93/180/365 days) with age factors (child ÷ 2; senior premium surcharges do not inflate commission) and deducted from the premium total; they appear only on these invoices, never on individual sales.
 
 | Method | Path | Description |
 |---|---|---|
 | GET | `/partner-invoices/partners` | Partners the caller may invoice. |
 | GET | `/partner-invoices/summary?startDate&endDate` | Period totals: premiums, collected, commissions, net to transfer. |
-| GET | `/partner-invoices/:partnerId?startDate&endDate` | Invoice preview (JSON): per-sale lines with commissions + totals. |
-| GET | `/partner-invoices/:partnerId/pdf?startDate&endDate&currency` | Invoice PDF in the official format (logos, addresses, premium breakdown). `Accept-Language: fr` for French labels. `currency` = `XOF` \| `USD` \| `EUR` (amounts convert from XOF base). |
+| GET | `/partner-invoices/:partnerId?startDate&endDate&saleIds&discountPct` | Invoice preview (JSON): per-sale lines with commissions + totals. |
+| GET | `/partner-invoices/:partnerId/pdf?startDate&endDate&currency&saleIds&discountPct` | Invoice PDF. `Accept-Language: fr` for French labels. `currency` = `XOF` \| `USD` \| `EUR`. |
+
+### Optional query parameters (preview + PDF)
+
+| Param | Description |
+|---|---|
+| `saleIds` | Comma-separated sale ids to **include**. Omit to include all confirmed sales in the period. Empty string → no lines. |
+| `discountPct` | Percentage discount `0`–`100` applied to **total policies issued** (premiums) **and** **total commissions to deduct**. Shown on the PDF when greater than 0. Net = discounted premiums − discounted commissions. |
+
+Example:
+
+```
+GET /partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&saleIds=100,101,105&discountPct=10
+```
 
 ---
 

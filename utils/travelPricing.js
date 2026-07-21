@@ -93,12 +93,12 @@ export function getAgeFromDateString(dobStr, refDate = new Date()) {
 }
 
 /**
- * Age bands (non-overlapping):
- * - under 16: ÷2
- * - 16–75: ×1
- * - 76–80: ×2
- * - 81–85: ×4
- * - over 85: ineligible
+ * Age bands — shared rules for every plan (existing and future):
+ * - 1 day – under 16: premium ÷ 2
+ * - 16 – 75: standard premium
+ * - over 75 – 80: premium × 2
+ * - 81 – 85: premium × 4 (senior surcharge; commission stays standard)
+ * - over 85: not eligible — customer must request a specific exemption
  */
 export function getAgePremiumMultiplier(age) {
   if (age === null || age === undefined) {
@@ -111,13 +111,28 @@ export function getAgePremiumMultiplier(age) {
   return { multiplier: null, eligible: false, band: "ineligible" };
 }
 
+/**
+ * Commission age factor (partner invoices):
+ * - under 16 → commission ÷ 2
+ * - otherwise → standard (senior premium surcharges do NOT increase commission)
+ */
+export function getAgeCommissionMultiplier(age) {
+  if (age === null || age === undefined) return 1;
+  if (age < 16) return 0.5;
+  return 1;
+}
+
+export const AGE_EXEMPTION_MESSAGE =
+  "The customer must request a specific exemption";
+
 export function roundMoney(n) {
   return Math.round(Number(n) * 100) / 100;
 }
 
 /**
  * @param {object} [opts]
- * @param {boolean} [opts.fixedDurationPremiums] — exact table price, no age multipliers (Agico Burundi).
+ * @param {boolean} [opts.fixedDurationPremiums] — use plan's own duration rows + show premium on certificate.
+ *   Age multipliers still apply (same rules for all plans).
  */
 export function computeTravelPlanPremium(pricingTables, stayDays, dateOfBirth, opts = {}) {
   const tiers = extractValidityTiersFromPricing(pricingTables);
@@ -132,17 +147,6 @@ export function computeTravelPlanPremium(pricingTables, stayDays, dateOfBirth, o
     };
   }
 
-  if (opts.fixedDurationPremiums) {
-    return {
-      validityDays,
-      basePremium: base,
-      age: getAgeFromDateString(dateOfBirth),
-      ageInfo: { multiplier: 1, eligible: true, band: "fixed_table" },
-      planPremium: roundMoney(base),
-      fixedDurationPremiums: true,
-    };
-  }
-
   const age = getAgeFromDateString(dateOfBirth);
   const ageInfo = getAgePremiumMultiplier(age);
   if (!ageInfo.eligible) {
@@ -153,7 +157,7 @@ export function computeTravelPlanPremium(pricingTables, stayDays, dateOfBirth, o
       age,
       ageInfo,
       planPremium: null,
-      fixedDurationPremiums: false,
+      fixedDurationPremiums: !!opts.fixedDurationPremiums,
     };
   }
   return {
@@ -162,6 +166,6 @@ export function computeTravelPlanPremium(pricingTables, stayDays, dateOfBirth, o
     age,
     ageInfo,
     planPremium: roundMoney(base * ageInfo.multiplier),
-    fixedDurationPremiums: false,
+    fixedDurationPremiums: !!opts.fixedDurationPremiums,
   };
 }

@@ -35,3 +35,12 @@ export const getInvoiceBySaleId = async (saleId) => {
   const [rows] = await pool.query(`SELECT * FROM invoices WHERE sale_id = ? LIMIT 1`, [saleId]);
   return rows[0];
 };
+
+export const updateInvoiceAmounts = async (invoiceId, { subtotal, tax, total }) => {
+  const pool = getPool();
+  const [result] = await pool.execute(
+    `UPDATE invoices SET subtotal = ?, tax = ?, total = ? WHERE id = ?`,
+    [toAmount(subtotal), toAmount(tax), toAmount(total), invoiceId]
+  );
+  return result.affectedRows;
+};

@@ -46,6 +46,7 @@ const I18N = {
     totalIssued: "Total Polices émises",
     totalCommissions: "Total commissions à déduire",
     netToTransfer: "Total net à transférer",
+    discountRate: (pct) => `Remise appliquée : ${pct} %`,
     paymentTitle: "MODALITÉS DE PAIEMENT",
     paymentMode: "Mode : Mobile money (Qr Code de reversement)",
     observationsTitle: "Observations :",
@@ -77,6 +78,7 @@ const I18N = {
     totalIssued: "Total policies issued",
     totalCommissions: "Total commissions to deduct",
     netToTransfer: "Net total to transfer",
+    discountRate: (pct) => `Discount applied: ${pct}%`,
     paymentTitle: "PAYMENT TERMS",
     paymentMode: "Mode: Mobile money (transfer QR code)",
     observationsTitle: "Observations:",
@@ -346,7 +348,7 @@ export const generatePartnerInvoicePDF = async ({
     }
 
     // ---------- Totals ----------
-    y = ensureSpace(y, 90);
+    y = ensureSpace(y, 110);
     y += 10;
     const totalsLabelX = leftX + 230;
     const totalsValueX = leftX + 400;
@@ -363,6 +365,12 @@ export const generatePartnerInvoicePDF = async ({
       });
       y += 20;
     };
+    const discountPct = Number(totals.discountPct) || 0;
+    if (discountPct > 0) {
+      doc.fillColor(DARK).font("Helvetica-Bold").fontSize(8);
+      doc.text(L.discountRate(discountPct), totalsLabelX, y, { width: 250, lineBreak: false });
+      y += 18;
+    }
     totalsRow(L.totalIssued, totals.totalPremiums, false);
     totalsRow(L.totalCommissions, totals.totalCommissions, true);
     totalsRow(L.netToTransfer, totals.netToTransfer, true);

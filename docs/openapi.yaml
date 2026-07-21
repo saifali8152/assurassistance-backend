@@ -53,7 +53,7 @@ tags:
   - name: Activity log
     description: Admin-only audit trail of user activity (JWT only).
   - name: Partner invoices
-    description: Periodic premium invoices per partner (travel agency, corporate, …) with commission deductions. Admin or sub-admin JWT; sub-admins only see the agencies they supervise.
+    description: Periodic premium invoices per partner (travel agency, corporate, …) with commission deductions. Optional `saleIds` and `discountPct` on preview/PDF. Admin or sub-admin JWT; sub-admins only see the agencies they supervise.
 
 security:
   - bearerJWT: []
@@ -277,13 +277,35 @@ components:
       required: [case_id, premium_amount, total]
       properties:
         case_id: { type: integer }
-        premium_amount: { type: number }
+        premium_amount:
+          type: number
+          description: >
+            Billable premium after duration-tier mapping and age multipliers.
+            Do not include coverage-limit amounts. Under 16 → half; 76–80 → ×2;
+            81–85 → ×4; over 85 rejected.
         tax: { type: number, default: 0 }
-        total: { type: number }
+        total:
+          type: number
+          description: Typically premium_amount + tax (coverage limits are not billed).
         currency: { type: string, default: XOF }
-        plan_price: { type: number, nullable: true }
-        guarantees_total: { type: number, nullable: true }
-        guarantees_details: { type: object, nullable: true }
+        plan_price:
+          type: number
+          nullable: true
+          description: Same as premium_amount for travel plans (stored for ledgers / partner invoices).
+        guarantees_total:
+          type: number
+          nullable: true
+          description: Ignored — always stored as 0. Coverage limits are not billable.
+        guarantees_details:
+          type: array
+          nullable: true
+          description: Optional benefit rows for certificates (limits only, not charges).
+          items:
+            type: object
+            properties:
+              category: { type: string }
+              coverageType: { type: string }
+              amount: { type: number }
 
     UpdatePaymentRequest:
       type: object
@@ -779,10 +801,16 @@ paths:
   /cases/{caseId}/update:
     put:
       tags: [Cases]
-      summary: Update a case (and its traveller).
+      summary: Update a case (and its traveller); recalculates sale premium when confirmed.
       description: |
-        Agents: limited to 3 edits and not within 24h of the travel start.
-        Admins / sub-administrators (within scope): unlimited.
+        When a sale already exists, the server recomputes `plan_price` /
+        `premium_amount` / `total` from the plan catalogue using inclusive stay
+        days and age multipliers, then syncs the linked invoice amounts.
+
+        Agents / operators: limited to first name, last name, destination, and
+        travel dates; at most 3 edits; only while more than 24 hours before
+        departure (`start_date`). Admins / sub-administrators (within scope):
+        all fields, unlimited.
       security:
         - bearerJWT: []
         - bearerApiKey: [cases:write]
@@ -796,7 +824,7 @@ paths:
               $ref: '#/components/schemas/CreateCaseRequest'
       responses:
         "200":
-          description: Updated.
+          description: Updated (and sale premium refreshed when applicable).
           content:
             application/json:
               schema:
@@ -805,11 +833,30 @@ paths:
                   message: { type: string }
                   policyEditCount: { type: integer }
                   policyEditsRemaining: { type: integer }
+                  pricing:
+                    type: object
+                    nullable: true
+                    description: Present when the case has a confirmed sale.
+                    properties:
+                      plan_price: { type: number }
+                      premium_amount: { type: number }
+                      tax: { type: number }
+                      total: { type: number }
+                      validityDays: { type: integer, nullable: true }
+                      ageBand: { type: string, nullable: true }
+                      commission:
+                        type: number
+                        description: Informational partner-invoice commission under current rules (not stored on the sale).
+        "400":
+          description: Validation / age exemption / pricing failure (case rolled back if premium could not be computed).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /cases/{caseId}/policy-edit-meta:
     get:
       tags: [Cases]
-      summary: Inspect remaining policy edits + whether the case is locked.
+      summary: Inspect remaining policy edits + whether the case is locked for operators.
       security:
         - bearerJWT: []
         - bearerApiKey: [cases:read]
@@ -828,13 +875,16 @@ paths:
                     type: object
                     properties:
                       hasSale: { type: boolean }
+                      saleId: { type: integer, nullable: true }
                       policyEditCount: { type: integer }
-                      maxEdits: { type: integer }
-                      editsRemaining: { type: integer }
-                      lockReason:
-                        type: string
-                        nullable: true
-                        enum: [too_close_to_travel, max_edits_reached, no_sale, null]
+                      policyEditsRemaining: { type: integer }
+                      departureDate: { type: string, format: date, nullable: true }
+                      operatorLimitedEditOpen: { type: boolean }
+                      inLast24HoursBeforeDeparture: { type: boolean }
+                      hasDeparted: { type: boolean }
+                      agentMayEditLimitedFields: { type: boolean }
+                      adminMayEditAllFields: { type: boolean }
+                      agentBlockedFromEditing: { type: boolean }
 
   /sales:
     post:
@@ -1965,9 +2015,22 @@ paths:
         - { name: partnerId, in: path, required: true, schema: { type: integer } }
         - { name: startDate, in: query, required: true, schema: { type: string, format: date } }
         - { name: endDate, in: query, required: true, schema: { type: string, format: date } }
+        - name: saleIds
+          in: query
+          required: false
+          schema: { type: string }
+          description: Comma-separated sale ids to include. Omit for all sales in the period.
+        - name: discountPct
+          in: query
+          required: false
+          schema: { type: number, minimum: 0, maximum: 100, default: 0 }
+          description: Percentage discount applied to total premiums and total commissions.
       responses:
         "200":
-          description: Invoice data — lines carry the commission per coverage-duration tier; totals include netToTransfer (premiums minus commissions).
+          description: >
+            Invoice data — lines carry the commission per coverage-duration tier
+            (with age factors); totals include discountPct, discounted premiums /
+            commissions, and netToTransfer.
           content:
             application/json:
               schema:
@@ -1989,7 +2052,7 @@ paths:
   /partner-invoices/{partnerId}/pdf:
     get:
       tags: [Partner invoices]
-      summary: Invoice PDF in the official format (logos, addresses, premium breakdown, commissions deducted). Accept-Language "fr" switches labels to French. Amounts are stored in XOF and converted for display via the currency query (XOF, USD, EUR).
+      summary: Invoice PDF (optional sale selection + percentage discount). Accept-Language "fr" switches labels to French.
       security:
         - bearerJWT: []
       parameters:
@@ -1997,6 +2060,16 @@ paths:
         - { name: startDate, in: query, required: true, schema: { type: string, format: date } }
         - { name: endDate, in: query, required: true, schema: { type: string, format: date } }
         - { name: currency, in: query, required: false, schema: { type: string, enum: [XOF, USD, EUR], default: XOF }, description: "Display currency. Amounts are converted from XOF (database base)." }
+        - name: saleIds
+          in: query
+          required: false
+          schema: { type: string }
+          description: Comma-separated sale ids to include on the PDF.
+        - name: discountPct
+          in: query
+          required: false
+          schema: { type: number, minimum: 0, maximum: 100, default: 0 }
+          description: Discount % listed on the PDF and applied to premiums and commissions.
       responses:
         "200":
           description: PDF file.

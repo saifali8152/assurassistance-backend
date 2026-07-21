@@ -103,6 +103,46 @@ export const updateCaseStatus = async (caseId, status) => {
   await pool.execute(`UPDATE cases SET status = ? WHERE id = ?`, [status, caseId]);
 };
 
+/**
+ * Permanently delete a case. Sales / invoices / certificates cascade via FK.
+ * Also removes the traveller when no other cases still reference them.
+ */
+export const deleteCaseById = async (caseId) => {
+  const pool = getPool();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+
+    const [cases] = await conn.query(
+      `SELECT id, traveller_id FROM cases WHERE id = ? LIMIT 1`,
+      [caseId]
+    );
+    if (!cases.length) {
+      await conn.rollback();
+      return { deleted: false };
+    }
+
+    const travellerId = cases[0].traveller_id;
+    await conn.query(`DELETE FROM cases WHERE id = ?`, [caseId]);
+
+    const [remaining] = await conn.query(
+      `SELECT COUNT(*) AS cnt FROM cases WHERE traveller_id = ?`,
+      [travellerId]
+    );
+    if (Number(remaining[0]?.cnt || 0) === 0) {
+      await conn.query(`DELETE FROM travellers WHERE id = ?`, [travellerId]);
+    }
+
+    await conn.commit();
+    return { deleted: true, travellerId };
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+};
+
 // append to src/models/caseModel.js
 
 export const getCaseDetailsById = async (caseId) => {
@@ -132,7 +172,9 @@ const CASE_LIST_SELECT = `
          CONCAT(t.first_name, ' ', t.last_name) AS full_name,
          cat.name AS plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules,
          cat.currency, cat.country_of_residence AS plan_country_of_residence, cat.route_type,
-         s.id AS sale_id, u.name AS created_by_name, c.duration_days
+         cat.fixed_duration_premiums,
+         s.id AS sale_id, s.plan_price AS sale_plan_price, s.premium_amount AS sale_premium_amount,
+         u.name AS created_by_name, c.duration_days
 `;
 
 /** Shared WHERE builder for paginated case listings (admin, sub-admin scope, agents). */

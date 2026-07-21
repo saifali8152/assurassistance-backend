@@ -233,10 +233,12 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
       );
     }
 
+    // Age band when non-standard (same rules for all plans, including Agico fixed-duration)
     if (
-      !pr.fixedDurationPremiums &&
       (pr.ageMultiplier != null ||
-        (pr.ageBand != null && String(pr.ageBand).trim() !== ""))
+        (pr.ageBand != null && String(pr.ageBand).trim() !== "")) &&
+      pr.ageBand !== "standard" &&
+      pr.ageBand !== "unknown"
     ) {
       section("Age");
       const mult = pr.ageMultiplier ?? 1;

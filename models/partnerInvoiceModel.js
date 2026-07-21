@@ -16,6 +16,7 @@ export const getPartnerSalesForPeriod = async ({ accountIds, startDate, endDate 
        s.case_id,
        CONCAT(t.first_name, ' ', t.last_name) AS traveller_name,
        t.phone AS traveller_phone,
+       t.date_of_birth,
        cat.name AS plan_name,
        cat.partner_insurer_logo,
        s.policy_number,
@@ -60,7 +61,11 @@ export const getPartnerSalesForPeriod = async ({ accountIds, startDate, endDate 
       confirmed_at: r.confirmed_at,
       currency: r.currency || "XOF",
       created_by_name: r.created_by_name || "",
-      commission: commissionForSale({ premium: planPremium, durationDays: r.duration_days }),
+      commission: commissionForSale({
+        premium: planPremium,
+        durationDays: r.duration_days,
+        dateOfBirth: r.date_of_birth,
+      }),
     };
   });
 };
@@ -88,9 +93,11 @@ export const getCommissionSummary = async ({ accountIds = null, startDate, endDa
             THEN s.plan_price ELSE s.premium_amount END AS plan_premium,
        COALESCE(s.tax, 0) AS tax,
        COALESCE(s.received_amount, 0) AS received_amount,
-       c.duration_days
+       c.duration_days,
+       t.date_of_birth
      FROM sales s
      JOIN cases c ON s.case_id = c.id
+     JOIN travellers t ON c.traveller_id = t.id
      WHERE ${where.join(" AND ")}`,
     params
   );
@@ -100,20 +107,42 @@ export const getCommissionSummary = async ({ accountIds = null, startDate, endDa
     const premium = Number(r.plan_premium) || 0;
     acc.totalPremiums += premium + (Number(r.tax) || 0);
     acc.totalCollected += Number(r.received_amount) || 0;
-    acc.totalCommissions += commissionForSale({ premium, durationDays: r.duration_days });
+    acc.totalCommissions += commissionForSale({
+      premium,
+      durationDays: r.duration_days,
+      dateOfBirth: r.date_of_birth,
+    });
   }
   return { ...acc, netToTransfer: acc.totalPremiums - acc.totalCommissions };
 };
 
-export const computeInvoiceTotals = (lines) => {
-  const totals = lines.reduce(
+export const computeInvoiceTotals = (lines, { discountPct = 0 } = {}) => {
+  const gross = lines.reduce(
     (acc, l) => {
-      acc.totalPremiums += l.total;
-      acc.totalCommissions += l.commission;
-      acc.totalReceived += l.received_amount;
+      acc.totalPremiums += Number(l.total) || 0;
+      acc.totalCommissions += Number(l.commission) || 0;
+      acc.totalReceived += Number(l.received_amount) || 0;
       return acc;
     },
     { totalPremiums: 0, totalCommissions: 0, totalReceived: 0 }
   );
-  return { ...totals, netToTransfer: totals.totalPremiums - totals.totalCommissions };
+
+  let pct = Number(discountPct);
+  if (!Number.isFinite(pct) || pct < 0) pct = 0;
+  if (pct > 100) pct = 100;
+  const factor = 1 - pct / 100;
+  const round2 = (n) => Math.round(Number(n) * 100) / 100;
+
+  const totalPremiums = round2(gross.totalPremiums * factor);
+  const totalCommissions = round2(gross.totalCommissions * factor);
+
+  return {
+    discountPct: pct,
+    totalPremiumsGross: round2(gross.totalPremiums),
+    totalCommissionsGross: round2(gross.totalCommissions),
+    totalPremiums,
+    totalCommissions,
+    totalReceived: round2(gross.totalReceived),
+    netToTransfer: round2(totalPremiums - totalCommissions),
+  };
 };

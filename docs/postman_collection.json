@@ -229,7 +229,7 @@
             "method": "POST",
             "url": { "raw": "{{baseUrl}}/cases/4821/confirm-sale", "host": ["{{baseUrl}}"], "path": ["cases","4821","confirm-sale"] },
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"premium_amount\": 25000, \"tax\": 0, \"total\": 25000 }" }
+            "body": { "mode": "raw", "raw": "{ \"premium_amount\": 15250, \"tax\": 0, \"total\": 15250 }" }
           }
         },
         {
@@ -240,14 +240,14 @@
           }
         },
         {
-          "name": "Update case",
+          "name": "Update case (recalculates sale premium if confirmed)",
           "request": {
             "method": "PUT",
             "url": { "raw": "{{baseUrl}}/cases/4821/update", "host": ["{{baseUrl}}"], "path": ["cases","4821","update"] },
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"traveller\": { \"first_name\": \"Aïcha\", \"last_name\": \"Diallo\", \"phone\": \"+225...\", \"date_of_birth\": \"1992-03-14\", \"country_of_residence\": \"Ivory Coast\", \"gender\": \"Female\", \"nationality\": \"Ivorian\", \"passport_or_id\": \"CI0123456\" },\n  \"caseData\": { \"destination\": \"France, Spain, Italy\", \"start_date\": \"2026-06-01\", \"end_date\": \"2026-06-15\", \"selected_plan_id\": 12 }\n}"
+              "raw": "{\n  \"traveller\": { \"first_name\": \"Aïcha\", \"last_name\": \"Diallo\", \"phone\": \"+225...\", \"date_of_birth\": \"1992-03-14\", \"country_of_residence\": \"Ivory Coast\", \"gender\": \"Female\", \"nationality\": \"Ivorian\", \"passport_or_id\": \"CI0123456\" },\n  \"caseData\": { \"destination\": \"France, Spain, Italy\", \"start_date\": \"2026-06-01\", \"end_date\": \"2026-06-26\", \"selected_plan_id\": 12 }\n}"
             }
           }
         }
@@ -262,7 +262,7 @@
             "method": "POST",
             "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] },
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"case_id\": 4821,\n  \"premium_amount\": 25000,\n  \"tax\": 0,\n  \"total\": 25000,\n  \"currency\": \"XOF\",\n  \"plan_price\": 25000\n}" }
+            "body": { "mode": "raw", "raw": "{\n  \"case_id\": 4821,\n  \"premium_amount\": 15250,\n  \"tax\": 0,\n  \"total\": 15250,\n  \"currency\": \"XOF\",\n  \"plan_price\": 15250,\n  \"guarantees_total\": 0\n}" }
           }
         },
         {
@@ -599,7 +599,7 @@
     },
     {
       "name": "Partner invoices (admin / sub-admin JWT)",
-      "description": "Periodic premium invoices per partner (travel agency, corporate, …) with commission deductions. Sub-admins only see the agencies they supervise. Uses {{jwt}}.",
+      "description": "Periodic premium invoices per partner with commission deductions. Optional saleIds (comma-separated) and discountPct (0–100) on preview/PDF. Sub-admins only see agencies they supervise. Uses {{jwt}}.",
       "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
       "item": [
         {
@@ -619,30 +619,37 @@
           }
         },
         {
-          "name": "Invoice preview (JSON)",
+          "name": "Invoice preview (JSON, optional saleIds + discount)",
           "request": {
             "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/partner-invoices/12?startDate=2026-06-01&endDate=2026-06-30",
+              "raw": "{{baseUrl}}/partner-invoices/12?startDate=2026-06-01&endDate=2026-06-30&saleIds=100,101&discountPct=10",
               "host": ["{{baseUrl}}"],
               "path": ["partner-invoices","12"],
-              "query": [{ "key": "startDate", "value": "2026-06-01" }, { "key": "endDate", "value": "2026-06-30" }]
+              "query": [
+                { "key": "startDate", "value": "2026-06-01" },
+                { "key": "endDate", "value": "2026-06-30" },
+                { "key": "saleIds", "value": "100,101", "description": "Comma-separated sale ids to include; omit for all" },
+                { "key": "discountPct", "value": "10", "description": "0–100; applied to premiums and commissions" }
+              ]
             }
           }
         },
         {
-          "name": "Invoice PDF",
+          "name": "Invoice PDF (optional saleIds + discount)",
           "request": {
             "method": "GET",
             "header": [{ "key": "Accept-Language", "value": "fr" }],
             "url": {
-              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF",
+              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&saleIds=100,101&discountPct=10",
               "host": ["{{baseUrl}}"],
               "path": ["partner-invoices","12","pdf"],
               "query": [
                 { "key": "startDate", "value": "2026-06-01" },
                 { "key": "endDate", "value": "2026-06-30" },
-                { "key": "currency", "value": "XOF", "description": "XOF | USD | EUR — amounts convert from XOF base" }
+                { "key": "currency", "value": "XOF", "description": "XOF | USD | EUR — amounts convert from XOF base" },
+                { "key": "saleIds", "value": "100,101" },
+                { "key": "discountPct", "value": "10" }
               ]
             }
           }

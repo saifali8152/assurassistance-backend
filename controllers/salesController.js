@@ -5,7 +5,7 @@ import { createCertificate, generatePublicToken } from "../models/certificateMod
 import { getCaseDetailsById } from "../models/caseModel.js";
 import { logActivity } from "../models/activityModel.js";  // <-- Add this
 import getPool from "../utils/db.js";
-import { getAgeFromDateString, getAgePremiumMultiplier } from "../utils/travelPricing.js";
+import { getAgeFromDateString, getAgePremiumMultiplier, AGE_EXEMPTION_MESSAGE } from "../utils/travelPricing.js";
 
 export const createSaleController = async (req, res) => {
   try {
@@ -16,7 +16,6 @@ export const createSaleController = async (req, res) => {
       total,
       currency = 'XOF',
       plan_price = 0,
-      guarantees_total = 0,
       guarantees_details = null
     } = req.body;
     const created_by = req.user.id; // <-- We'll log the user creating the sale
@@ -33,11 +32,13 @@ export const createSaleController = async (req, res) => {
       const age = getAgeFromDateString(caseRow.date_of_birth);
       if (!getAgePremiumMultiplier(age).eligible) {
         return res.status(400).json({
-          message: "Travel insurance is not available for travellers over 85 years of age."
+          message: AGE_EXEMPTION_MESSAGE
         });
       }
     }
 
+    // Coverage limits are stored in guarantees_details only — never billed as a sum.
+    const guaranteesTotalStored = 0;
     // 1. Generate numbers
     const policyNumber = `POL-${Date.now()}`;
     const certificateNumber = `CERT-${uuidv4().slice(0, 8).toUpperCase()}`;
@@ -53,7 +54,7 @@ export const createSaleController = async (req, res) => {
       total,
       currency: currency || 'XOF',
       plan_price: plan_price || 0,
-      guarantees_total: guarantees_total || 0,
+      guarantees_total: guaranteesTotalStored,
       guarantees_details: (guarantees_details !== null && guarantees_details !== undefined) ? guarantees_details : null
     });
 

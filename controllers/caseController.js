@@ -9,10 +9,12 @@ import {
   getAllCasesWithPagination,
   getCasesByAgentIdsWithPagination,
   updateCaseAndTraveller,
-  getCaseDetailsById
+  getCaseDetailsById,
+  deleteCaseById
 } from "../models/caseModel.js";
 import { getAgentVisibilityIds } from "../models/userModel.js";
-import { createSale, getSaleByCaseId, incrementPolicyEditCount } from "../models/salesModel.js";
+import { createSale, getSaleByCaseId, incrementPolicyEditCount, updateSalePricing } from "../models/salesModel.js";
+import { getInvoiceBySaleId, updateInvoiceAmounts } from "../models/invoiceModel.js";
 import { logActivity } from "../models/activityModel.js"; // <-- make sure this exists
 import { INVALID_DATE_OF_BIRTH_CODE } from "../utils/parseFlexibleDate.js";
 import {
@@ -21,6 +23,8 @@ import {
   hasDeparted,
   MAX_OPERATOR_POLICY_EDITS
 } from "../utils/policyEditRules.js";
+import { computePremiumForCaseDetails } from "../utils/recomputeSalePremium.js";
+import { commissionForSale } from "../utils/commissionRules.js";
 
 const MAX_GROUP_MEMBERS = 500;
 
@@ -351,6 +355,47 @@ export const cancelCase = async (req, res) => {
   }
 };
 
+/**
+ * Permanently delete a case (superadmin / admin only).
+ * Removes the case and cascaded sale / invoice / certificate rows.
+ */
+export const deleteCase = async (req, res) => {
+  try {
+    if (req.user?.role !== "admin") {
+      return res.status(403).json({ success: false, message: "Forbidden: admin only" });
+    }
+
+    const caseId = Number(req.params.caseId);
+    if (!Number.isInteger(caseId) || caseId <= 0) {
+      return res.status(400).json({ success: false, message: "Invalid case id" });
+    }
+
+    const existing = await getCaseDetailsById(caseId);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: "Case not found" });
+    }
+
+    const result = await deleteCaseById(caseId);
+    if (!result.deleted) {
+      return res.status(404).json({ success: false, message: "Case not found" });
+    }
+
+    try {
+      await logActivity(
+        req.user.id,
+        `Deleted Case ${caseId}${existing.full_name ? ` (${existing.full_name})` : ""}`
+      );
+    } catch (logErr) {
+      console.error("Activity log failed:", logErr.message);
+    }
+
+    res.json({ success: true, message: "Case deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 /** Who may edit what on a confirmed sale — used by the SPA */
 /** Single case for edit / resume (traveller + plan + optional sale id) */
 export const getCaseById = async (req, res) => {
@@ -480,6 +525,77 @@ export const updateCase = async (req, res) => {
 
     await updateCaseAndTraveller(caseId, traveller, caseData);
 
+    let pricingResult = null;
+    if (sale?.id) {
+      const refreshed = await getCaseDetailsById(caseId);
+      const computed = computePremiumForCaseDetails(refreshed);
+      if (!computed.ok) {
+        // Roll back case/traveller so we never leave dates changed with a failed premium.
+        try {
+          await updateCaseAndTraveller(
+            caseId,
+            {
+              first_name: existing.first_name,
+              last_name: existing.last_name,
+              date_of_birth: existing.date_of_birth,
+              country_of_residence: existing.country_of_residence,
+              gender: existing.gender,
+              nationality: existing.nationality,
+              passport_or_id: existing.passport_or_id,
+              phone: existing.phone,
+              email: existing.email,
+              address: existing.address,
+            },
+            {
+              destination: existing.destination,
+              start_date: existing.start_date,
+              end_date: existing.end_date,
+              selected_plan_id: existing.selected_plan_id,
+              status: existing.status || "Confirmed",
+            }
+          );
+        } catch (rbErr) {
+          console.error("policy edit rollback failed:", rbErr.message);
+        }
+        return res.status(400).json({ message: computed.error });
+      }
+      const tax = Number(sale.tax) || 0;
+      await updateSalePricing(sale.id, {
+        premium_amount: computed.premium,
+        tax,
+        total: computed.premium + tax,
+        plan_price: computed.premium,
+        guarantees_total: 0,
+      });
+      try {
+        const inv = await getInvoiceBySaleId(sale.id);
+        if (inv?.id) {
+          await updateInvoiceAmounts(inv.id, {
+            subtotal: computed.premium,
+            tax,
+            total: computed.premium + tax,
+          });
+        }
+      } catch (invErr) {
+        console.error("invoice amount sync after policy edit failed:", invErr.message);
+      }
+      const commission = commissionForSale({
+        premium: computed.premium,
+        basePremium: computed.basePremium,
+        durationDays: refreshed?.duration_days,
+        dateOfBirth: refreshed?.date_of_birth,
+      });
+      pricingResult = {
+        plan_price: computed.premium,
+        premium_amount: computed.premium,
+        tax,
+        total: computed.premium + tax,
+        validityDays: computed.validityDays ?? null,
+        ageBand: computed.ageBand ?? null,
+        commission,
+      };
+    }
+
     if (shouldIncrementOperatorEdit && sale?.id) {
       try {
         await incrementPolicyEditCount(sale.id);
@@ -500,7 +616,8 @@ export const updateCase = async (req, res) => {
     res.json({
       message: "Case updated successfully",
       policyEditCount: saleAfter ? newCount : undefined,
-      policyEditsRemaining: saleAfter ? Math.max(0, MAX_OPERATOR_POLICY_EDITS - newCount) : undefined
+      policyEditsRemaining: saleAfter ? Math.max(0, MAX_OPERATOR_POLICY_EDITS - newCount) : undefined,
+      pricing: pricingResult || undefined,
     });
   } catch (err) {
     return handleCaseWriteError(err, res);

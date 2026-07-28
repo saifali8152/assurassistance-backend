@@ -53,7 +53,7 @@ tags:
   - name: Activity log
     description: Admin-only audit trail of user activity (JWT only).
   - name: Partner invoices
-    description: Periodic premium invoices per partner (travel agency, corporate, …) with commission deductions. Optional `saleIds` and `discountPct` on preview/PDF. Admin or sub-admin JWT; sub-admins only see the agencies they supervise.
+    description: Periodic premium invoices per partner. Optional saleIds and discountPct. Agico (fixed_duration_premiums) lines have commission 0. PDF currency converts from each sale's currency (not always XOF). Admin or sub-admin JWT.
 
 security:
   - bearerJWT: []
@@ -2028,9 +2028,9 @@ paths:
       responses:
         "200":
           description: >
-            Invoice data — lines carry the commission per coverage-duration tier
-            (with age factors); totals include discountPct, discounted premiums /
-            commissions, and netToTransfer.
+            Invoice data — lines carry native sale amounts and `currency`;
+            commission is 0 for Agico (fixed_duration_premiums). Totals include
+            discountPct when set.
           content:
             application/json:
               schema:
@@ -2059,7 +2059,7 @@ paths:
         - { name: partnerId, in: path, required: true, schema: { type: integer } }
         - { name: startDate, in: query, required: true, schema: { type: string, format: date } }
         - { name: endDate, in: query, required: true, schema: { type: string, format: date } }
-        - { name: currency, in: query, required: false, schema: { type: string, enum: [XOF, USD, EUR], default: XOF }, description: "Display currency. Amounts are converted from XOF (database base)." }
+        - { name: currency, in: query, required: false, schema: { type: string, enum: [XOF, USD, EUR], default: XOF }, description: "Display currency. Each line is converted from that sale's currency (e.g. USD Agico premiums stay 11 when currency=USD)." }
         - name: saleIds
           in: query
           required: false

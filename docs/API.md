@@ -487,7 +487,13 @@ Periodic premium invoices per partner (travel agency, corporate desk, …). Sub-
 | GET | `/partner-invoices/partners` | Partners the caller may invoice. |
 | GET | `/partner-invoices/summary?startDate&endDate` | Period totals: premiums, collected, commissions, net to transfer. |
 | GET | `/partner-invoices/:partnerId?startDate&endDate&saleIds&discountPct` | Invoice preview (JSON): per-sale lines with commissions + totals. |
-| GET | `/partner-invoices/:partnerId/pdf?startDate&endDate&currency&saleIds&discountPct` | Invoice PDF. `Accept-Language: fr` for French labels. `currency` = `XOF` \| `USD` \| `EUR`. |
+| GET | `/partner-invoices/:partnerId/pdf?startDate&endDate&currency&saleIds&discountPct` | Invoice PDF. `Accept-Language: fr` for French labels. |
+
+### Currency on partner invoices
+
+Each line carries the sale’s own `currency` (e.g. Agico Burundi sales are often **USD** with premiums like `11`). Amounts in the JSON preview are **native** to that sale currency — do not treat them as XOF.
+
+The PDF query param `currency` (`XOF` \| `USD` \| `EUR`) is the **display** currency only: each line is converted from `line.currency` → display currency. Example: a `11` USD premium with `?currency=USD` prints **11.00**, not a CFA→USD conversion of 11.
 
 ### Optional query parameters (preview + PDF)
 
@@ -495,8 +501,15 @@ Periodic premium invoices per partner (travel agency, corporate desk, …). Sub-
 |---|---|
 | `saleIds` | Comma-separated sale ids to **include**. Omit to include all confirmed sales in the period. Empty string → no lines. |
 | `discountPct` | Percentage discount `0`–`100` applied to **total policies issued** (premiums) **and** **total commissions to deduct**. Shown on the PDF when greater than 0. Net = discounted premiums − discounted commissions. |
+| `currency` | (PDF only) Display currency. Converted **from each sale’s currency**, not always from XOF. |
 
-Example:
+Example (Agico partner, display USD, no commission):
+
+```
+GET /partner-invoices/12/pdf?startDate=2026-07-01&endDate=2026-07-31&currency=USD
+```
+
+Example with selection + discount:
 
 ```
 GET /partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&saleIds=100,101,105&discountPct=10

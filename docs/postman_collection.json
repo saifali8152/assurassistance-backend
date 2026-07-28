@@ -599,7 +599,7 @@
     },
     {
       "name": "Partner invoices (admin / sub-admin JWT)",
-      "description": "Periodic premium invoices per partner with commission deductions. Optional saleIds (comma-separated) and discountPct (0–100) on preview/PDF. Sub-admins only see agencies they supervise. Uses {{jwt}}.",
+      "description": "Partner premium invoices. Agico (fixed_duration_premiums) → commission 0. PDF currency converts from each sale's currency. Optional saleIds + discountPct. Uses {{jwt}}.",
       "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
       "item": [
         {
@@ -641,13 +641,13 @@
             "method": "GET",
             "header": [{ "key": "Accept-Language", "value": "fr" }],
             "url": {
-              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&saleIds=100,101&discountPct=10",
+              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=USD&saleIds=100,101&discountPct=10",
               "host": ["{{baseUrl}}"],
               "path": ["partner-invoices","12","pdf"],
               "query": [
                 { "key": "startDate", "value": "2026-06-01" },
                 { "key": "endDate", "value": "2026-06-30" },
-                { "key": "currency", "value": "XOF", "description": "XOF | USD | EUR — amounts convert from XOF base" },
+                { "key": "currency", "value": "USD", "description": "XOF | USD | EUR — convert from each sale's currency (Agico often USD)" },
                 { "key": "saleIds", "value": "100,101" },
                 { "key": "discountPct", "value": "10" }
               ]

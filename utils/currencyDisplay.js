@@ -1,6 +1,6 @@
-// Display conversion for partner invoices (and other reports that store amounts in XOF).
-// Mirrors frontend/src/context/CurrencyContext.tsx + currencyService.ts fallbacks.
-// XOF is the database base currency; USD/EUR are display conversions.
+// Display conversion for partner invoices and reports.
+// Sale amounts are stored in the plan/sale currency (often XOF, sometimes USD for Agico).
+// The UI selector chooses a *display* currency; we convert from the source currency.
 
 export const SUPPORTED_CURRENCIES = ["XOF", "USD", "EUR"];
 
@@ -22,21 +22,32 @@ export function currencyLabel(currency) {
   return cur;
 }
 
-/** Convert an amount stored in XOF to the display currency. */
-export function convertFromXof(amountXof, currency = "XOF") {
-  const n = Number(amountXof);
+/** Convert an amount from one supported currency to another. */
+export function convertAmount(amount, fromCurrency = "XOF", toCurrency = "XOF") {
+  const n = Number(amount);
   if (!Number.isFinite(n)) return 0;
-  const cur = normalizeCurrency(currency);
-  return n * RATES_FROM_XOF[cur];
+  const from = normalizeCurrency(fromCurrency);
+  const to = normalizeCurrency(toCurrency);
+  if (from === to) return n;
+  const inXof = from === "XOF" ? n : n / RATES_FROM_XOF[from];
+  return inXof * RATES_FROM_XOF[to];
+}
+
+/** @deprecated Prefer convertAmount(amount, "XOF", currency). */
+export function convertFromXof(amountXof, currency = "XOF") {
+  return convertAmount(amountXof, "XOF", currency);
 }
 
 /**
- * Format a XOF-stored amount for display in the given currency.
- * XOF → whole FCFA; USD/EUR → 2 decimal places with currency code.
+ * Format an amount for display.
+ * @param amount numeric amount in `fromCurrency`
+ * @param displayCurrency target display currency
+ * @param locale "fr" | "en"
+ * @param fromCurrency currency the amount is stored in (default XOF for legacy callers)
  */
-export function formatFromXof(amountXof, currency = "XOF", locale = "fr") {
-  const cur = normalizeCurrency(currency);
-  const converted = convertFromXof(amountXof, cur);
+export function formatAmount(amount, displayCurrency = "XOF", locale = "fr", fromCurrency = "XOF") {
+  const cur = normalizeCurrency(displayCurrency);
+  const converted = convertAmount(amount, fromCurrency, cur);
   const loc = locale === "fr" ? "fr-FR" : "en-US";
   if (cur === "XOF") {
     return `${Math.round(converted).toLocaleString(loc).replace(/\u202f|\u00a0/g, " ")} FCFA`;
@@ -47,10 +58,15 @@ export function formatFromXof(amountXof, currency = "XOF", locale = "fr") {
   })} ${cur}`;
 }
 
+/** @deprecated Prefer formatAmount(amount, currency, locale, "XOF"). */
+export function formatFromXof(amountXof, currency = "XOF", locale = "fr") {
+  return formatAmount(amountXof, currency, locale, "XOF");
+}
+
 /** Compact cell value (no currency suffix — used in dense PDF tables). */
-export function formatAmountCell(amountXof, currency = "XOF", locale = "fr") {
-  const cur = normalizeCurrency(currency);
-  const converted = convertFromXof(amountXof, cur);
+export function formatAmountCell(amount, displayCurrency = "XOF", locale = "fr", fromCurrency = "XOF") {
+  const cur = normalizeCurrency(displayCurrency);
+  const converted = convertAmount(amount, fromCurrency, cur);
   const loc = locale === "fr" ? "fr-FR" : "en-US";
   if (cur === "XOF") {
     return String(Math.round(converted));

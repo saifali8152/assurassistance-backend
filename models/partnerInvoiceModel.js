@@ -19,6 +19,7 @@ export const getPartnerSalesForPeriod = async ({ accountIds, startDate, endDate 
        t.date_of_birth,
        cat.name AS plan_name,
        cat.partner_insurer_logo,
+       cat.fixed_duration_premiums,
        s.policy_number,
        s.certificate_number,
        CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
@@ -65,6 +66,7 @@ export const getPartnerSalesForPeriod = async ({ accountIds, startDate, endDate 
         premium: planPremium,
         durationDays: r.duration_days,
         dateOfBirth: r.date_of_birth,
+        fixedDurationPremiums: !!Number(r.fixed_duration_premiums),
       }),
     };
   });
@@ -94,10 +96,12 @@ export const getCommissionSummary = async ({ accountIds = null, startDate, endDa
        COALESCE(s.tax, 0) AS tax,
        COALESCE(s.received_amount, 0) AS received_amount,
        c.duration_days,
-       t.date_of_birth
+       t.date_of_birth,
+       cat.fixed_duration_premiums
      FROM sales s
      JOIN cases c ON s.case_id = c.id
      JOIN travellers t ON c.traveller_id = t.id
+     LEFT JOIN catalogue cat ON c.selected_plan_id = cat.id
      WHERE ${where.join(" AND ")}`,
     params
   );
@@ -111,6 +115,7 @@ export const getCommissionSummary = async ({ accountIds = null, startDate, endDa
       premium,
       durationDays: r.duration_days,
       dateOfBirth: r.date_of_birth,
+      fixedDurationPremiums: !!Number(r.fixed_duration_premiums),
     });
   }
   return { ...acc, netToTransfer: acc.totalPremiums - acc.totalCommissions };

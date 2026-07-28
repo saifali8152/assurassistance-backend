@@ -9,9 +9,11 @@
 //   180 days — premium 60,500 XOF — commission 15,000 XOF
 //   365 days — premium 78,000 XOF — commission 18,000 XOF
 //
-// Age rules (same for all plans):
+// Age rules (same for all plans that earn commission):
 //   • under 16 → commission ÷ 2
 //   • senior premium surcharges (×2 / ×4) do NOT increase commission
+//
+// Agico Burundi (catalogue.fixed_duration_premiums = 1): no commission deduction.
 
 import { getAgeCommissionMultiplier, getAgeFromDateString } from "./travelPricing.js";
 
@@ -49,9 +51,20 @@ export function baseCommissionForSale({ premium, basePremium, durationDays }) {
 
 /**
  * Final commission after age factor.
- * @param {{ premium?: number, basePremium?: number, durationDays?: number, dateOfBirth?: string|null, age?: number|null }} args
+ * @param {{
+ *   premium?: number,
+ *   basePremium?: number,
+ *   durationDays?: number,
+ *   dateOfBirth?: string|null,
+ *   age?: number|null,
+ *   fixedDurationPremiums?: boolean,
+ *   noCommission?: boolean,
+ * }} args
  */
 export function commissionForSale(args = {}) {
+  // Agico fixed-duration plans (and any explicit no-commission flag): $0 commission.
+  if (args.noCommission || args.fixedDurationPremiums) return 0;
+
   const base = baseCommissionForSale(args);
   if (!base) return 0;
   const age =

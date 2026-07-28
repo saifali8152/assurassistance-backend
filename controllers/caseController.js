@@ -584,6 +584,7 @@ export const updateCase = async (req, res) => {
         basePremium: computed.basePremium,
         durationDays: refreshed?.duration_days,
         dateOfBirth: refreshed?.date_of_birth,
+        fixedDurationPremiums: !!Number(refreshed?.plan_fixed_duration_premiums),
       });
       pricingResult = {
         plan_price: computed.premium,

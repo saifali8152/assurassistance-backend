@@ -4,8 +4,9 @@ import path from "path";
 import {
   normalizeCurrency,
   currencyLabel,
-  formatFromXof,
+  formatAmount,
   formatAmountCell,
+  convertAmount,
 } from "./currencyDisplay.js";
 
 const ORANGE = "#E4590F";
@@ -156,24 +157,27 @@ const COLUMNS = [
   { key: "commission", w: 34, align: "right" },
 ];
 
-function cellText(line, key, currency, locale) {
-  switch (key) {
-    case "plan_premium":
-    case "tax":
-    case "total":
-    case "received_amount":
-    case "commission":
-      return formatAmountCell(line[key], currency, locale);
-    case "confirmed_at":
-      return fmtShortDate(line.confirmed_at);
-    default:
-      return String(line[key] ?? "");
-  }
+function cellText(line, displayCurrency, locale) {
+  const from = line.currency || "XOF";
+  return (key) => {
+    switch (key) {
+      case "plan_premium":
+      case "tax":
+      case "total":
+      case "received_amount":
+      case "commission":
+        return formatAmountCell(line[key], displayCurrency, locale, from);
+      case "confirmed_at":
+        return fmtShortDate(line.confirmed_at);
+      default:
+        return String(line[key] ?? "");
+    }
+  };
 }
 
 /**
  * Generate the partner (travel agency) premium invoice PDF.
- * Amounts in `lines` / `totals` are stored in XOF and converted for display via `currency`.
+ * Each line keeps its own sale currency; amounts are converted to `currency` for display.
  * Returns a Buffer.
  */
 export const generatePartnerInvoicePDF = async ({
@@ -333,9 +337,10 @@ export const generatePartnerInvoicePDF = async ({
     for (const line of lines) {
       y = ensureSpace(y, rowH);
       let x = leftX;
+      const textFor = cellText(line, displayCurrency, locale);
       doc.fillColor(DARK).font("Helvetica").fontSize(tableFont);
       for (const col of COLUMNS) {
-        doc.text(cellText(line, col.key, displayCurrency, locale), x + 1, y, {
+        doc.text(textFor(col.key), x + 1, y, {
           width: col.w - 2, height: 7, align: col.align || "left", lineBreak: false, ellipsis: true,
         });
         x += col.w;
@@ -346,6 +351,24 @@ export const generatePartnerInvoicePDF = async ({
       doc.restore();
       y += rowH;
     }
+
+    // Totals in display currency (each line converted from its own sale currency)
+    const displayTotals = lines.reduce(
+      (acc, line) => {
+        const from = line.currency || "XOF";
+        acc.totalPremiums += convertAmount(line.total, from, displayCurrency);
+        acc.totalCommissions += convertAmount(line.commission, from, displayCurrency);
+        return acc;
+      },
+      { totalPremiums: 0, totalCommissions: 0 }
+    );
+    const discountPct = Number(totals.discountPct) || 0;
+    if (discountPct > 0) {
+      const factor = 1 - discountPct / 100;
+      displayTotals.totalPremiums *= factor;
+      displayTotals.totalCommissions *= factor;
+    }
+    displayTotals.netToTransfer = displayTotals.totalPremiums - displayTotals.totalCommissions;
 
     // ---------- Totals ----------
     y = ensureSpace(y, 110);
@@ -360,20 +383,20 @@ export const generatePartnerInvoicePDF = async ({
       }
       doc.fillColor(DARK).font("Helvetica-Bold").fontSize(8);
       doc.text(label, totalsLabelX, y, { width: 150, lineBreak: false });
-      doc.text(formatFromXof(value, displayCurrency, locale), totalsValueX - 20, y, {
+      // Values already converted to display currency
+      doc.text(formatAmount(value, displayCurrency, locale, displayCurrency), totalsValueX - 20, y, {
         width: 100, align: "right", lineBreak: false,
       });
       y += 20;
     };
-    const discountPct = Number(totals.discountPct) || 0;
     if (discountPct > 0) {
       doc.fillColor(DARK).font("Helvetica-Bold").fontSize(8);
       doc.text(L.discountRate(discountPct), totalsLabelX, y, { width: 250, lineBreak: false });
       y += 18;
     }
-    totalsRow(L.totalIssued, totals.totalPremiums, false);
-    totalsRow(L.totalCommissions, totals.totalCommissions, true);
-    totalsRow(L.netToTransfer, totals.netToTransfer, true);
+    totalsRow(L.totalIssued, displayTotals.totalPremiums, false);
+    totalsRow(L.totalCommissions, displayTotals.totalCommissions, true);
+    totalsRow(L.netToTransfer, displayTotals.netToTransfer, true);
 
     // ---------- Payment terms / observations / signature ----------
     y = ensureSpace(y, 170);

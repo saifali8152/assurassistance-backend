@@ -125,7 +125,7 @@ Duration is inclusive stay days (`end_date − start_date + 1`). Map stay length
 | 81 – 85 | × 4 |
 | Over 85 | not eligible — `"The customer must request a specific exemption"` |
 
-**Commission** (partner invoices only; never stored on the sale): under 16 → commission ÷ 2; senior premium surcharges do **not** increase commission.
+**Commission** (partner invoices only; never stored on the sale): under 16 → commission ÷ 2; senior premium surcharges do **not** increase commission. Plans with `fixed_duration_premiums` (Agico Burundi) have **commission = 0** (no deduction).
 
 **Coverage limits** (`guarantees_details`) are benefit ceilings — they are **not** added to `premium_amount` / `total`. `guarantees_total` is always stored as `0`.
 
@@ -480,7 +480,7 @@ These endpoints are part of the staff/admin surface. They are reachable via
 
 ## 11. Partner invoices — `/api/partner-invoices` (admin / sub-admin JWT)
 
-Periodic premium invoices per partner (travel agency, corporate desk, …). Sub-administrators only see the agencies under their supervision. Commissions are applied per coverage-duration tier (10/45/93/180/365 days) with age factors (child ÷ 2; senior premium surcharges do not inflate commission) and deducted from the premium total; they appear only on these invoices, never on individual sales.
+Periodic premium invoices per partner (travel agency, corporate desk, …). Sub-administrators only see the agencies under their supervision. Commissions are applied per coverage-duration tier (10/45/93/180/365 days) with age factors (child ÷ 2; senior premium surcharges do not inflate commission) and deducted from the premium total; they appear only on these invoices, never on individual sales. **Agico plans** (`fixed_duration_premiums`) have **commission = 0** on every line.
 
 | Method | Path | Description |
 |---|---|---|

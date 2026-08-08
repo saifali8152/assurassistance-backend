@@ -174,6 +174,7 @@ const CASE_LIST_SELECT = `
          cat.currency, cat.country_of_residence AS plan_country_of_residence, cat.route_type,
          cat.fixed_duration_premiums,
          s.id AS sale_id, s.plan_price AS sale_plan_price, s.premium_amount AS sale_premium_amount,
+         s.deleted_at AS sale_deleted_at, s.deletion_reason AS sale_deletion_reason,
          u.name AS created_by_name, c.duration_days
 `;
 

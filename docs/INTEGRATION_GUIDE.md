@@ -121,7 +121,7 @@ the endpoint.
 | `cases:write` | `POST /cases`, `POST /cases/group`, `PUT /cases/{id}/update`, `POST /cases/{id}/cancel`, `PATCH /cases/{id}/status` |
 | `sales:read` | `GET /sales`, `GET /sales/{id}`, `GET /sales/invoice/{id}`, `GET /sales/certificate/{id}`, `GET /sales/certificate/{id}/page`, group ZIPs |
 | `sales:write` | `POST /sales`, `POST /cases/{id}/confirm-sale` |
-| `sales:payment` | `PATCH /sales/{id}/payment` |
+| `sales:payment` | `PATCH /sales/{id}/payment` (mark Paid / reverse Unpaid — **admin owner** only; Paid→Unpaid max **2×** per policy) |
 | `ledger:read` | `GET /ledger`, `GET /ledger/export` |
 | `invoices:read` | `GET /invoice-ledger`, `GET /invoice-ledger/export` |
 | `agents:read` | (reserved — agency list/profile for future key access) |
@@ -279,6 +279,49 @@ curl -X PATCH https://backend-api.assurassistancepro.org/api/sales/7912/payment 
   -H "Content-Type: application/json" \
   -d '{ "payment_status": "Paid", "received_amount": 15250, "payment_notes": "Wire transfer ABC" }'
 ```
+
+### Admin: reverse Paid → Unpaid (max 2) & soft-delete
+
+These staff operations require an **admin JWT** (soft-delete is JWT-only; payment
+updates also accept an API key only when the key’s `owner_user_id` is an admin).
+
+**Reverse a paid policy** (counts toward the limit of 2):
+
+```bash
+TOKEN=$(curl -s -X POST "$AAS/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@…","password":"…"}' | jq -r .token)
+
+curl -s -X PATCH "$AAS/sales/7912/payment" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "payment_status": "Unpaid", "received_amount": 0 }' | jq .
+```
+
+Response includes `payment_reverse_count` and `payment_reverses_remaining`.
+After 2 reverses the API returns `400` with `code: "payment_reverse_limit"`.
+Every change is written to the Activity Log.
+
+**Soft-delete a policy** (remains visible; premium & commission shown as 0):
+
+```bash
+# Optional: list allowed reasons
+curl -s "$AAS/sales/meta/deletion-reasons" -H "Authorization: Bearer $TOKEN" | jq .
+
+curl -s -X POST "$AAS/sales/7912/soft-delete" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{ "reason": "Test policy" }' | jq .
+```
+
+Allowed reasons (exact strings): `Test policy`, `Customer desistement`,
+`Error or duplicate`, `Cancellation before reversal`.
+
+Ledger / partner-invoice lines for soft-deleted sales keep **case** and **sale**
+ids, set `is_deleted: true`, and force premium/commission to **0**.
+
+Full reference: [`API.md`](./API.md) §4 and OpenAPI paths
+`/sales/{id}/payment`, `/sales/{id}/soft-delete`, `/sales/meta/deletion-reasons`.
 
 ---
 

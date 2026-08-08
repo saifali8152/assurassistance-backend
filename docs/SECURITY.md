@@ -186,6 +186,8 @@ with exponential backoff respecting the `Reset` header.
 | What | Where |
 |---|---|
 | Login / logout, case create/update/confirm/cancel, sale create | `user_activity` table — surfaced in `/api/activity-log` (admin only). |
+| Payment status changes (admin) | `user_activity`: `payment_status:{saleId}:{from}->{to}` or `payment_reverse:{saleId}:{n}/2`. Paid→Unpaid limited to **2** via `sales.payment_reverse_count`. |
+| Policy soft-delete (admin JWT) | `sales.deleted_at` / `deletion_reason` / `deleted_by_user_id` + `user_activity` `policy_soft_delete:{saleId}:{reason}`. Endpoints: `POST /sales/{id}/soft-delete`, `GET /sales/meta/deletion-reasons`. |
 | Agency / partner reassignment (admin JWT) | `agency_supervision_history` (period, supervisor, changed_by, reason, timestamps) + `user_activity` entry `agency_reassign:{agencyId}->{supervisorId}`. Endpoints: `PATCH /admin/agents/{id}/supervisor`, `GET /admin/agents/{id}/supervision-history`. |
 | Every API-key request | `api_key_usage` table — `method`, `path`, `status_code`, `ip`, `user_agent`, `elapsed_ms`. **No request/response bodies are logged.** |
 | API-key lifecycle (create, rotate, revoke) | Implicit in `api_keys.created_at` / `revoked_at`. |

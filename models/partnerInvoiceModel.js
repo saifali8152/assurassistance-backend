@@ -1,5 +1,6 @@
 import getPool from "../utils/db.js";
 import { commissionForSale } from "../utils/commissionRules.js";
+import { applySoftDeletedSaleDisplay } from "../utils/policyLifecycle.js";
 
 /**
  * All confirmed sales for the given creator account ids within a period,
@@ -29,6 +30,8 @@ export const getPartnerSalesForPeriod = async ({ accountIds, startDate, endDate 
        s.payment_status,
        s.confirmed_at,
        s.currency,
+       s.deleted_at,
+       s.deletion_reason,
        c.duration_days,
        u.name AS created_by_name
      FROM sales s
@@ -43,9 +46,10 @@ export const getPartnerSalesForPeriod = async ({ accountIds, startDate, endDate 
   );
 
   return rows.map((r) => {
-    const planPremium = Number(r.plan_premium) || 0;
-    const tax = Number(r.tax) || 0;
-    return {
+    const isDeleted = r.deleted_at != null;
+    const planPremium = isDeleted ? 0 : Number(r.plan_premium) || 0;
+    const tax = isDeleted ? 0 : Number(r.tax) || 0;
+    const line = {
       sale_id: r.sale_id,
       case_id: r.case_id,
       traveller_name: r.traveller_name,
@@ -57,18 +61,24 @@ export const getPartnerSalesForPeriod = async ({ accountIds, startDate, endDate 
       plan_premium: planPremium,
       tax,
       total: planPremium + tax,
-      received_amount: Number(r.received_amount) || 0,
+      received_amount: isDeleted ? 0 : Number(r.received_amount) || 0,
       payment_status: r.payment_status,
       confirmed_at: r.confirmed_at,
       currency: r.currency || "XOF",
       created_by_name: r.created_by_name || "",
-      commission: commissionForSale({
-        premium: planPremium,
-        durationDays: r.duration_days,
-        dateOfBirth: r.date_of_birth,
-        fixedDurationPremiums: !!Number(r.fixed_duration_premiums),
-      }),
+      commission: isDeleted
+        ? 0
+        : commissionForSale({
+            premium: planPremium,
+            durationDays: r.duration_days,
+            dateOfBirth: r.date_of_birth,
+            fixedDurationPremiums: !!Number(r.fixed_duration_premiums),
+          }),
+      deleted_at: r.deleted_at || null,
+      deletion_reason: r.deletion_reason || null,
+      is_deleted: isDeleted,
     };
+    return applySoftDeletedSaleDisplay(line);
   });
 };
 
@@ -97,7 +107,8 @@ export const getCommissionSummary = async ({ accountIds = null, startDate, endDa
        COALESCE(s.received_amount, 0) AS received_amount,
        c.duration_days,
        t.date_of_birth,
-       cat.fixed_duration_premiums
+       cat.fixed_duration_premiums,
+       s.deleted_at
      FROM sales s
      JOIN cases c ON s.case_id = c.id
      JOIN travellers t ON c.traveller_id = t.id
@@ -108,6 +119,7 @@ export const getCommissionSummary = async ({ accountIds = null, startDate, endDa
 
   const acc = { totalSales: rows.length, totalPremiums: 0, totalCollected: 0, totalCommissions: 0 };
   for (const r of rows) {
+    if (r.deleted_at != null) continue;
     const premium = Number(r.plan_premium) || 0;
     acc.totalPremiums += premium + (Number(r.tax) || 0);
     acc.totalCollected += Number(r.received_amount) || 0;

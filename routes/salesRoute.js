@@ -5,8 +5,12 @@ import {
   createSaleController,
   getAllSalesController,
   getSaleByIdController,
-  updatePaymentStatusController
+  updatePaymentStatusController,
+  softDeleteSaleController,
+  listPolicyDeletionReasonsController
 } from "../controllers/salesController.js";
+import { adminOnly } from "../middlewares/roleMiddleware.js";
+import authenticate from "../middlewares/authMiddleware.js";
 import {
   downloadInvoice,
   downloadCertificate,
@@ -30,6 +34,13 @@ router.get("/certificate/public/:token", getCertificatePageDataPublic);
 router.get("/certificate/:id/page", authenticateAny, requireScope("sales:read"), getCertificatePageData);
 router.get("/certificate/:id", authenticateAny, requireScope("sales:read"), downloadCertificate);
 
+router.get(
+  "/meta/deletion-reasons",
+  authenticate,
+  adminOnly,
+  listPolicyDeletionReasonsController
+);
 router.get("/:id", authenticateAny, requireScope("sales:read"), getSaleByIdController);
 router.patch("/:id/payment", authenticateAny, requireScope("sales:payment"), updatePaymentStatusController);
+router.post("/:id/soft-delete", authenticate, adminOnly, softDeleteSaleController);
 export default router;

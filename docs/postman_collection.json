@@ -274,12 +274,41 @@
           "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/7912", "host": ["{{baseUrl}}"], "path": ["sales","7912"] } }
         },
         {
-          "name": "Update payment status",
+          "name": "Update payment status (mark Paid)",
           "request": {
             "method": "PATCH",
             "url": { "raw": "{{baseUrl}}/sales/7912/payment", "host": ["{{baseUrl}}"], "path": ["sales","7912","payment"] },
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"payment_status\": \"Paid\", \"received_amount\": 25000, \"payment_notes\": \"Wire transfer ABC\" }" }
+            "body": { "mode": "raw", "raw": "{ \"payment_status\": \"Paid\", \"received_amount\": 25000, \"payment_notes\": \"Wire transfer ABC\" }" },
+            "description": "Admin JWT (or API key owned by admin) + sales:payment. Marks the sale as Paid."
+          }
+        },
+        {
+          "name": "Reverse payment status (Paid → Unpaid, admin)",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/sales/7912/payment", "host": ["{{baseUrl}}"], "path": ["sales","7912","payment"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"payment_status\": \"Unpaid\", \"received_amount\": 0, \"payment_notes\": \"\" }" },
+            "description": "Admin only. Unchecking Paid is limited to 2 occurrences per policy (payment_reverse_count). Audited in Activity Log."
+          }
+        },
+        {
+          "name": "List policy deletion reasons (admin JWT)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/sales/meta/deletion-reasons", "host": ["{{baseUrl}}"], "path": ["sales","meta","deletion-reasons"] },
+            "description": "Admin JWT only. Returns canonical soft-delete reasons."
+          }
+        },
+        {
+          "name": "Soft-delete policy (admin JWT)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/sales/7912/soft-delete", "host": ["{{baseUrl}}"], "path": ["sales","7912","soft-delete"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Test policy\"\n}" },
+            "description": "Admin JWT only. Policy remains visible with premium/commission 0. Reasons: Test policy | Customer desistement | Error or duplicate | Cancellation before reversal."
           }
         }
       ]

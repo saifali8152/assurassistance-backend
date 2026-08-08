@@ -142,13 +142,15 @@ export const getMonthlyReconciliation = async (month) => {
         DATE_FORMAT(s.confirmed_at, '%b-%Y') as month,
         COUNT(s.id) as total_sales,
         SUM(
-          CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
+          CASE WHEN s.deleted_at IS NOT NULL THEN 0
+               WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
             THEN s.plan_price + COALESCE(s.tax, 0)
             ELSE s.total
           END
         ) as total_amount,
         SUM(
-          CASE WHEN s.payment_status = 'Paid' THEN
+          CASE WHEN s.deleted_at IS NOT NULL THEN 0
+               WHEN s.payment_status = 'Paid' THEN
             CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
               THEN s.plan_price + COALESCE(s.tax, 0)
               ELSE s.total
@@ -156,7 +158,8 @@ export const getMonthlyReconciliation = async (month) => {
           ELSE 0 END
         ) as paid_amount,
         SUM(
-          CASE WHEN s.payment_status = 'Unpaid' THEN
+          CASE WHEN s.deleted_at IS NOT NULL THEN 0
+               WHEN s.payment_status = 'Unpaid' THEN
             CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
               THEN s.plan_price + COALESCE(s.tax, 0)
               ELSE s.total
@@ -164,7 +167,8 @@ export const getMonthlyReconciliation = async (month) => {
           ELSE 0 END
         ) as unpaid_amount,
         SUM(
-          CASE WHEN s.payment_status = 'Partial' THEN
+          CASE WHEN s.deleted_at IS NOT NULL THEN 0
+               WHEN s.payment_status = 'Partial' THEN
             CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
               THEN s.plan_price + COALESCE(s.tax, 0)
               ELSE s.total
@@ -172,14 +176,16 @@ export const getMonthlyReconciliation = async (month) => {
           ELSE 0 END
         ) as partial_amount,
         SUM(
-          CASE WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
+          CASE WHEN s.deleted_at IS NOT NULL THEN 0
+               WHEN s.plan_price IS NOT NULL AND s.plan_price > 0
             THEN s.plan_price + COALESCE(s.tax, 0)
             ELSE s.total
           END
-        ) - SUM(COALESCE(s.received_amount, 0)) as balance_due,
-        SUM(s.received_amount) as gross_collected,
-        SUM(s.tax) as fees,
-        SUM(s.received_amount) - SUM(s.tax) as net_due
+        ) - SUM(CASE WHEN s.deleted_at IS NOT NULL THEN 0 ELSE COALESCE(s.received_amount, 0) END) as balance_due,
+        SUM(CASE WHEN s.deleted_at IS NOT NULL THEN 0 ELSE s.received_amount END) as gross_collected,
+        SUM(CASE WHEN s.deleted_at IS NOT NULL THEN 0 ELSE s.tax END) as fees,
+        SUM(CASE WHEN s.deleted_at IS NOT NULL THEN 0 ELSE s.received_amount END)
+          - SUM(CASE WHEN s.deleted_at IS NOT NULL THEN 0 ELSE s.tax END) as net_due
      FROM sales s
      JOIN cases c ON c.id = s.case_id
      JOIN users u ON u.id = c.created_by

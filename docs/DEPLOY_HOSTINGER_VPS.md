@@ -449,6 +449,18 @@ Certificate QR codes point to `{FRONTEND}/certificate-public/{token}`. The API s
    CERTIFICATE_WEBSITE_URL=https://www.assurassistance.org
    ```
 
+### Paid policy reverse + soft-delete
+
+1. **Migration (once):**
+   ```bash
+   cd /path/to/backend
+   mysql -u assurapp -p assurassistance < migrations/add_sales_payment_reverse_and_soft_delete.sql
+   ```
+
+2. **Behaviour (Admin only, Sales Ledger):**
+   - Reverse Paid → Unpaid: max **2** times per policy; each change logged in Activity Log.
+   - Soft-delete policy with required reason; row stays visible (gray), premium & commission shown as **0**.
+
 ### Agency / partner reassignment (Admin → Sub-Admin)
 
 Allows Admin to transfer a travel agency (e.g. **IT Voyages**) to a sub-administrator (e.g. **Esther Ahouman**) without changing policies, policy numbers, identifiers or agency codes. Periods are stored in `agency_supervision_history`.

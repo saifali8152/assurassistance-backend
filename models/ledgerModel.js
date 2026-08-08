@@ -1,6 +1,7 @@
 // src/models/ledgerModel.js
 import getPool from "../utils/db.js";
 import { commissionForSale } from "../utils/commissionRules.js";
+import { applySoftDeletedSaleDisplay, MAX_PAYMENT_REVERSES } from "../utils/policyLifecycle.js";
 
 function buildLedgerWhere({ role, agentId, agentIds, startDate, endDate, status, paymentStatus, search }) {
   const params = [];
@@ -49,18 +50,23 @@ function buildLedgerWhere({ role, agentId, agentIds, startDate, endDate, status,
 }
 
 function mapLedgerRow(r) {
-  const planPremium =
-    r.plan_price != null && Number(r.plan_price) > 0
+  const isDeleted = r.deleted_at != null;
+  const planPremium = isDeleted
+    ? 0
+    : r.plan_price != null && Number(r.plan_price) > 0
       ? Number(r.plan_price)
       : Number(r.premium_amount) || 0;
-  const tax = Number(r.tax) || 0;
-  const commission = commissionForSale({
-    premium: planPremium,
-    durationDays: r.duration_days,
-    dateOfBirth: r.date_of_birth,
-    fixedDurationPremiums: !!Number(r.fixed_duration_premiums),
-  });
-  return {
+  const tax = isDeleted ? 0 : Number(r.tax) || 0;
+  const commission = isDeleted
+    ? 0
+    : commissionForSale({
+        premium: planPremium,
+        durationDays: r.duration_days,
+        dateOfBirth: r.date_of_birth,
+        fixedDurationPremiums: !!Number(r.fixed_duration_premiums),
+      });
+  const reverseCount = Number(r.payment_reverse_count) || 0;
+  const mapped = {
     sale_id: r.sale_id,
     case_id: r.case_id,
     agent_id: r.agent_id,
@@ -71,19 +77,25 @@ function mapLedgerRow(r) {
     product_type: r.product_type || "",
     policy_number: r.policy_number || "",
     certificate_number: r.certificate_number || "",
-    plan_price: r.plan_price != null ? Number(r.plan_price) : null,
-    premium_amount: Number(r.premium_amount) || 0,
+    plan_price: isDeleted ? 0 : r.plan_price != null ? Number(r.plan_price) : null,
+    premium_amount: isDeleted ? 0 : Number(r.premium_amount) || 0,
     plan_premium: planPremium,
     tax,
     total: planPremium + tax,
-    received_amount: Number(r.received_amount) || 0,
+    received_amount: isDeleted ? 0 : Number(r.received_amount) || 0,
     payment_notes: r.payment_notes || "",
     payment_status: r.payment_status,
     confirmed_at: r.confirmed_at,
     currency: r.currency || "XOF",
     commission,
     net_to_transfer: planPremium + tax - commission,
+    payment_reverse_count: reverseCount,
+    payment_reverses_remaining: Math.max(0, MAX_PAYMENT_REVERSES - reverseCount),
+    is_deleted: isDeleted,
+    deleted_at: r.deleted_at || null,
+    deletion_reason: r.deletion_reason || null,
   };
+  return applySoftDeletedSaleDisplay(mapped);
 }
 
 export const getLedger = async ({
@@ -144,8 +156,11 @@ export const getLedger = async ({
       COALESCE(s.received_amount, 0) AS received_amount,
       COALESCE(s.payment_notes, '') AS payment_notes,
       s.payment_status,
+      s.payment_reverse_count,
       s.confirmed_at,
       s.currency,
+      s.deleted_at,
+      s.deletion_reason,
       c.duration_days
     ${baseSQL}
     ORDER BY s.confirmed_at DESC
@@ -195,7 +210,8 @@ export const getLedgerSummary = async ({
        COALESCE(s.received_amount, 0) AS received_amount,
        c.duration_days,
        t.date_of_birth,
-       cat.fixed_duration_premiums
+       cat.fixed_duration_premiums,
+       s.deleted_at
      FROM sales s
      JOIN cases c ON s.case_id = c.id
      JOIN travellers t ON c.traveller_id = t.id
@@ -212,6 +228,7 @@ export const getLedgerSummary = async ({
     totalCommissions: 0,
   };
   for (const r of rows) {
+    if (r.deleted_at != null) continue; // soft-deleted: visible in list, 0 in totals
     const premium = Number(r.plan_premium) || 0;
     const tax = Number(r.tax) || 0;
     acc.totalPremiums += premium + tax;

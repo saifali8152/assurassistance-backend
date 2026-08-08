@@ -232,7 +232,95 @@ Same body shape as `/cases`, but `travellers` is an array:
 | POST   | `/sales` | JWT or KEY | `sales:write` | Create a sale from a confirmed case. |
 | GET    | `/sales` | JWT or KEY | `sales:read`  | List sales. |
 | GET    | `/sales/:id` | JWT or KEY | `sales:read`  | Single sale. |
-| PATCH  | `/sales/:id/payment` | JWT or KEY | `sales:payment` | Update payment status. |
+| PATCH  | `/sales/:id/payment` | JWT or KEY (owner admin) | `sales:payment` | Update payment. **Admin only** may reverse **Paid → Unpaid**, at most **2** times per policy (`payment_reverse_count`). Each change is written to the Activity Log. |
+| POST   | `/sales/:id/soft-delete` | ADMIN JWT | — | Soft-delete a policy (requires `reason`). Row stays visible; premium & commission display as **0**. |
+| GET    | `/sales/meta/deletion-reasons` | ADMIN JWT | — | Allowed soft-delete reasons. |
+
+### PATCH /sales/:id/payment — mark Paid / reverse to Unpaid
+
+Controller requires the authenticated user to be **admin** (API keys only work
+when the key owner is an admin). Soft-deleted policies cannot be updated
+(`code: "policy_deleted"`).
+
+**Mark Paid**
+
+```json
+{ "payment_status": "Paid", "received_amount": 25000, "payment_notes": "Wire transfer ABC" }
+```
+
+**Reverse Paid → Unpaid** (Admin only, max **2** times per policy)
+
+```json
+{ "payment_status": "Unpaid", "received_amount": 0, "payment_notes": "" }
+```
+
+**200**
+
+```json
+{
+  "message": "Payment status reversed to Unpaid",
+  "data": {
+    "sale_id": 7912,
+    "payment_status": "Unpaid",
+    "payment_reverse_count": 1,
+    "payment_reverses_remaining": 1
+  }
+}
+```
+
+Errors: `403` not admin; `400` `payment_reverse_limit` after 2 reverses; `400` `policy_deleted`.
+
+Audit log (`user_activity`): `payment_reverse:{saleId}:{n}/2` or
+`payment_status:{saleId}:{from}->{to}`.
+
+### POST /sales/:id/soft-delete — Admin JWT only
+
+Soft-delete keeps the policy visible in ledgers / partner invoices / cases with
+**premium = 0** and **commission = 0** (gray UI). Hard-delete is not used.
+
+```json
+{ "reason": "Test policy" }
+```
+
+Allowed `reason` values (exact strings):
+
+| Reason |
+|---|
+| `Test policy` |
+| `Customer desistement` |
+| `Error or duplicate` |
+| `Cancellation before reversal` |
+
+**200**
+
+```json
+{
+  "success": true,
+  "message": "Policy deleted. It remains visible with premium and commission set to 0.",
+  "data": {
+    "sale_id": 7912,
+    "case_id": 4821,
+    "deletion_reason": "Test policy",
+    "is_deleted": true
+  }
+}
+```
+
+Audit log: `policy_soft_delete:{saleId}:{reason_key}`.
+
+### GET /sales/meta/deletion-reasons — Admin JWT only
+
+```json
+{
+  "success": true,
+  "data": [
+    "Test policy",
+    "Customer desistement",
+    "Error or duplicate",
+    "Cancellation before reversal"
+  ]
+}
+```
 
 ### POST /sales — request
 

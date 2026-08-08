@@ -39,7 +39,10 @@ tags:
   - name: Cases
     description: A "case" represents one (or many, via groups) travellers + a chosen plan + travel window. Selling a policy = confirming a sale on a case.
   - name: Sales
-    description: A case becomes a sale once confirmed. Sales expose the policy/certificate numbers, invoice download, and payment status.
+    description: |
+      A case becomes a sale once confirmed. Sales expose policy/certificate
+      numbers, invoice download, and payment status. Admin may reverse Paid→Unpaid
+      (max 2×) and soft-delete policies (remain visible with premium/commission 0).
   - name: Documents
     description: PDFs (invoice, certificate, group ZIP) generated on demand from the sale data.
   - name: Reports
@@ -298,7 +301,16 @@ components:
           type: string
           enum: [Unpaid, Paid, Partial]
         payment_notes: { type: string, nullable: true }
+        payment_reverse_count:
+          type: integer
+          description: Times Admin reversed Paid → Unpaid (max 2).
         confirmed_at: { type: string, format: date-time }
+        deleted_at: { type: string, format: date-time, nullable: true }
+        deletion_reason:
+          type: string
+          nullable: true
+          description: Soft-delete reason when deleted_at is set.
+        is_deleted: { type: boolean }
 
     CreateSaleRequest:
       type: object
@@ -345,6 +357,19 @@ components:
         payment_notes: { type: string, nullable: true }
         received_amount: { type: number, nullable: true }
 
+    SoftDeleteSaleRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          enum:
+            - Test policy
+            - Customer desistement
+            - Error or duplicate
+            - Cancellation before reversal
+          example: "Test policy"
+
     LedgerRow:
       type: object
       description: |
@@ -372,6 +397,13 @@ components:
         received_amount: { type: number }
         payment_status: { type: string }
         confirmed_at: { type: string, format: date-time }
+        payment_reverse_count: { type: integer }
+        payment_reverses_remaining: { type: integer }
+        is_deleted:
+          type: boolean
+          description: Soft-deleted policies stay listed with premium/commission forced to 0.
+        deleted_at: { type: string, format: date-time, nullable: true }
+        deletion_reason: { type: string, nullable: true }
 
     LedgerSummary:
       type: object
@@ -977,6 +1009,14 @@ paths:
     patch:
       tags: [Sales]
       summary: Update payment status (Paid / Unpaid / Partial).
+      description: |
+        Requires an **admin** JWT (or API key whose owner is admin) and scope
+        `sales:payment`.
+
+        **Paid → Unpaid** (unchecking a paid policy) is allowed for Admin only,
+        at most **two** times per policy (`payment_reverse_count`). Each change
+        is recorded in the Activity Log (`payment_reverse:…` or
+        `payment_status:…`). Soft-deleted policies cannot be updated.
       security:
         - bearerJWT: []
         - bearerApiKey: [sales:payment]
@@ -987,8 +1027,132 @@ paths:
         content:
           application/json:
             schema: { $ref: '#/components/schemas/UpdatePaymentRequest' }
+            examples:
+              markPaid:
+                summary: Mark as Paid
+                value:
+                  payment_status: Paid
+                  received_amount: 25000
+                  payment_notes: Wire transfer ABC
+              reverseToUnpaid:
+                summary: Reverse Paid → Unpaid (Admin, max 2×)
+                value:
+                  payment_status: Unpaid
+                  received_amount: 0
+                  payment_notes: ""
       responses:
-        "200": { description: Updated. }
+        "200":
+          description: Payment updated (includes reverse counters when applicable).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      sale_id: { type: integer }
+                      payment_status: { type: string }
+                      payment_reverse_count: { type: integer }
+                      payment_reverses_remaining: { type: integer }
+        "400":
+          description: Reverse limit reached, or policy is soft-deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "403":
+          description: Caller is not an admin.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /sales/meta/deletion-reasons:
+    get:
+      tags: [Sales]
+      summary: List allowed soft-delete reasons.
+      description: **Admin JWT only** (not available via API key).
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: Canonical reason strings.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: string
+                      enum:
+                        - Test policy
+                        - Customer desistement
+                        - Error or duplicate
+                        - Cancellation before reversal
+        "403":
+          description: Not admin.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /sales/{id}/soft-delete:
+    post:
+      tags: [Sales]
+      summary: Soft-delete a policy (Admin JWT only).
+      description: |
+        Soft-delete keeps the sale visible in the system (ledger, partner
+        invoices, cases) with **case number**, **sale number**, gray formatting,
+        and **premium / commission displayed as 0**. A required reason must be
+        one of the canonical values from `GET /sales/meta/deletion-reasons`.
+
+        Audited as `policy_soft_delete:{saleId}:{reason}` in Activity Log.
+        Not available via API key.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SoftDeleteSaleRequest' }
+            example:
+              reason: "Test policy"
+      responses:
+        "200":
+          description: Soft-deleted; still listed with zeroed amounts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      sale_id: { type: integer }
+                      case_id: { type: integer }
+                      deletion_reason: { type: string }
+                      is_deleted: { type: boolean }
+        "400":
+          description: Missing/invalid reason, or already deleted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "403":
+          description: Not admin.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Sale not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /sales/invoice/{id}:
     get:

@@ -369,7 +369,7 @@
     },
     {
       "name": "Agents (admin / sub-admin JWT)",
-      "description": "Agency-management endpoints. JWT only — no API-key scope grants access. Uses {{jwt}}.",
+      "description": "Agency-management endpoints. JWT only — no API-key scope grants access. Uses {{jwt}}. Includes admin-only reassignment (PATCH …/supervisor) and supervision history (GET …/supervision-history).",
       "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
       "item": [
         {
@@ -421,6 +421,24 @@
             "url": { "raw": "{{baseUrl}}/admin/agents/42/sub-agents", "host": ["{{baseUrl}}"], "path": ["admin","agents","42","sub-agents"] },
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Kofi\",\n  \"last_name\": \"Mensah\",\n  \"email\": \"subagent@example.com\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12]\n}" }
+          }
+        },
+        {
+          "name": "Reassign agency supervisor (admin)",
+          "request": {
+            "method": "PATCH",
+            "url": { "raw": "{{baseUrl}}/admin/agents/42/supervisor", "host": ["{{baseUrl}}"], "path": ["admin","agents","42","supervisor"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"supervisor_user_id\": 7,\n  \"effective_from\": \"2026-05-01\",\n  \"reason\": \"Transfer IT Voyages to Esther Ahouman\"\n}" },
+            "description": "Admin JWT only. Moves a top-level partner/agency to another sub-admin (or admin). Policies, policy numbers, identifiers and agency codes are retained. Writes agency_supervision_history periods."
+          }
+        },
+        {
+          "name": "Agency supervision history (admin)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/admin/agents/42/supervision-history", "host": ["{{baseUrl}}"], "path": ["admin","agents","42","supervision-history"] },
+            "description": "Admin JWT only. Management periods by date for the agency (e.g. Mar–Apr Admin, from May Sub-Admin Esther)."
           }
         },
         {

@@ -380,11 +380,13 @@ These endpoints are part of the staff/admin surface. They are reachable via
 |---|---|---|---|
 | POST | `/admin/create-agent` | SUB | Create an agency account. Returns the temporary password. |
 | GET | `/admin/list-agents` | SUB | Paginated list of agencies. |
-| GET | `/admin/agents/:id` | SUB | One agency + its sub-agents. |
+| GET | `/admin/agents/:id` | SUB | One agency + its sub-agents. Includes current `supervisor_*` fields for top-level agencies. |
 | PATCH | `/admin/agents/:id` | SUB | Update profile fields. |
 | DELETE | `/admin/agents/:id` | SUB | Remove an agency (and optionally its hierarchy). |
 | GET | `/admin/agents/:id/sub-agents` | SUB | Sub-agents under an agency. |
 | POST | `/admin/agents/:id/sub-agents` | SUB | Create a sub-agent. |
+| PATCH | `/admin/agents/:id/supervisor` | ADMIN | Reassign a top-level partner / travel agency to another supervising account (sub-admin or admin). **Does not alter** sales, policies, policy numbers, identifiers or agency codes. |
+| GET | `/admin/agents/:id/supervision-history` | ADMIN | Management periods for an agency (who supervised from/to, who recorded the change). |
 | PATCH | `/admin/users/status` | SUB | Activate / deactivate a user. |
 | POST | `/admin/send-reset-link` | SUB | Email a password-reset link to a user. |
 | GET | `/admin/dashboard` | SUB | KPIs for the home page. |
@@ -397,6 +399,102 @@ These endpoints are part of the staff/admin surface. They are reachable via
 | POST | `/admin/create-sub-admin` | ADMIN | Create a sub-administrator. |
 | GET | `/admin/sub-admins` | ADMIN | List sub-administrators. |
 | DELETE | `/admin/sub-admins/:id` | ADMIN | Delete a sub-administrator. |
+
+### PATCH /admin/agents/:id/supervisor — reassign supervising account (admin JWT only)
+
+Transfers ownership scope of a **top-level** agency (`role=agent`, no `parent_agent_id`) from one admin/sub-admin to another. Historical cases and sales stay intact; future visibility follows the new supervisor via `users.created_by_id`. An audit row is written to `agency_supervision_history` and a short entry is logged in Activity Log.
+
+**Request**
+
+```json
+{
+  "supervisor_user_id": 7,
+  "effective_from": "2026-05-01",
+  "reason": "Transfer IT Voyages to Esther Ahouman"
+}
+```
+
+| Field | Required | Notes |
+|---|---|---|
+| `supervisor_user_id` | yes | Target user id; must be `admin` or `sub_admin`. |
+| `effective_from` | no | `YYYY-MM-DD`. Defaults to today. Previous open period ends the day before. |
+| `reason` | no | Free text (max 500 chars), stored on the history row. |
+
+**Response (200)**
+
+```json
+{
+  "success": true,
+  "message": "Agency reassigned successfully. Historical data retained.",
+  "data": {
+    "agency": {
+      "id": 42,
+      "name": "IT Voyages Contact",
+      "company_name": "IT Voyages",
+      "supervisor_user_id": 7,
+      "supervisor_name": "Esther Ahouman",
+      "supervisor_email": "esther@example.com",
+      "supervisor_role": "sub_admin"
+    },
+    "previous_supervisor_user_id": 1,
+    "new_supervisor_user_id": 7,
+    "history": [
+      {
+        "id": 1,
+        "supervisor_user_id": 1,
+        "supervisor_name": "Admin",
+        "supervisor_role": "admin",
+        "effective_from": "2026-03-01",
+        "effective_to": "2026-04-30",
+        "changed_by_user_id": 1,
+        "changed_by_name": "Admin",
+        "reason": "Period before reassignment (auto-recorded)",
+        "created_at": "2026-05-01T10:00:00.000Z",
+        "is_current": false
+      },
+      {
+        "id": 2,
+        "supervisor_user_id": 7,
+        "supervisor_name": "Esther Ahouman",
+        "supervisor_role": "sub_admin",
+        "effective_from": "2026-05-01",
+        "effective_to": null,
+        "changed_by_user_id": 1,
+        "changed_by_name": "Admin",
+        "reason": "Transfer IT Voyages to Esther Ahouman",
+        "created_at": "2026-05-01T10:00:00.000Z",
+        "is_current": true
+      }
+    ]
+  }
+}
+```
+
+Errors: `400` (missing / invalid supervisor, already assigned), `403` (not admin), `404` (agency or supervisor not found).
+
+### GET /admin/agents/:id/supervision-history — management periods (admin JWT only)
+
+**Response (200)**
+
+```json
+{
+  "success": true,
+  "data": {
+    "agency": {
+      "id": 42,
+      "name": "IT Voyages Contact",
+      "company_name": "IT Voyages",
+      "supervisor_user_id": 7,
+      "supervisor_name": "Esther Ahouman",
+      "supervisor_email": "esther@example.com",
+      "supervisor_role": "sub_admin"
+    },
+    "history": [ /* same shape as above; ordered by effective_from ASC */ ]
+  }
+}
+```
+
+If the agency has never been reassigned, the API may auto-record an open period from the agency's `created_at` under the current supervisor so the UI can show a complete timeline.
 
 ### User (JWT)
 

@@ -45,7 +45,11 @@ tags:
   - name: Reports
     description: Aggregated ledger and "invoices by region" views.
   - name: Agents
-    description: Agency-management endpoints (used by AssurAssistance staff and field-sales sub-administrators).
+    description: |
+      Agency-management endpoints (used by AssurAssistance staff and field-sales
+      sub-administrators). Admin-only reassignment endpoints move a partner /
+      travel agency between supervising accounts without losing historical
+      policies or identifiers (`PATCH/GET …/supervisor` and `…/supervision-history`).
   - name: Users
     description: Self-service profile, dashboard, and password endpoints for the logged-in user (JWT only).
   - name: Reconciliation
@@ -136,6 +140,30 @@ components:
         total: { type: integer }
         page: { type: integer }
         limit: { type: integer }
+
+    AgencySupervisionPeriod:
+      type: object
+      description: |
+        One management period for a top-level partner / travel agency.
+        `effective_to` null means the period is current / ongoing.
+      properties:
+        id: { type: integer }
+        agency_user_id: { type: integer }
+        supervisor_user_id: { type: integer, nullable: true }
+        supervisor_name: { type: string, nullable: true }
+        supervisor_email: { type: string, nullable: true }
+        supervisor_role:
+          type: string
+          nullable: true
+          description: Typically `admin` or `sub_admin`.
+        effective_from: { type: string, format: date, example: "2026-03-01" }
+        effective_to: { type: string, format: date, nullable: true, example: "2026-04-30" }
+        changed_by_user_id: { type: integer }
+        changed_by_name: { type: string, nullable: true }
+        changed_by_email: { type: string, nullable: true }
+        reason: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        is_current: { type: boolean }
 
     LoginRequest:
       type: object
@@ -1214,6 +1242,143 @@ paths:
                   success: { type: boolean }
                   message: { type: string }
                   deletedCount: { type: integer }
+
+  /admin/agents/{id}/supervisor:
+    patch:
+      tags: [Agents]
+      summary: Reassign a partner / travel agency to another supervising account.
+      description: |
+        **Admin JWT only** (not available via API key). Moves a top-level agency
+        (`role=agent`, no parent) from one admin/sub-admin to another by updating
+        `users.created_by_id` and appending a period to `agency_supervision_history`.
+
+        **Historical data is retained:** issued policies, policy numbers,
+        identifiers and agency codes are unchanged. Future visibility for the
+        new sub-admin follows the updated ownership.
+
+        Set `effective_from` to backdate the cutover (e.g. `2026-05-01` so
+        March–April remain under the previous supervisor in the audit trail).
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer }, description: Top-level agency user id. }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [supervisor_user_id]
+              properties:
+                supervisor_user_id:
+                  type: integer
+                  description: Target supervising account (`admin` or `sub_admin` user id).
+                  example: 7
+                effective_from:
+                  type: string
+                  format: date
+                  description: Start of the new management period (YYYY-MM-DD). Defaults to today. Previous period ends the day before.
+                  example: "2026-05-01"
+                reason:
+                  type: string
+                  maxLength: 500
+                  nullable: true
+                  example: "Transfer IT Voyages to Esther Ahouman"
+            example:
+              supervisor_user_id: 7
+              effective_from: "2026-05-01"
+              reason: "Transfer IT Voyages to Esther Ahouman"
+      responses:
+        "200":
+          description: Agency reassigned; full supervision history returned.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      agency:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          name: { type: string }
+                          company_name: { type: string, nullable: true }
+                          supervisor_user_id: { type: integer, nullable: true }
+                          supervisor_name: { type: string, nullable: true }
+                          supervisor_email: { type: string, nullable: true }
+                          supervisor_role: { type: string, nullable: true }
+                      previous_supervisor_user_id: { type: integer, nullable: true }
+                      new_supervisor_user_id: { type: integer, nullable: true }
+                      history:
+                        type: array
+                        items: { $ref: '#/components/schemas/AgencySupervisionPeriod' }
+        "400":
+          description: Invalid supervisor, or agency already assigned to that account.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "403":
+          description: Caller is not an admin.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Agency or supervisor not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/agents/{id}/supervision-history:
+    get:
+      tags: [Agents]
+      summary: Management history by period for a partner / travel agency.
+      description: |
+        **Admin JWT only.** Returns ordered supervision periods so the platform
+        can display e.g. "March to April: managed by Admin" / "From May onward:
+        managed by Sub-Admin Esther Ahouman".
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Current agency supervisor + period history.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      agency:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          name: { type: string }
+                          company_name: { type: string, nullable: true }
+                          supervisor_user_id: { type: integer, nullable: true }
+                          supervisor_name: { type: string, nullable: true }
+                          supervisor_email: { type: string, nullable: true }
+                          supervisor_role: { type: string, nullable: true }
+                      history:
+                        type: array
+                        items: { $ref: '#/components/schemas/AgencySupervisionPeriod' }
+        "403":
+          description: Caller is not an admin.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "404":
+          description: Agency not found (must be a top-level partner).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /admin/api-keys:
     post:

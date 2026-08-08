@@ -23,6 +23,14 @@ import getPool from '../utils/db.js';
 import { generateStrongPassword } from '../utils/passwordUtils.js';
 import sendEmail from '../utils/emailService.js';
 import { agentWelcomeTemplate, passwordResetLinkTemplate } from '../utils/emailTemplates.js';
+import { logActivity } from '../models/activityModel.js';
+import {
+  reassignAgencySupervisor,
+  listSupervisionHistory,
+  recordInitialSupervision,
+  getTopLevelAgencyById,
+  ensureOpenSupervisionPeriod
+} from '../models/agencySupervisionModel.js';
 
 const REQUIRED_AGENT_FIELDS = ['company_name', 'partnership_type', 'country_of_residence', 'whatsapp_phone'];
 
@@ -77,6 +85,16 @@ export const createAgent = async (req, res) => {
 
     if (assigned_plan_ids && Array.isArray(assigned_plan_ids) && assigned_plan_ids.length > 0) {
       await setAgentAssignedPlans(userId, assigned_plan_ids.map((id) => parseInt(id, 10)));
+    }
+
+    try {
+      await recordInitialSupervision({
+        agencyUserId: userId,
+        supervisorUserId: req.user?.id ?? null,
+        changedByUserId: req.user?.id ?? userId,
+      });
+    } catch (histErr) {
+      console.error('Failed to record initial supervision history:', histErr);
     }
 
     // Send welcome email to agent
@@ -207,6 +225,10 @@ export const listPartners = async (req, res) => {
          u.geographical_location,
          u.work_phone,
          u.whatsapp_phone,
+         u.created_by_id AS supervisor_user_id,
+         s.name AS supervisor_name,
+         s.email AS supervisor_email,
+         s.role AS supervisor_role,
          (
            SELECT COUNT(*)
            FROM users d
@@ -241,6 +263,7 @@ export const listPartners = async (req, res) => {
               )
          ) AS total_cases
        FROM users u
+       LEFT JOIN users s ON s.id = u.created_by_id
        ${whereClause}
        ORDER BY u.company_name IS NULL, u.company_name ASC, u.name ASC
        LIMIT ? OFFSET ?`,
@@ -266,6 +289,10 @@ export const listPartners = async (req, res) => {
           geographical_location: p.geographical_location,
           work_phone: p.work_phone,
           whatsapp_phone: p.whatsapp_phone,
+          supervisor_user_id: p.supervisor_user_id,
+          supervisor_name: p.supervisor_name,
+          supervisor_email: p.supervisor_email,
+          supervisor_role: p.supervisor_role,
           account_count: Number(p.account_count) || 0,
           direct_agent_count: Number(p.direct_agent_count) || 0,
           total_cases: Number(p.total_cases) || 0
@@ -327,17 +354,20 @@ export const listAgents = async (req, res) => {
       params
     );
     
-    // Get paginated results (include agent profile fields and assigned plan ids)
+    // Get paginated results (include agent profile fields, supervising account, assigned plan ids)
     const [agents] = await pool.query(`
       SELECT 
         u.id, u.name, u.email, u.status, u.created_at, u.force_password_change, u.last_login,
         u.company_name, u.partnership_type, u.country_of_residence, u.iata_number,
         u.geographical_location, u.work_phone, u.whatsapp_phone,
+        u.created_by_id AS supervisor_user_id,
+        sup.name AS supervisor_name, sup.email AS supervisor_email, sup.role AS supervisor_role,
         GROUP_CONCAT(DISTINCT uap.catalogue_id) AS assigned_plan_ids,
         COUNT(DISTINCT c.id) as total_cases,
         COALESCE(SUM(DISTINCT s.received_amount), 0) as total_collected,
         MAX(a.activity_date) as last_activity
       FROM users u
+      LEFT JOIN users sup ON sup.id = u.created_by_id
       LEFT JOIN cases c ON c.created_by = u.id
       LEFT JOIN sales s ON s.case_id = c.id
       LEFT JOIN user_activity a ON a.user_id = u.id
@@ -607,6 +637,18 @@ export const getAgent = async (req, res) => {
       const children = await getSubAgents(parseInt(id, 10));
       sub_agents = children.map((s) => ({ ...mapSubAgentRow(s), type: 'sub_agent' }));
     }
+
+    let supervisor_user_id = isSupervisor ? (user.created_by_id ?? null) : null;
+    let supervisor_name = null;
+    let supervisor_email = null;
+    let supervisor_role = null;
+    if (supervisor_user_id != null) {
+      const sup = await findUserById(supervisor_user_id);
+      supervisor_name = sup?.name ?? null;
+      supervisor_email = sup?.email ?? null;
+      supervisor_role = sup?.role_name ?? null;
+    }
+
     res.json({
       success: true,
       data: {
@@ -627,12 +669,116 @@ export const getAgent = async (req, res) => {
         assigned_plan_ids,
         parent_agent_id: user.parent_agent_id,
         type: userType,
-        sub_agents
+        sub_agents,
+        supervisor_user_id,
+        supervisor_name,
+        supervisor_email,
+        supervisor_role
       }
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * Admin-only: reassign a top-level partner / travel agency to another supervising
+ * account (sub-admin or admin). Sales, policies and agency codes are unchanged;
+ * only users.created_by_id and agency_supervision_history are updated.
+ */
+export const reassignAgentSupervisor = async (req, res) => {
+  try {
+    const agencyId = parseInt(req.params.id, 10);
+    if (!agencyId) return res.status(400).json({ success: false, message: 'Invalid agency id' });
+
+    const { supervisor_user_id, effective_from, reason } = req.body || {};
+    if (supervisor_user_id == null || supervisor_user_id === '') {
+      return res.status(400).json({
+        success: false,
+        message: 'supervisor_user_id is required (sub-administrator or admin id)'
+      });
+    }
+
+    const result = await reassignAgencySupervisor({
+      agencyId,
+      newSupervisorId: Number(supervisor_user_id),
+      effectiveFrom: effective_from || null,
+      changedByUserId: req.user.id,
+      reason: reason ? String(reason).slice(0, 500) : null
+    });
+
+    try {
+      // user_activity.activity_type is varchar(100)
+      const activity = `agency_reassign:${agencyId}->${result.newSupervisorId}`;
+      await logActivity(req.user.id, activity.slice(0, 100));
+    } catch (logErr) {
+      console.error('Failed to log agency reassignment activity:', logErr);
+    }
+
+    res.json({
+      success: true,
+      message: 'Agency reassigned successfully. Historical data retained.',
+      data: {
+        agency: {
+          id: result.agency.id,
+          name: result.agency.name,
+          company_name: result.agency.company_name,
+          supervisor_user_id: result.agency.supervisor_id,
+          supervisor_name: result.agency.supervisor_name,
+          supervisor_email: result.agency.supervisor_email,
+          supervisor_role: result.agency.supervisor_role
+        },
+        previous_supervisor_user_id: result.previousSupervisorId,
+        new_supervisor_user_id: result.newSupervisorId,
+        history: result.history
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    const status = err.status || 500;
+    res.status(status).json({
+      success: false,
+      message: err.status ? err.message : 'Server error'
+    });
+  }
+};
+
+/** Admin-only: management periods for a partner / travel agency. */
+export const getAgentSupervisionHistory = async (req, res) => {
+  try {
+    const agencyId = parseInt(req.params.id, 10);
+    if (!agencyId) return res.status(400).json({ success: false, message: 'Invalid agency id' });
+
+    const agency = await getTopLevelAgencyById(agencyId);
+    if (!agency) {
+      return res.status(404).json({
+        success: false,
+        message: 'Agency not found (must be a top-level partner / travel agency)'
+      });
+    }
+
+    await ensureOpenSupervisionPeriod(agency, req.user.id);
+    const history = await listSupervisionHistory(agencyId);
+
+    res.json({
+      success: true,
+      data: {
+        agency: {
+          id: agency.id,
+          name: agency.name,
+          company_name: agency.company_name,
+          supervisor_user_id: agency.supervisor_id,
+          supervisor_name: agency.supervisor_name,
+          supervisor_email: agency.supervisor_email,
+          supervisor_role: agency.supervisor_role
+        },
+        history
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 

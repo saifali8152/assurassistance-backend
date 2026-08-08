@@ -124,8 +124,13 @@ the endpoint.
 | `sales:payment` | `PATCH /sales/{id}/payment` |
 | `ledger:read` | `GET /ledger`, `GET /ledger/export` |
 | `invoices:read` | `GET /invoice-ledger`, `GET /invoice-ledger/export` |
-| `agents:read` | (reserved) |
-| `agents:write` | (reserved) |
+| `agents:read` | (reserved — agency list/profile for future key access) |
+| `agents:write` | (reserved — agency mutations for future key access) |
+
+**Agency reassignment** (`PATCH /admin/agents/{id}/supervisor` and
+`GET /admin/agents/{id}/supervision-history`) is **admin JWT only** — there is
+no API-key scope for it. See [§11b Agency reassignment](#11b-agency-reassignment--admin-jwt)
+and [`API.md`](./API.md) §7.
 
 If you call an endpoint without the right scope you'll get:
 
@@ -530,6 +535,54 @@ A ready-to-import Postman collection lives at
 [`docs/postman_collection.json`](./postman_collection.json). It defines a
 `{{baseUrl}}` and `{{apiKey}}` variable so you can flip between staging and
 production cleanly.
+
+---
+
+## 11b. Agency reassignment — admin JWT
+
+Staff integrations that manage field-sales ownership (not typical partner
+issuance flows) can reassign a top-level partner / travel agency to another
+sub-administrator **without losing historical data**.
+
+| Method | Path | Auth |
+|---|---|---|
+| PATCH | `/admin/agents/{id}/supervisor` | Admin JWT |
+| GET | `/admin/agents/{id}/supervision-history` | Admin JWT |
+
+What changes:
+
+- `users.created_by_id` on the agency (who “owns” it for visibility)
+- Rows in `agency_supervision_history` (period, supervising account, who changed it, date, reason)
+- A short Activity Log entry (`agency_reassign:{agencyId}->{supervisorId}`)
+
+What does **not** change: issued policies, policy numbers, case/sale identifiers, agency codes, premiums.
+
+Example — transfer **IT Voyages** to sub-admin **Esther Ahouman** from 1 May 2026
+(so March–April remain under Admin in the audit trail):
+
+```bash
+# 1) Login as Admin → capture JWT
+TOKEN=$(curl -s -X POST "$AAS/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@…","password":"…"}' | jq -r .token)
+
+# 2) Reassign (agency id = 42, Esther's user id = 7)
+curl -s -X PATCH "$AAS/admin/agents/42/supervisor" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "supervisor_user_id": 7,
+    "effective_from": "2026-05-01",
+    "reason": "Transfer IT Voyages to Esther Ahouman"
+  }' | jq .
+
+# 3) Read management history by period
+curl -s "$AAS/admin/agents/42/supervision-history" \
+  -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+Full request/response shapes: [`API.md`](./API.md) §7 and OpenAPI paths
+`/admin/agents/{id}/supervisor` + `/admin/agents/{id}/supervision-history`.
 
 ---
 

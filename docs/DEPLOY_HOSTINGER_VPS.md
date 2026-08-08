@@ -449,6 +449,30 @@ Certificate QR codes point to `{FRONTEND}/certificate-public/{token}`. The API s
    CERTIFICATE_WEBSITE_URL=https://www.assurassistance.org
    ```
 
+### Agency / partner reassignment (Admin → Sub-Admin)
+
+Allows Admin to transfer a travel agency (e.g. **IT Voyages**) to a sub-administrator (e.g. **Esther Ahouman**) without changing policies, policy numbers, identifiers or agency codes. Periods are stored in `agency_supervision_history`.
+
+1. **Migration (once):**
+   ```bash
+   cd /path/to/backend
+   mysql -u assurapp -p assurassistance < migrations/add_agency_supervision_history.sql
+   ```
+
+2. **UI:** Admin → Agents or Partners by type → Reassign (user icon) / Management history. Only the Admin role can reassign.
+
+3. **One-off script (IT Voyages → Esther Ahouman from 2026-05-01):**
+   ```bash
+   cd /path/to/backend
+   node scripts/reassignItVoyagesToEsther.js --dry-run
+   node scripts/reassignItVoyagesToEsther.js --effective-from=2026-05-01
+   ```
+   Optional overrides: `--agency="IT Voyages"` `--supervisor="Esther Ahouman"`.
+
+4. **API (Admin JWT):**
+   - `PATCH /api/admin/agents/:id/supervisor` body `{ supervisor_user_id, effective_from?, reason? }`
+   - `GET /api/admin/agents/:id/supervision-history`
+
 
 ssh root@187.77.172.212
 ?Eg7ouw'CcC?Dni4UKm8

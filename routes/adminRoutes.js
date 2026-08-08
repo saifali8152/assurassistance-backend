@@ -17,7 +17,9 @@ import {
   createSubAdmin,
   listSubAdmins,
   deleteSubAdmin,
-  listPartners
+  listPartners,
+  reassignAgentSupervisor,
+  getAgentSupervisionHistory
 } from '../controllers/adminController.js';
 import authenticate from '../middlewares/authMiddleware.js';
 import { adminOnly, adminOrSubAdmin } from '../middlewares/roleMiddleware.js';
@@ -36,6 +38,9 @@ router.get('/agent-hierarchy', authenticate, adminOnly, listAgentHierarchy);
 router.get('/agents/:id', authenticate, adminOrSubAdmin, getAgent);
 router.patch('/agents/:id', authenticate, adminOrSubAdmin, updateAgent);
 router.delete('/agents/:id', authenticate, adminOrSubAdmin, deleteAgentOrHierarchy);
+// Admin-only: reassign partner/agency to another sub-admin (keeps historical sales/policies).
+router.patch('/agents/:id/supervisor', authenticate, adminOnly, reassignAgentSupervisor);
+router.get('/agents/:id/supervision-history', authenticate, adminOnly, getAgentSupervisionHistory);
 router.get('/agents/:id/sub-agents', authenticate, adminOrSubAdmin, listSubAgents);
 router.post('/agents/:id/sub-agents', authenticate, adminOrSubAdmin, createSubAgent);
 router.patch('/users/status', authenticate, adminOrSubAdmin, changeUserStatus);

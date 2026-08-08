@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import {
   normalizeCurrency,
   currencyLabel,
@@ -8,6 +9,9 @@ import {
   formatAmountCell,
   convertAmount,
 } from "./currencyDisplay.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PUBLIC_DIR = path.join(__dirname, "..", "public");
 
 const ORANGE = "#E4590F";
 const DARK = "#333333";
@@ -25,14 +29,17 @@ const COMPANY = {
 const I18N = {
   fr: {
     title: "FACTURE DE PRIMES D'ASSURANCE VOYAGE",
+    receiptTitle: "REÇU DE PRIMES D'ASSURANCE VOYAGE",
     subtitle: "(Assur'Assistance)",
     address: "Adresse :",
     phone: "Téléphone :",
     tel: "N°Tel :",
     email: "Email :",
     billedTo: "FACTURÉ À :",
+    receiptTo: "REÇU POUR :",
     agencyName: "Nom de l'agence de voyage :",
     invoiceNo: "Facture N° :",
+    receiptNo: "Reçu N° :",
     issueDate: "Date d'émission :",
     billingPeriod: "Période de facturation :",
     fromTo: (a, b) => `Du ${a} au ${b}`,
@@ -50,21 +57,27 @@ const I18N = {
     discountRate: (pct) => `Remise appliquée : ${pct} %`,
     paymentTitle: "MODALITÉS DE PAIEMENT",
     paymentMode: "Mode : Mobile money (Qr Code de reversement)",
+    receiptPaymentTitle: "ACCUSÉ DE RÉCEPTION",
+    receiptPaymentMode: "Les polices listées ci-dessous sont marquées comme payées.",
     observationsTitle: "Observations :",
     observations: "Merci de bien vouloir procéder au règlement dans les délais indiqués.",
+    receiptObservations: "Ce reçu confirme le règlement des polices sélectionnées.",
     signature: "Signature et cachet",
     noSales: "Aucune vente confirmée sur la période.",
   },
   en: {
     title: "TRAVEL INSURANCE PREMIUM INVOICE",
+    receiptTitle: "TRAVEL INSURANCE PREMIUM RECEIPT",
     subtitle: "(Assur'Assistance)",
     address: "Address:",
     phone: "Phone:",
     tel: "Tel:",
     email: "Email:",
     billedTo: "BILLED TO:",
+    receiptTo: "RECEIPT FOR:",
     agencyName: "Travel agency name:",
     invoiceNo: "Invoice No:",
+    receiptNo: "Receipt No:",
     issueDate: "Issue date:",
     billingPeriod: "Billing period:",
     fromTo: (a, b) => `From ${a} to ${b}`,
@@ -82,12 +95,28 @@ const I18N = {
     discountRate: (pct) => `Discount applied: ${pct}%`,
     paymentTitle: "PAYMENT TERMS",
     paymentMode: "Mode: Mobile money (transfer QR code)",
+    receiptPaymentTitle: "PAYMENT ACKNOWLEDGEMENT",
+    receiptPaymentMode: "The policies listed below are marked as paid.",
     observationsTitle: "Observations:",
     observations: "Please proceed with payment within the indicated deadlines.",
+    receiptObservations: "This receipt confirms settlement of the selected policies.",
     signature: "Signature and stamp",
     noSales: "No confirmed sales in this period.",
   },
 };
+
+/** Resolve PAID / SETTLED stamp PNG for the document locale. */
+export function resolveStampFsPath(stamp, locale = "fr") {
+  const kind = String(stamp || "none").toLowerCase();
+  if (kind !== "paid" && kind !== "settled") return null;
+  const lang = locale === "fr" ? "fr" : "en";
+  const file = `${kind}-${lang}.png`;
+  const cwd = process.cwd();
+  return tryImagePath(
+    path.join(PUBLIC_DIR, "stamps", file),
+    path.join(cwd, "public", "stamps", file)
+  );
+}
 
 const MONTHS_FR = ["JANVIER", "FÉVRIER", "MARS", "AVRIL", "MAI", "JUIN", "JUILLET", "AOÛT", "SEPTEMBRE", "OCTOBRE", "NOVEMBRE", "DÉCEMBRE"];
 const MONTHS_EN = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
@@ -176,22 +205,30 @@ function cellText(line, displayCurrency, locale) {
 }
 
 /**
- * Generate the partner (travel agency) premium invoice PDF.
+ * Generate the partner (travel agency) premium invoice or receipt PDF.
  * Each line keeps its own sale currency; amounts are converted to `currency` for display.
  * Returns a Buffer.
+ *
+ * @param {object} opts
+ * @param {"invoice"|"receipt"} [opts.documentType="invoice"]
+ * @param {"none"|"paid"|"settled"} [opts.stamp="none"]  Overlay stamp (receipts; optional on invoices)
  */
 export const generatePartnerInvoicePDF = async ({
   invoiceNumber,
   partner,          // { name, company_name, geographical_location, work_phone, whatsapp_phone, email }
-  lines,            // rows from getPartnerSalesForPeriod (amounts in XOF)
-  totals,           // { totalPremiums, totalCommissions, netToTransfer } in XOF
+  lines,            // rows from getPartnerSalesForPeriod
+  totals,           // { totalPremiums, totalCommissions, netToTransfer, discountPct? }
   startDate,
   endDate,
   partnerLogoFsPath = null,
   locale = "fr",
   currency = "XOF",
+  documentType = "invoice",
+  stamp = "none",
 }) => {
-  const L = I18N[locale === "fr" ? "fr" : "en"];
+  const lang = locale === "fr" ? "fr" : "en";
+  const L = I18N[lang];
+  const isReceipt = String(documentType).toLowerCase() === "receipt";
   const displayCurrency = normalizeCurrency(currency);
   const curLabel = currencyLabel(displayCurrency);
   const margin = 25;
@@ -209,25 +246,33 @@ export const generatePartnerInvoicePDF = async ({
     const rightEdge = pageW - margin;
     const cwd = process.cwd();
 
+    // Assur'Assistance (left) — prefer backend/public so VPS deploys without the frontend tree
     const mainLogo = tryImagePath(
-      path.join(cwd, "..", "frontend", "public", "full-logo.png"),
+      path.join(PUBLIC_DIR, "full-logo.png"),
       path.join(cwd, "public", "full-logo.png"),
+      path.join(cwd, "..", "frontend", "public", "full-logo.png"),
       path.join(cwd, "public", "logo.png")
     );
-    const partnerLogo =
-      partnerLogoFsPath && fs.existsSync(partnerLogoFsPath) ? partnerLogoFsPath : null;
+    // GNA (right) — catalogue insurer upload when present, else bundled fallback
+    const gnaLogo = tryImagePath(
+      partnerLogoFsPath && fs.existsSync(partnerLogoFsPath) ? partnerLogoFsPath : null,
+      path.join(PUBLIC_DIR, "gna-logo.png"),
+      path.join(cwd, "public", "gna-logo.png")
+    );
+    const stampPath = resolveStampFsPath(stamp, lang);
 
-    // ---------- Header: company logo left, insurer logo (e.g. GNA) right ----------
+    // ---------- Header: Assur'Assistance left, GNA right ----------
     const headerTop = 25;
     const logoH = 42;
     if (mainLogo) {
       try { doc.image(mainLogo, leftX, headerTop, { fit: [150, logoH] }); } catch {}
     }
-    if (partnerLogo) {
-      try { doc.image(partnerLogo, rightEdge - 130, headerTop, { fit: [130, logoH] }); } catch {}
+    if (gnaLogo) {
+      try { doc.image(gnaLogo, rightEdge - 130, headerTop, { fit: [130, logoH] }); } catch {}
     }
+    const docTitle = isReceipt ? L.receiptTitle : L.title;
     doc.fillColor(ORANGE).font("Helvetica-Bold").fontSize(10.5);
-    doc.text(L.title, leftX + 155, headerTop + 8, {
+    doc.text(docTitle, leftX + 155, headerTop + 8, {
       width: usable - 300, align: "center", height: 12, lineBreak: false, ellipsis: false,
     });
     doc.fillColor(DARK).font("Helvetica").fontSize(8);
@@ -260,7 +305,8 @@ export const generatePartnerInvoicePDF = async ({
     const agencyPhone = partner.work_phone || partner.whatsapp_phone || "";
     const agencyEmail = partner.email || "";
 
-    doc.fillColor(DARK).font("Helvetica-Bold").fontSize(11).text(L.billedTo, blockX, y);
+    doc.fillColor(DARK).font("Helvetica-Bold").fontSize(11)
+      .text(isReceipt ? L.receiptTo : L.billedTo, blockX, y);
     y += 18;
     doc.fontSize(9).font("Helvetica").fillColor(GRAY)
       .text(`${L.agencyName} `, blockX, y, { continued: true })
@@ -277,8 +323,9 @@ export const generatePartnerInvoicePDF = async ({
     doc.fillColor(DARK);
     y += 24;
 
-    // ---------- Invoice meta ----------
-    doc.fillColor(GRAY).fontSize(9).text(`${L.invoiceNo} `, blockX, y, { continued: true })
+    // ---------- Invoice / receipt meta ----------
+    doc.fillColor(GRAY).fontSize(9)
+      .text(`${isReceipt ? L.receiptNo : L.invoiceNo} `, blockX, y, { continued: true })
       .fillColor(DARK).font("Helvetica-Bold").text(invoiceNumber);
     y += 18;
     doc.font("Helvetica").fillColor(GRAY).text(`${L.issueDate} `, blockX, y, { continued: true })
@@ -401,21 +448,40 @@ export const generatePartnerInvoicePDF = async ({
     // ---------- Payment terms / observations / signature ----------
     y = ensureSpace(y, 170);
     y += 15;
-    doc.fillColor(DARK).font("Helvetica-Bold").fontSize(10).text(L.paymentTitle, blockX, y);
+    doc.fillColor(DARK).font("Helvetica-Bold").fontSize(10)
+      .text(isReceipt ? L.receiptPaymentTitle : L.paymentTitle, blockX, y);
     y += 20;
-    doc.font("Helvetica").fontSize(9).text(L.paymentMode, blockX, y);
+    doc.font("Helvetica").fontSize(9)
+      .text(isReceipt ? L.receiptPaymentMode : L.paymentMode, blockX, y);
     y += 26;
     dashedSeparator(doc, blockX, y, 230);
     y += 14;
     doc.font("Helvetica").fontSize(9).fillColor(DARK).text(L.observationsTitle, blockX, y);
     y += 13;
-    doc.text(L.observations, blockX, y);
+    doc.text(isReceipt ? L.receiptObservations : L.observations, blockX, y);
     y += 26;
     dashedSeparator(doc, blockX, y, 230);
     y += 18;
     doc.text(L.signature, blockX, y);
     y += 26;
     doc.font("Helvetica-Bold").text(COMPANY.name, blockX, y);
+
+    // ---------- Optional PAID / SETTLED stamp overlay ----------
+    if (stampPath) {
+      try {
+        const stampW = 160;
+        const stampH = 110;
+        const stampX = rightEdge - stampW - 10;
+        const stampY = Math.min(y - 40, doc.page.height - margin - stampH - 20);
+        doc.save();
+        doc.opacity(0.88);
+        doc.rotate(-12, { origin: [stampX + stampW / 2, stampY + stampH / 2] });
+        doc.image(stampPath, stampX, stampY, { fit: [stampW, stampH] });
+        doc.restore();
+      } catch (e) {
+        console.warn("Partner invoice stamp overlay skipped:", e?.message || e);
+      }
+    }
 
     doc.end();
   });

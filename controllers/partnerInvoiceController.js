@@ -40,6 +40,21 @@ function parseInvoiceOptions(req) {
   return { discountPct, saleIds };
 }
 
+function parseDocumentType(req) {
+  const raw = String(req.query.documentType || req.query.mode || "invoice").toLowerCase();
+  return raw === "receipt" ? "receipt" : "invoice";
+}
+
+function parseStamp(req) {
+  const raw = String(req.query.stamp || "none").toLowerCase();
+  if (raw === "paid" || raw === "settled") return raw;
+  return "none";
+}
+
+function isPaidLine(line) {
+  return String(line?.payment_status || "").toLowerCase() === "paid" && !line?.is_deleted;
+}
+
 function localeFromReq(req) {
   const al = (req.get("Accept-Language") || "").toLowerCase();
   return al.startsWith("fr") ? "fr" : "en";
@@ -96,11 +111,12 @@ async function loadInvoiceData(partner, startDate, endDate, { saleIds = null, di
   return { lines, totals: computeInvoiceTotals(lines, { discountPct }) };
 }
 
-function buildInvoiceNumber(partner, startDate) {
+function buildDocumentNumber(partner, startDate, documentType = "invoice") {
   const slug = String(partner.company_name || partner.name || `partner-${partner.id}`)
     .trim()
     .replace(/\s+/g, "-");
-  return `INV ${slug} _ ${startDate.slice(0, 7).replace("-", "")}`;
+  const prefix = documentType === "receipt" ? "RCP" : "INV";
+  return `${prefix} ${slug} _ ${startDate.slice(0, 7).replace("-", "")}`;
 }
 
 /**
@@ -172,7 +188,7 @@ export const getPartnerInvoice = async (req, res) => {
     res.json({
       success: true,
       data: {
-        invoiceNumber: buildInvoiceNumber(partner, period.startDate),
+        invoiceNumber: buildDocumentNumber(partner, period.startDate, "invoice"),
         partner: {
           id: partner.id,
           name: partner.name,
@@ -196,8 +212,11 @@ export const getPartnerInvoice = async (req, res) => {
 
 /**
  * GET /api/partner-invoices/:partnerId/pdf?startDate&endDate
- * The invoice PDF in the official format (logos, addresses, premium breakdown,
+ * Invoice or receipt PDF (Assur'Assistance + GNA logos, premium breakdown,
  * commissions deducted from the total premium).
+ *
+ * Query: documentType=invoice|receipt, stamp=none|paid|settled
+ * Receipts only include policies with payment_status=Paid (non-deleted).
  */
 export const downloadPartnerInvoicePdf = async (req, res) => {
   try {
@@ -208,10 +227,26 @@ export const downloadPartnerInvoicePdf = async (req, res) => {
     const { partner, error } = await resolvePartner(req, req.params.partnerId);
     if (error) return res.status(error.status).json({ success: false, message: error.message });
 
+    const documentType = parseDocumentType(req);
+    const stamp = parseStamp(req);
     const options = parseInvoiceOptions(req);
-    const { lines, totals } = await loadInvoiceData(partner, period.startDate, period.endDate, options);
+    let { lines, totals } = await loadInvoiceData(partner, period.startDate, period.endDate, options);
+
+    if (documentType === "receipt") {
+      lines = lines.filter(isPaidLine);
+      if (lines.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Partner receipts can only include policies marked as Paid. No paid policies were selected for this period.",
+        });
+      }
+      totals = computeInvoiceTotals(lines, { discountPct: options.discountPct });
+      // Stamps are intended for receipts; default to "paid" when omitted would surprise —
+      // keep explicit stamp only (none is allowed).
+    }
+
     const insurerLogoRel = lines.find((l) => l.partner_insurer_logo)?.partner_insurer_logo || null;
-    const invoiceNumber = buildInvoiceNumber(partner, period.startDate);
+    const invoiceNumber = buildDocumentNumber(partner, period.startDate, documentType);
 
     const pdfBuffer = await generatePartnerInvoicePDF({
       invoiceNumber,
@@ -223,6 +258,8 @@ export const downloadPartnerInvoicePdf = async (req, res) => {
       partnerLogoFsPath: partnerLogoFsFromDb(insurerLogoRel),
       locale: localeFromReq(req),
       currency: currencyFromReq(req),
+      documentType,
+      stamp,
     });
 
     const fileSlug = invoiceNumber.replace(/[^\w-]+/g, "-").replace(/-+/g, "-");

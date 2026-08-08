@@ -2414,7 +2414,7 @@ paths:
   /partner-invoices/{partnerId}/pdf:
     get:
       tags: [Partner invoices]
-      summary: Invoice PDF (optional sale selection + percentage discount). Accept-Language "fr" switches labels to French.
+      summary: Invoice or receipt PDF (Assur'Assistance + GNA logos; optional Paid-only receipt + PAID/SETTLED stamp). Accept-Language "fr" switches labels/stamps to French.
       security:
         - bearerJWT: []
       parameters:
@@ -2432,9 +2432,24 @@ paths:
           required: false
           schema: { type: number, minimum: 0, maximum: 100, default: 0 }
           description: Discount % listed on the PDF and applied to premiums and commissions.
+        - name: documentType
+          in: query
+          required: false
+          schema: { type: string, enum: [invoice, receipt], default: invoice }
+          description: Use receipt for Paid-only partner receipts.
+        - name: stamp
+          in: query
+          required: false
+          schema: { type: string, enum: [none, paid, settled], default: none }
+          description: Optional PAID/SETTLED stamp overlay (localized via Accept-Language).
       responses:
         "200":
           description: PDF file.
           content:
             application/pdf:
               schema: { type: string, format: binary }
+        "400":
+          description: Receipt requested but no Paid policies in the selection.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }

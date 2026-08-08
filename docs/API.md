@@ -698,7 +698,7 @@ Periodic premium invoices per partner (travel agency, corporate desk, …). Sub-
 | GET | `/partner-invoices/partners` | Partners the caller may invoice. |
 | GET | `/partner-invoices/summary?startDate&endDate` | Period totals: premiums, collected, commissions, net to transfer. |
 | GET | `/partner-invoices/:partnerId?startDate&endDate&saleIds&discountPct` | Invoice preview (JSON): per-sale lines with commissions + totals. |
-| GET | `/partner-invoices/:partnerId/pdf?startDate&endDate&currency&saleIds&discountPct` | Invoice PDF. `Accept-Language: fr` for French labels. |
+| GET | `/partner-invoices/:partnerId/pdf?startDate&endDate&currency&saleIds&discountPct&documentType&stamp` | Invoice or receipt PDF. Header shows **Assur'Assistance** + **GNA** logos. `Accept-Language: fr` for French labels/stamps. |
 
 ### Currency on partner invoices
 
@@ -713,6 +713,8 @@ The PDF query param `currency` (`XOF` \| `USD` \| `EUR`) is the **display** curr
 | `saleIds` | Comma-separated sale ids to **include**. Omit to include all confirmed sales in the period. Empty string → no lines. |
 | `discountPct` | Percentage discount `0`–`100` applied to **total policies issued** (premiums) **and** **total commissions to deduct**. Shown on the PDF when greater than 0. Net = discounted premiums − discounted commissions. |
 | `currency` | (PDF only) Display currency. Converted **from each sale’s currency**, not always from XOF. |
+| `documentType` | (PDF only) `invoice` (default) or `receipt`. Receipts **only** include non-deleted lines with `payment_status=Paid`; otherwise `400`. |
+| `stamp` | (PDF only) `none` (default), `paid`, or `settled`. Overlays a localized PAID/PAYÉ stamp on the PDF (FR/EN from `Accept-Language`). |
 
 Example (Agico partner, display USD, no commission):
 
@@ -724,6 +726,12 @@ Example with selection + discount:
 
 ```
 GET /partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&saleIds=100,101,105&discountPct=10
+```
+
+Example partner receipt (Paid policies + PAID stamp):
+
+```
+GET /partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&documentType=receipt&stamp=paid&saleIds=100,105
 ```
 
 ---

@@ -20,6 +20,10 @@ endpoint, see [`API.md`](./API.md). For the security model, see
 - Download the invoice and the certificate PDFs.
 - Mark invoices as paid.
 - Pull the sales ledger and the "invoices by region" report.
+- Generate partner period invoices / Paid-only receipts (admin or sub-admin JWT),
+  with Assur'Assistance + GNA logos and optional PAID / SETTLED stamps.
+- Download contractual documentation (Terms & Conditions full / brief); Admin
+  uploads and replaces those files.
 
 Everything the AssurAssistance web app can do, your integration can do —
 within the **scopes** your API key was issued with.
@@ -450,6 +454,79 @@ build a dashboard:
 
 `regionBy` accepts: `residence` (traveller's country of residence, default),
 `destination` (travel corridor), or `agent` (selling agent's country).
+
+### Partner invoices & receipts (admin / sub-admin JWT)
+
+Periodic premium invoices for a top-level partner (travel agency, corporate
+desk, …). **Auth:** admin or sub-admin **JWT** only (not API keys). Sub-admins
+only see agencies under their supervision.
+
+PDF headers always include the **Assur'Assistance** logo and the **GNA** logo
+(plan insurer upload when present, otherwise the bundled GNA fallback).
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/partner-invoices/partners` | Partners the caller may invoice |
+| GET | `/partner-invoices/summary?startDate&endDate` | Scope-wide premiums / collected / commissions |
+| GET | `/partner-invoices/:partnerId?startDate&endDate` | JSON preview (lines + commission totals) |
+| GET | `/partner-invoices/:partnerId/pdf?…` | Invoice or receipt PDF |
+
+**PDF query parameters**
+
+| Param | Values | Description |
+|-------|--------|-------------|
+| `startDate` / `endDate` | `YYYY-MM-DD` | Required billing period |
+| `currency` | `XOF` \| `USD` \| `EUR` | Display currency (converted per sale) |
+| `saleIds` | `100,101` | Optional include-list |
+| `discountPct` | `0`–`100` | Applied to premiums **and** commissions |
+| `documentType` | `invoice` (default) \| `receipt` | Receipt = **Paid** policies only |
+| `stamp` | `none` (default) \| `paid` \| `settled` | Localized stamp overlay (`Accept-Language`) |
+
+Receipts reject unpaid / soft-deleted lines. If none remain after filtering,
+the API returns **400**.
+
+```bash
+TOKEN=$(curl -s -X POST "$AAS/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@…","password":"…"}' | jq -r .token)
+
+# Invoice PDF (logos + optional selection / discount)
+curl -fOJ "$AAS/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&saleIds=100,105&discountPct=10" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept-Language: fr"
+
+# Partner receipt — Paid policies only + PAID stamp
+curl -fOJ "$AAS/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&documentType=receipt&stamp=paid&saleIds=100,105" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Accept-Language: en"
+```
+
+Stamp language follows `Accept-Language` (`fr` → PAYÉ / settled FR assets;
+otherwise English PAID / PAID IN FULL). See [`API.md`](./API.md#11-partner-invoices--api-partner-invoices-admin--sub-admin-jwt)
+for the full reference.
+
+### Contractual documents (Terms & Conditions)
+
+Two fixed slots — `full` and `brief`. Any logged-in user (JWT) may list and
+download. **Only Admin** may upload, replace, update metadata, or delete.
+When uploading, Admin must send `title` and a short `description` with the file.
+
+```bash
+# List
+curl "$AAS/contractual-documents" -H "Authorization: Bearer $TOKEN"
+
+# Download
+curl -fOJ "$AAS/contractual-documents/full/download" -H "Authorization: Bearer $TOKEN"
+
+# Admin upload / replace
+curl -X POST "$AAS/contractual-documents/full" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "title=Terms and Conditions – Full Version" \
+  -F "description=Complete contractual terms." \
+  -F "file=@./terms-full.pdf"
+```
+
+See [`API.md`](./API.md#12-contractual-documents--api-contractual-documents-jwt).
 
 ---
 

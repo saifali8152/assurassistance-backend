@@ -29,6 +29,7 @@ import reconciliationRoute from './routes/reconciliationRoute.js';
 import activityLogRoutes from './routes/activityLogRoute.js';
 import apiKeyRoutes from './routes/apiKeyRoute.js';
 import partnerInvoiceRoutes from './routes/partnerInvoiceRoute.js';
+import contractualDocumentRoutes from './routes/contractualDocumentRoutes.js';
 
 // Initialize database pool
 const pool = initializePool({
@@ -228,6 +229,7 @@ app.use("/api/ledger", ledgerRoutes);
 app.use("/api/invoice-ledger", invoiceLedgerRoutes);
 app.use("/api/activity-log", activityLogRoutes);
 app.use("/api/partner-invoices", partnerInvoiceRoutes);
+app.use("/api/contractual-documents", contractualDocumentRoutes);
 
 // 404 for unknown API routes (so proxy gets a response, not hang)
 app.use('/api', (req, res, next) => {

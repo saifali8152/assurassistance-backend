@@ -9,6 +9,8 @@ and rendered as Swagger UI at `/api/docs`).
 - **Local:** `http://localhost:3000/api`
 - **Auth:** `Authorization: Bearer <jwt|api-key>` (see [SECURITY.md](./SECURITY.md))
 
+Notable recent additions: [partner invoices / receipts](#11-partner-invoices--api-partner-invoices-admin--sub-admin-jwt) (`documentType`, `stamp`), [contractual documents](#12-contractual-documents--api-contractual-documents-jwt) (Terms & Conditions `full` / `brief`).
+
 Legend:
 
 - **Auth?** — JWT = web-app JWT, KEY = API key, ADMIN = JWT+admin role, SUB = JWT+admin/sub-admin, PUBLIC = no auth.
@@ -691,7 +693,7 @@ If the agency has never been reassigned, the API may auto-record an open period 
 
 ## 11. Partner invoices — `/api/partner-invoices` (admin / sub-admin JWT)
 
-Periodic premium invoices per partner (travel agency, corporate desk, …). Sub-administrators only see the agencies under their supervision. Commissions are applied per coverage-duration tier (10/45/93/180/365 days) with age factors (child ÷ 2; senior premium surcharges do not inflate commission) and deducted from the premium total; they appear only on these invoices, never on individual sales. **Agico plans** (`fixed_duration_premiums`) have **commission = 0** on every line.
+Periodic premium invoices **and Paid-only partner receipts** per partner (travel agency, corporate desk, …). Sub-administrators only see the agencies under their supervision. PDF headers always show the **Assur'Assistance** logo and the **GNA** logo. Commissions are applied per coverage-duration tier (10/45/93/180/365 days) with age factors (child ÷ 2; senior premium surcharges do not inflate commission) and deducted from the premium total; they appear only on these invoices, never on individual sales. **Agico plans** (`fixed_duration_premiums`) have **commission = 0** on every line.
 
 | Method | Path | Description |
 |---|---|---|
@@ -736,7 +738,36 @@ GET /partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XO
 
 ---
 
-## 12. Health & docs
+## 12. Contractual documents — `/api/contractual-documents` (JWT)
+
+Terms & Conditions library with two fixed slots: **`full`** (Full Version / Version Complète) and **`brief`** (Brief Version / Version Brève).
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/contractual-documents` | Any JWT | List both slots (empty slots return `has_file: false`). |
+| GET | `/contractual-documents/:key` | Any JWT | Metadata for `full` or `brief`. |
+| GET | `/contractual-documents/:key/download` | Any JWT | Download the file (`Content-Disposition: attachment`). |
+| POST | `/contractual-documents/:key` | **Admin JWT** | Upload or replace. Multipart: `file`, `title`, `description` (title + description required). |
+| PATCH | `/contractual-documents/:key` | **Admin JWT** | Update title + description only (`{ title, description }`). |
+| DELETE | `/contractual-documents/:key` | **Admin JWT** | Remove the document for that slot. |
+
+Allowed file types: **PDF, DOC, DOCX** (max 15 MB). Non-admin users may only list and download.
+
+Example upload:
+
+```
+POST /contractual-documents/full
+Authorization: Bearer <admin-jwt>
+Content-Type: multipart/form-data
+
+file=<terms-full.pdf>
+title=Terms and Conditions – Full Version
+description=Complete contractual terms for Assur'Assistance travel insurance.
+```
+
+---
+
+## 13. Health & docs
 
 | Method | Path | Description |
 |---|---|---|

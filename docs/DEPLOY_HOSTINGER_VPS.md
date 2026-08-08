@@ -449,6 +449,33 @@ Certificate QR codes point to `{FRONTEND}/certificate-public/{token}`. The API s
    CERTIFICATE_WEBSITE_URL=https://www.assurassistance.org
    ```
 
+### Contractual documents (Terms & Conditions)
+
+1. **Migration (once):**
+   ```bash
+   cd /path/to/backend
+   mysql -u assurapp -p assurassistance < migrations/add_contractual_documents.sql
+   ```
+2. Ensure the API process can write `uploads/contractual-docs/` (created automatically on first upload).
+3. Redeploy backend + frontend. Menu: **Contractual Documentation Download** (FR/EN).
+   Admin uploads full / brief PDFs with title + description; other roles download only.
+
+### Partner invoices / receipts (logos + stamps)
+
+No DB migration. After pulling the latest backend:
+
+1. Ensure these assets are deployed with the backend (they ship under `backend/public/`):
+   - `public/full-logo.png` — Assur'Assistance
+   - `public/gna-logo.png` — GNA fallback (replace with official artwork if preferred)
+   - `public/stamps/paid-en.png`, `paid-fr.png`, `settled-en.png`, `settled-fr.png`
+2. Redeploy/restart the API process so PDF generation picks up the new code.
+3. Optional PDF query params for integrators / UI: `documentType=invoice|receipt`,
+   `stamp=none|paid|settled` (receipts require `payment_status=Paid`).
+
+Update the 3rd-party package docs from `backend/docs/` into
+`client-integration-package/` (API.md, INTEGRATION_GUIDE.md, openapi.yaml,
+postman_collection.json) when sharing with partners.
+
 ### Paid policy reverse + soft-delete
 
 1. **Migration (once):**

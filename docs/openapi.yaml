@@ -12,6 +12,8 @@ info:
       * Download invoice and certificate PDFs.
       * Mark invoices as paid and reconcile.
       * Pull ledger and "invoices by region" reports.
+      * Download contractual documentation (Terms & Conditions full / brief);
+        Admin JWT uploads and replaces those files.
 
     The same JSON shapes are used by the in-house AssurAssistance web app, so
     anything the web app can do, a 3rd-party integration can do — within the
@@ -60,7 +62,16 @@ tags:
   - name: Activity log
     description: Admin-only audit trail of user activity (JWT only).
   - name: Partner invoices
-    description: Periodic premium invoices per partner. Optional saleIds and discountPct. Agico (fixed_duration_premiums) lines have commission 0. PDF currency converts from each sale's currency (not always XOF). Admin or sub-admin JWT.
+    description: >
+      Periodic premium invoices / Paid-only receipts per partner. PDF header shows
+      Assur'Assistance + GNA logos. Optional saleIds, discountPct, documentType
+      (invoice|receipt), stamp (none|paid|settled). Receipts require payment_status=Paid.
+      Agico (fixed_duration_premiums) lines have commission 0. PDF currency converts
+      from each sale's currency (not always XOF). Admin or sub-admin JWT.
+  - name: Contractual documents
+    description: >
+      Terms & Conditions downloads (full / brief). Any JWT may list and download.
+      Only admin JWT may upload, replace, update metadata, or delete.
 
 security:
   - bearerJWT: []
@@ -143,6 +154,22 @@ components:
         total: { type: integer }
         page: { type: integer }
         limit: { type: integer }
+
+    ContractualDocument:
+      type: object
+      description: Terms & Conditions slot (full or brief).
+      properties:
+        id: { type: integer, nullable: true }
+        doc_key: { type: string, enum: [full, brief] }
+        title: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        original_filename: { type: string, nullable: true }
+        mime_type: { type: string, nullable: true }
+        file_size: { type: integer, nullable: true }
+        has_file: { type: boolean }
+        download_url: { type: string, nullable: true }
+        created_at: { type: string, format: date-time, nullable: true }
+        updated_at: { type: string, format: date-time, nullable: true }
 
     AgencySupervisionPeriod:
       type: object
@@ -1071,7 +1098,7 @@ paths:
     get:
       tags: [Sales]
       summary: List allowed soft-delete reasons.
-      description: **Admin JWT only** (not available via API key).
+      description: "Admin JWT only (not available via API key)."
       security:
         - bearerJWT: []
       responses:
@@ -2450,6 +2477,142 @@ paths:
               schema: { type: string, format: binary }
         "400":
           description: Receipt requested but no Paid policies in the selection.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # --- Contractual documents (Terms & Conditions) ---------------------------
+  /contractual-documents:
+    get:
+      tags: [Contractual documents]
+      summary: List full and brief Terms & Conditions slots.
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: Both document slots (has_file false when not uploaded).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  keys:
+                    type: array
+                    items: { type: string, enum: [full, brief] }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ContractualDocument' }
+
+  /contractual-documents/{key}:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema: { type: string, enum: [full, brief] }
+    get:
+      tags: [Contractual documents]
+      summary: Get metadata for one document slot.
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: Document metadata.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/ContractualDocument' }
+        "404":
+          description: Not uploaded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    post:
+      tags: [Contractual documents]
+      summary: Upload or replace a document (admin only). Title + description required.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [title, description]
+              properties:
+                title: { type: string, maxLength: 255 }
+                description: { type: string, maxLength: 1000 }
+                file: { type: string, format: binary, description: PDF, DOC, or DOCX (required on first upload) }
+      responses:
+        "200":
+          description: Uploaded or replaced.
+        "400":
+          description: Validation error.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "403":
+          description: Admin only.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    patch:
+      tags: [Contractual documents]
+      summary: Update title and description only (admin).
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, description]
+              properties:
+                title: { type: string }
+                description: { type: string }
+      responses:
+        "200":
+          description: Updated.
+        "404":
+          description: Not found.
+    delete:
+      tags: [Contractual documents]
+      summary: Remove document for this slot (admin).
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: Removed.
+        "404":
+          description: Not found.
+
+  /contractual-documents/{key}/download:
+    get:
+      tags: [Contractual documents]
+      summary: Download the document file (any authenticated user).
+      security:
+        - bearerJWT: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string, enum: [full, brief] }
+      responses:
+        "200":
+          description: File attachment.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+            application/msword:
+              schema: { type: string, format: binary }
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema: { type: string, format: binary }
+        "404":
+          description: Not available.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

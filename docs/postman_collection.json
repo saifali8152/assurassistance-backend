@@ -648,7 +648,7 @@
     },
     {
       "name": "Partner invoices (admin / sub-admin JWT)",
-      "description": "Partner premium invoices. Agico (fixed_duration_premiums) → commission 0. PDF currency converts from each sale's currency. Optional saleIds + discountPct. Uses {{jwt}}.",
+      "description": "Partner premium invoices and Paid-only receipts. PDF header: Assur'Assistance + GNA logos. Optional saleIds, discountPct, documentType (invoice|receipt), stamp (none|paid|settled). Accept-Language localizes labels/stamps. Agico → commission 0. Uses {{jwt}}.",
       "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
       "item": [
         {
@@ -685,12 +685,12 @@
           }
         },
         {
-          "name": "Invoice PDF (optional saleIds + discount)",
+          "name": "Invoice PDF (logos + optional saleIds + discount)",
           "request": {
             "method": "GET",
             "header": [{ "key": "Accept-Language", "value": "fr" }],
             "url": {
-              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=USD&saleIds=100,101&discountPct=10",
+              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=USD&saleIds=100,101&discountPct=10&documentType=invoice",
               "host": ["{{baseUrl}}"],
               "path": ["partner-invoices","12","pdf"],
               "query": [
@@ -698,10 +698,103 @@
                 { "key": "endDate", "value": "2026-06-30" },
                 { "key": "currency", "value": "USD", "description": "XOF | USD | EUR — convert from each sale's currency (Agico often USD)" },
                 { "key": "saleIds", "value": "100,101" },
-                { "key": "discountPct", "value": "10" }
+                { "key": "discountPct", "value": "10" },
+                { "key": "documentType", "value": "invoice", "description": "invoice (default) | receipt" }
               ]
             }
           }
+        },
+        {
+          "name": "Partner receipt PDF (Paid only + PAID stamp)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept-Language", "value": "en" }],
+            "url": {
+              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&documentType=receipt&stamp=paid&saleIds=100,105",
+              "host": ["{{baseUrl}}"],
+              "path": ["partner-invoices","12","pdf"],
+              "query": [
+                { "key": "startDate", "value": "2026-06-01" },
+                { "key": "endDate", "value": "2026-06-30" },
+                { "key": "currency", "value": "XOF" },
+                { "key": "documentType", "value": "receipt", "description": "receipt = Paid policies only (400 if none)" },
+                { "key": "stamp", "value": "paid", "description": "none | paid | settled — localized via Accept-Language" },
+                { "key": "saleIds", "value": "100,105", "description": "Must be Paid; unpaid lines are dropped" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Partner receipt PDF (SETTLED stamp, French)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept-Language", "value": "fr" }],
+            "url": {
+              "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&documentType=receipt&stamp=settled",
+              "host": ["{{baseUrl}}"],
+              "path": ["partner-invoices","12","pdf"],
+              "query": [
+                { "key": "startDate", "value": "2026-06-01" },
+                { "key": "endDate", "value": "2026-06-30" },
+                { "key": "currency", "value": "XOF" },
+                { "key": "documentType", "value": "receipt" },
+                { "key": "stamp", "value": "settled", "description": "SETTLED / PAYÉ stamp (FR when Accept-Language=fr)" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Contractual documents (JWT)",
+      "description": "Terms & Conditions (full / brief). Any JWT lists and downloads. Admin JWT uploads/replaces (multipart title + description + file).",
+      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "item": [
+        {
+          "name": "List documents",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/contractual-documents", "host": ["{{baseUrl}}"], "path": ["contractual-documents"] } }
+        },
+        {
+          "name": "Download full version",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/contractual-documents/full/download", "host": ["{{baseUrl}}"], "path": ["contractual-documents","full","download"] } }
+        },
+        {
+          "name": "Download brief version",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/contractual-documents/brief/download", "host": ["{{baseUrl}}"], "path": ["contractual-documents","brief","download"] } }
+        },
+        {
+          "name": "Upload / replace full (admin)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/contractual-documents/full", "host": ["{{baseUrl}}"], "path": ["contractual-documents","full"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Terms and Conditions – Full Version", "type": "text" },
+                { "key": "description", "value": "Complete contractual terms.", "type": "text" },
+                { "key": "file", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload / replace brief (admin)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/contractual-documents/brief", "host": ["{{baseUrl}}"], "path": ["contractual-documents","brief"] },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Terms and Conditions – Brief Version", "type": "text" },
+                { "key": "description", "value": "Short summary of contractual terms.", "type": "text" },
+                { "key": "file", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete document (admin)",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/contractual-documents/full", "host": ["{{baseUrl}}"], "path": ["contractual-documents","full"] } }
         }
       ]
     },

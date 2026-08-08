@@ -328,6 +328,15 @@ curl -fOJ "https://backend-api.assurassistancepro.org/api/sales/group/grp_8f0c1a
 
 ### Sales ledger
 
+Financial consolidation view for admins, sub-admins and partner managers
+(supervisors). Each line includes **commission** and **net_to_transfer** using
+the same rules as partner invoices. `meta.summary` covers the full filtered
+set (not only the current page):
+
+- `totalPolicies` — total policies issued  
+- `totalCommissions` — total commissions  
+- `netToTransfer` — total net amount to transfer (`totalPremiums − totalCommissions`)
+
 ```bash
 curl "https://backend-api.assurassistancepro.org/api/ledger?startDate=2026-01-01&endDate=2026-06-30&page=1&limit=50" \
   -H "Authorization: Bearer $AAS_KEY"
@@ -338,12 +347,37 @@ Response shape (truncated):
 ```json
 {
   "success": true,
-  "data": [ { "sale_id": 7912, "traveller_name": "Aïcha Diallo", "plan_name": "AGICO Worldwide 30 Days", "total": 25000, "payment_status": "Paid", "confirmed_at": "2026-05-20T14:31:00.000Z" } ],
-  "meta": { "total": 318, "page": 1, "limit": 50 }
+  "data": [
+    {
+      "sale_id": 7912,
+      "traveller_name": "Aïcha Diallo",
+      "plan_name": "AGICO Worldwide 30 Days",
+      "plan_premium": 25000,
+      "tax": 0,
+      "total": 25000,
+      "commission": 4000,
+      "net_to_transfer": 21000,
+      "currency": "XOF",
+      "payment_status": "Paid",
+      "confirmed_at": "2026-05-20T14:31:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 318,
+    "page": 1,
+    "limit": 50,
+    "summary": {
+      "totalPolicies": 318,
+      "totalPremiums": 7950000,
+      "totalCollected": 7200000,
+      "totalCommissions": 1272000,
+      "netToTransfer": 6678000
+    }
+  }
 }
 ```
 
-CSV export:
+CSV export (includes Commission, Net to transfer, and a SUMMARY footer):
 
 ```
 GET /ledger/export?startDate=…&endDate=…

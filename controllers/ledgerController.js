@@ -1,19 +1,31 @@
 // src/controllers/ledgerController.js
-import { getLedger } from "../models/ledgerModel.js";
-import { getInvoiceBySaleId } from "../models/invoiceModel.js"; // optional if you need invoice path
+import { getLedger, getLedgerSummary } from "../models/ledgerModel.js";
 import { format } from "@fast-csv/format";
+
+async function resolveVisibility(req) {
+  const role = req.user.role;
+  let agentIds = null;
+  if (role === "agent" || role === "sub_admin") {
+    const { getAgentVisibilityIds } = await import("../models/userModel.js");
+    agentIds = await getAgentVisibilityIds(req.user.id);
+  }
+  return { role, agentId: req.user.id, agentIds };
+}
+
 export const listLedger = async (req, res) => {
   try {
-    const role = req.user.role; // 'admin', 'sub_admin' or 'agent'
-    let agentIds = null;
-    if (role === "agent" || role === "sub_admin") {
-      const { getAgentVisibilityIds } = await import("../models/userModel.js");
-      agentIds = await getAgentVisibilityIds(req.user.id);
-    }
-    const agentId = req.user.id;
-    const { startDate, endDate, status, paymentStatus, search, page = 1, limit = 25 } = req.query;
+    const { role, agentId, agentIds } = await resolveVisibility(req);
+    const {
+      startDate,
+      endDate,
+      status,
+      paymentStatus,
+      search,
+      page = 1,
+      limit = 25,
+    } = req.query;
 
-    const result = await getLedger({
+    const filters = {
       role,
       agentId,
       agentIds,
@@ -22,14 +34,22 @@ export const listLedger = async (req, res) => {
       status,
       paymentStatus,
       search,
-      page,
-      limit
-    });
+    };
+
+    const [result, summary] = await Promise.all([
+      getLedger({ ...filters, page, limit }),
+      getLedgerSummary(filters),
+    ]);
 
     res.json({
       success: true,
       data: result.rows,
-      meta: { total: result.total, page: result.page, limit: result.limit }
+      meta: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        summary,
+      },
     });
   } catch (err) {
     console.error(err);
@@ -39,16 +59,10 @@ export const listLedger = async (req, res) => {
 
 export const exportLedgerCsv = async (req, res) => {
   try {
-    const role = req.user.role;
-    const agentId = req.user.id;
-    let agentIds = null;
-    if (role === "agent" || role === "sub_admin") {
-      const { getAgentVisibilityIds } = await import("../models/userModel.js");
-      agentIds = await getAgentVisibilityIds(req.user.id);
-    }
+    const { role, agentId, agentIds } = await resolveVisibility(req);
     const { startDate, endDate, status, paymentStatus, search } = req.query;
 
-    const result = await getLedger({
+    const filters = {
       role,
       agentId,
       agentIds,
@@ -57,9 +71,12 @@ export const exportLedgerCsv = async (req, res) => {
       status,
       paymentStatus,
       search,
-      page: 1,
-      limit: 1000000
-    });
+    };
+
+    const [result, summary] = await Promise.all([
+      getLedger({ ...filters, page: 1, limit: 1000000 }),
+      getLedgerSummary(filters),
+    ]);
 
     const fileName = `sales_ledger_${Date.now()}.csv`;
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
@@ -69,7 +86,7 @@ export const exportLedgerCsv = async (req, res) => {
     const csvStream = format({ headers: true, quoteColumns: true });
     csvStream.pipe(res);
 
-    result.rows.forEach(r => {
+    result.rows.forEach((r) => {
       csvStream.write({
         "Sale ID": r.sale_id,
         "Case ID": r.case_id,
@@ -79,15 +96,41 @@ export const exportLedgerCsv = async (req, res) => {
         "Product Type": r.product_type || "",
         "Policy Number": r.policy_number || "",
         "Certificate Number": r.certificate_number || "",
-        "Plan premium (rate)": (r.plan_price != null && Number(r.plan_price) > 0 ? r.plan_price : r.premium_amount) || 0,
-        "Tax": r.tax || 0,
-        "Total": r.total || 0,
+        "Plan premium (rate)": r.plan_premium || 0,
+        Tax: r.tax || 0,
+        Total: r.total || 0,
+        Commission: r.commission || 0,
+        "Net to transfer": r.net_to_transfer || 0,
+        Currency: r.currency || "XOF",
         "Received Amount": r.received_amount || 0,
         "Payment Status": r.payment_status || "",
         "Confirmed At": r.confirmed_at ? new Date(r.confirmed_at).toLocaleString() : "",
         "Created By": r.created_by_name || "",
-        "Payment Notes": r.payment_notes || ""
+        "Payment Notes": r.payment_notes || "",
       });
+    });
+
+    // Summary footer rows (same labels as partner invoice consolidation)
+    csvStream.write({
+      "Sale ID": "",
+      "Case ID": "",
+      "Traveller Name": "",
+      "Traveller Phone": "",
+      "Plan Name": "SUMMARY",
+      "Product Type": "",
+      "Policy Number": "",
+      "Certificate Number": "",
+      "Plan premium (rate)": "",
+      Tax: "",
+      Total: summary.totalPremiums,
+      Commission: summary.totalCommissions,
+      "Net to transfer": summary.netToTransfer,
+      Currency: "",
+      "Received Amount": summary.totalCollected,
+      "Payment Status": `Policies: ${summary.totalPolicies}`,
+      "Confirmed At": "",
+      "Created By": "",
+      "Payment Notes": "",
     });
 
     csvStream.end();

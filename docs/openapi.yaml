@@ -347,6 +347,9 @@ components:
 
     LedgerRow:
       type: object
+      description: |
+        Sales-ledger line. Commission uses the same `commissionForSale` rules as
+        partner invoices (duration tiers, child ÷2, Agico fixed-duration → 0).
       properties:
         sale_id: { type: integer }
         case_id: { type: integer }
@@ -358,13 +361,29 @@ components:
         product_type: { type: string }
         policy_number: { type: string }
         certificate_number: { type: string }
-        plan_price: { type: number }
+        plan_price: { type: number, nullable: true }
+        plan_premium: { type: number, description: Billable premium rate (plan_price or premium_amount). }
         premium_amount: { type: number }
         tax: { type: number }
-        total: { type: number }
+        total: { type: number, description: plan_premium + tax }
+        commission: { type: number }
+        net_to_transfer: { type: number, description: total − commission }
+        currency: { type: string, example: XOF }
         received_amount: { type: number }
         payment_status: { type: string }
         confirmed_at: { type: string, format: date-time }
+
+    LedgerSummary:
+      type: object
+      description: |
+        Full-filter consolidation totals (not page-only). Matches partner-invoice
+        math: netToTransfer = totalPremiums − totalCommissions.
+      properties:
+        totalPolicies: { type: integer }
+        totalPremiums: { type: number }
+        totalCollected: { type: number }
+        totalCommissions: { type: number }
+        netToTransfer: { type: number }
 
     InvoiceLedgerRow:
       type: object
@@ -1069,7 +1088,13 @@ paths:
   /ledger:
     get:
       tags: [Reports]
-      summary: Paginated sales ledger.
+      summary: Paginated sales ledger with commission + consolidation summary.
+      description: |
+        Available to admin, sub-admin and agent (partner-manager) JWTs, each
+        scoped to their visibility tree. Also via API key with `ledger:read`.
+        Each row includes `commission` and `net_to_transfer` using the same
+        rules as partner invoices. `meta.summary` covers the full filtered set:
+        total policies, total commissions, net amount to transfer.
       security:
         - bearerJWT: []
         - bearerApiKey: [ledger:read]
@@ -1083,7 +1108,7 @@ paths:
         - { name: status, in: query, schema: { type: string } }
       responses:
         "200":
-          description: Ledger page + total.
+          description: Ledger page + filter summary.
           content:
             application/json:
               schema:
@@ -1094,12 +1119,20 @@ paths:
                     type: array
                     items: { $ref: '#/components/schemas/LedgerRow' }
                   meta:
-                    $ref: '#/components/schemas/Pagination'
+                    type: object
+                    properties:
+                      total: { type: integer }
+                      page: { type: integer }
+                      limit: { type: integer }
+                      summary: { $ref: '#/components/schemas/LedgerSummary' }
 
   /ledger/export:
     get:
       tags: [Reports]
       summary: CSV export of the ledger (same filters as `/ledger`).
+      description: |
+        Includes Commission and Net to transfer columns, plus a SUMMARY footer
+        with total policies / commissions / net to transfer.
       security:
         - bearerJWT: []
         - bearerApiKey: [ledger:read]

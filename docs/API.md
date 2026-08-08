@@ -303,6 +303,11 @@ attachment; filename="…"`. Stream the body or persist to disk on your side.
 Query: `page`, `limit`, `search`, `startDate` (YYYY-MM-DD), `endDate`,
 `paymentStatus` (`Paid|Unpaid|Partial`), `status` (case status).
 
+Visible to **admin**, **sub_admin**, and **agent** (including partner-manager
+supervisors), each scoped to their visibility tree. Line amounts and
+**commission** use the same rules as partner invoices (`commissionForSale`:
+duration tiers, child ÷2, Agico `fixed_duration_premiums` → 0).
+
 **Response**
 
 ```json
@@ -321,22 +326,42 @@ Query: `page`, `limit`, `search`, `startDate` (YYYY-MM-DD), `endDate`,
       "policy_number": "AAS-2026-007912",
       "certificate_number": "CERT-2026-007912",
       "plan_price": 25000,
+      "plan_premium": 25000,
       "premium_amount": 25000,
       "tax": 0,
       "total": 25000,
+      "commission": 4000,
+      "net_to_transfer": 21000,
+      "currency": "XOF",
       "received_amount": 25000,
       "payment_status": "Paid",
       "confirmed_at": "2026-05-20T14:31:00.000Z"
     }
   ],
-  "meta": { "total": 318, "page": 1, "limit": 25 }
+  "meta": {
+    "total": 318,
+    "page": 1,
+    "limit": 25,
+    "summary": {
+      "totalPolicies": 318,
+      "totalPremiums": 7950000,
+      "totalCollected": 7200000,
+      "totalCommissions": 1272000,
+      "netToTransfer": 6678000
+    }
+  }
 }
 ```
+
+`meta.summary` covers the **full filtered set** (not only the current page):
+total policies issued, total commissions, and net amount to transfer
+(`totalPremiums − totalCommissions`), matching partner-invoice consolidation.
 
 ### GET /ledger/export
 
 Same filters; returns `text/csv` with a UTF-8 BOM (Excel-friendly). Filename:
-`sales_ledger_<timestamp>.csv`.
+`sales_ledger_<timestamp>.csv`. Includes **Commission**, **Net to transfer**,
+and a SUMMARY footer row with the same totals as `meta.summary`.
 
 ### GET /invoice-ledger
 

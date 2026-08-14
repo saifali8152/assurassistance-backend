@@ -14,6 +14,9 @@ info:
       * Pull ledger and "invoices by region" reports.
       * Download contractual documentation (Terms & Conditions full / brief);
         Admin JWT uploads and replaces those files.
+      * Admin JWT may change a supervisor / agency login email
+        (`PATCH /admin/agents/{id}` + `GET /admin/email-available`); the address
+        must be unique among all login accounts.
 
     The same JSON shapes are used by the in-house AssurAssistance web app, so
     anything the web app can do, a 3rd-party integration can do — within the
@@ -1406,6 +1409,28 @@ paths:
         "200":
           description: Agency list.
 
+  /admin/email-available:
+    get:
+      tags: [Agents]
+      summary: Check whether a login email is unused (case-insensitive).
+      security:
+        - bearerJWT: []
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema: { type: string, format: email }
+        - name: excludeUserId
+          in: query
+          required: false
+          schema: { type: integer }
+          description: Ignore this user (the account being edited).
+      responses:
+        "200":
+          description: available true if free; false if taken by another account.
+        "400":
+          description: Invalid email format.
+
   /admin/agents/{id}:
     get:
       tags: [Agents]
@@ -1418,7 +1443,7 @@ paths:
         "200": { description: Agent. }
     patch:
       tags: [Agents]
-      summary: Update an agency's profile + assigned plans.
+      summary: Update an agency's profile + assigned plans. Body field email is Admin JWT only and must be unique among all login accounts (case-insensitive).
       security:
         - bearerJWT: []
       parameters:
@@ -1438,13 +1463,22 @@ paths:
                 iata_number: { type: string, nullable: true }
                 geographical_location: { type: string, nullable: true }
                 work_phone: { type: string, nullable: true }
+                email:
+                  type: string
+                  format: email
+                  description: Admin only. Must be unique among all login accounts (case-insensitive).
                 assigned_plan_ids:
                   type: array
                   items: { type: integer }
       responses:
         "200": { description: Updated. }
         "403":
-          description: Agent outside a sub-administrator's scope.
+          description: Agent outside a sub-administrator's scope, or non-admin tried to change email.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "409":
+          description: Email already used by another account.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

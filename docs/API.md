@@ -9,7 +9,7 @@ and rendered as Swagger UI at `/api/docs`).
 - **Local:** `http://localhost:3000/api`
 - **Auth:** `Authorization: Bearer <jwt|api-key>` (see [SECURITY.md](./SECURITY.md))
 
-Notable recent additions: [partner invoices / receipts](#11-partner-invoices--api-partner-invoices-admin--sub-admin-jwt) (`documentType`, `stamp`), [contractual documents](#12-contractual-documents--api-contractual-documents-jwt) (Terms & Conditions `full` / `brief`).
+Notable recent additions: [partner invoices / receipts](#11-partner-invoices--api-partner-invoices-admin--sub-admin-jwt) (`documentType`, `stamp`), [contractual documents](#12-contractual-documents--api-contractual-documents-jwt) (Terms & Conditions `full` / `brief`), [supervisor login email](#patch-adminagentsid--change-login-email-admin-jwt-only) (`PATCH /admin/agents/:id` `email` + `GET /admin/email-available`).
 
 Legend:
 
@@ -496,7 +496,8 @@ These endpoints are part of the staff/admin surface. They are reachable via
 | POST | `/admin/create-agent` | SUB | Create an agency account. Returns the temporary password. |
 | GET | `/admin/list-agents` | SUB | Paginated list of agencies. |
 | GET | `/admin/agents/:id` | SUB | One agency + its sub-agents. Includes current `supervisor_*` fields for top-level agencies. |
-| PATCH | `/admin/agents/:id` | SUB | Update profile fields. |
+| PATCH | `/admin/agents/:id` | SUB | Update profile fields. **`email` is Admin-only**; rejected if already used by another login account (case-insensitive). |
+| GET | `/admin/email-available?email&excludeUserId` | SUB | Check whether a login email is free (`available: true/false`). |
 | DELETE | `/admin/agents/:id` | SUB | Remove an agency (and optionally its hierarchy). |
 | GET | `/admin/agents/:id/sub-agents` | SUB | Sub-agents under an agency. |
 | POST | `/admin/agents/:id/sub-agents` | SUB | Create a sub-agent. |
@@ -514,6 +515,62 @@ These endpoints are part of the staff/admin surface. They are reachable via
 | POST | `/admin/create-sub-admin` | ADMIN | Create a sub-administrator. |
 | GET | `/admin/sub-admins` | ADMIN | List sub-administrators. |
 | DELETE | `/admin/sub-admins/:id` | ADMIN | Delete a sub-administrator. |
+
+### PATCH /admin/agents/:id — change login email (admin JWT only)
+
+The main administrator may update a supervisor / agency **login email**. Sub-administrators may still patch other profile fields but **must not** send `email` (`403 email_change_forbidden`).
+
+The new address is normalized (trim + lowercase) and must be unique among **all** login accounts (`admin`, `sub_admin`, `agent`) — compared case-insensitively so `User@x.com` cannot overwrite `user@x.com`. The account being edited is excluded from the uniqueness check.
+
+**Request** (email change; other profile fields optional)
+
+```json
+{
+  "email": "supervisor.new@example.com",
+  "name": "Acme Travel"
+}
+```
+
+**Responses**
+
+| Status | `code` | Meaning |
+|---|---|---|
+| 200 | — | Updated. |
+| 400 | `email_required` / `email_invalid` | Missing or malformed address. |
+| 403 | `email_change_forbidden` | Caller is not the main admin. |
+| 409 | `email_taken` | Address already used by another login account. |
+
+```json
+{ "success": false, "message": "This email is already used by another account", "code": "email_taken" }
+```
+
+### GET /admin/email-available — uniqueness check (admin or sub-admin JWT)
+
+Call this before creating or renaming a login so the UI can block collisions.
+
+| Query | Required | Notes |
+|---|---|---|
+| `email` | yes | Address to test. |
+| `excludeUserId` | no | User id being edited (ignored in the uniqueness check). |
+
+**Response (200, free)**
+
+```json
+{ "success": true, "available": true }
+```
+
+**Response (200, taken)**
+
+```json
+{ "success": true, "available": false, "message": "This email is already used by another account", "code": "email_taken" }
+```
+
+```
+GET /admin/email-available?email=supervisor.new@example.com&excludeUserId=42
+PATCH /admin/agents/42
+Authorization: Bearer <admin-jwt>
+{ "email": "supervisor.new@example.com" }
+```
 
 ### PATCH /admin/agents/:id/supervisor — reassign supervising account (admin JWT only)
 

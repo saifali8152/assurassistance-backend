@@ -434,7 +434,22 @@
             "method": "PATCH",
             "url": { "raw": "{{baseUrl}}/admin/agents/42", "host": ["{{baseUrl}}"], "path": ["admin","agents","42"] },
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme Travel\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12, 13]\n}" }
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme Travel\",\n  \"email\": \"acme.new@example.com\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12, 13]\n}" }
+          }
+        },
+        {
+          "name": "Check login email available",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/email-available?email=acme.new@example.com&excludeUserId=42",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin","email-available"],
+              "query": [
+                { "key": "email", "value": "acme.new@example.com" },
+                { "key": "excludeUserId", "value": "42", "description": "User being edited (optional)" }
+              ]
+            }
           }
         },
         {

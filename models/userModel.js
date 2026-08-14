@@ -1,5 +1,16 @@
 import getPool from "../utils/db.js";
 
+const LOGIN_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function normalizeLoginEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+export function isValidLoginEmail(email) {
+  const n = normalizeLoginEmail(email);
+  return n.length >= 5 && n.length <= 100 && LOGIN_EMAIL_RE.test(n);
+}
+
 export const findUserByEmail = async (email) => {
   const pool = getPool();
   const [rows] = await pool.query(
@@ -10,6 +21,47 @@ export const findUserByEmail = async (email) => {
   );
   return rows[0];
 };
+
+/** Case-insensitive lookup so `User@x.com` and `user@x.com` cannot both exist. */
+export const findUserByEmailIgnoreCase = async (email) => {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT u.*, u.role as role_name
+     FROM users u
+     WHERE LOWER(u.email) = LOWER(?)
+     LIMIT 1`,
+    [String(email || "").trim()]
+  );
+  return rows[0] || null;
+};
+
+/**
+ * Validate a login email and ensure it is not already used by another account.
+ * @returns {Promise<string>} normalized (lowercase, trimmed) email
+ */
+export async function assertLoginEmailAvailable(email, excludeUserId = null) {
+  const normalized = normalizeLoginEmail(email);
+  if (!normalized) {
+    const err = new Error("Email is required");
+    err.status = 400;
+    err.code = "email_required";
+    throw err;
+  }
+  if (!isValidLoginEmail(normalized)) {
+    const err = new Error("Enter a valid email address");
+    err.status = 400;
+    err.code = "email_invalid";
+    throw err;
+  }
+  const existing = await findUserByEmailIgnoreCase(normalized);
+  if (existing && (excludeUserId == null || Number(existing.id) !== Number(excludeUserId))) {
+    const err = new Error("This email is already used by another account");
+    err.status = 409;
+    err.code = "email_taken";
+    throw err;
+  }
+  return normalized;
+}
 
 export const findUserById = async (id) => {
   const pool = getPool();
@@ -45,13 +97,14 @@ export const createUser = async ({
 };
 
 export const updateAgentProfile = async (userId, {
-  name, company_name, partnership_type, country_of_residence, iata_number,
+  name, email, company_name, partnership_type, country_of_residence, iata_number,
   geographical_location, work_phone, whatsapp_phone
 }) => {
   const pool = getPool();
   const updates = [];
   const values = [];
   if (name !== undefined) { updates.push('name = ?'); values.push(name); }
+  if (email !== undefined) { updates.push('email = ?'); values.push(email); }
   if (company_name !== undefined) { updates.push('company_name = ?'); values.push(company_name || null); }
   if (partnership_type !== undefined) { updates.push('partnership_type = ?'); values.push(partnership_type || null); }
   if (country_of_residence !== undefined) { updates.push('country_of_residence = ?'); values.push(country_of_residence || null); }

@@ -2,7 +2,7 @@
 import bcrypt from 'bcryptjs';
 import {
   createUser,
-  findUserByEmail,
+  assertLoginEmailAvailable,
   getAllUsers,
   getAgents,
   findUserById,
@@ -67,15 +67,23 @@ export const createAgent = async (req, res) => {
       }
     }
 
-    const exists = await findUserByEmail(email);
-    if (exists) return res.status(400).json({ message: 'User with this email already exists' });
+    let emailNorm;
+    try {
+      emailNorm = await assertLoginEmailAvailable(email);
+    } catch (emailErr) {
+      return res.status(emailErr.status || 400).json({
+        success: false,
+        message: emailErr.message,
+        code: emailErr.code || "email_invalid",
+      });
+    }
 
     // Generate strong password if tempPassword is not provided
     const password = tempPassword || generateStrongPassword(12);
     const hashed = await bcrypt.hash(password, 10);
 
     const userId = await createUser({
-      name, email, password: hashed, role: 'agent', force_password_change: 1,
+      name, email: emailNorm, password: hashed, role: 'agent', force_password_change: 1,
       company_name: company_name || null, partnership_type: partnership_type || null,
       country_of_residence: country_of_residence || null, whatsapp_phone: whatsapp_phone || null,
       iata_number: iata_number || null, geographical_location: geographical_location || null,
@@ -103,7 +111,7 @@ export const createAgent = async (req, res) => {
       const emailTemplate = agentWelcomeTemplate(name, password, loginUrl);
       
       await sendEmail(
-        email,
+        emailNorm,
         emailTemplate.subject,
         emailTemplate.text,
         emailTemplate.html
@@ -115,11 +123,18 @@ export const createAgent = async (req, res) => {
 
     res.status(201).json({ 
       id: userId, 
-      email, 
+      email: emailNorm, 
       tempPassword: password, 
       message: 'Agent created successfully. Welcome email sent to agent.' 
     });
   } catch (err) {
+    if (err?.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        message: "This email is already used by another account",
+        code: "email_taken",
+      });
+    }
     console.error(err);
     res.status(500).json({ message: 'Server error' });
   }
@@ -793,7 +808,7 @@ export const updateAgent = async (req, res) => {
       return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
     }
     const {
-      name, company_name, partnership_type, country_of_residence, whatsapp_phone,
+      name, email, company_name, partnership_type, country_of_residence, whatsapp_phone,
       iata_number, geographical_location, work_phone, assigned_plan_ids
     } = req.body;
     const updates = {};
@@ -805,8 +820,37 @@ export const updateAgent = async (req, res) => {
     if (iata_number !== undefined) updates.iata_number = iata_number;
     if (geographical_location !== undefined) updates.geographical_location = geographical_location;
     if (work_phone !== undefined) updates.work_phone = work_phone;
+    if (email !== undefined) {
+      if (req.user?.role !== "admin") {
+        return res.status(403).json({
+          success: false,
+          message: "Only the main administrator can change a login email",
+          code: "email_change_forbidden",
+        });
+      }
+      try {
+        updates.email = await assertLoginEmailAvailable(email, id);
+      } catch (emailErr) {
+        return res.status(emailErr.status || 400).json({
+          success: false,
+          message: emailErr.message,
+          code: emailErr.code || "email_invalid",
+        });
+      }
+    }
     if (Object.keys(updates).length > 0) {
-      await updateAgentProfile(parseInt(id, 10), updates);
+      try {
+        await updateAgentProfile(parseInt(id, 10), updates);
+      } catch (dupErr) {
+        if (dupErr?.code === "ER_DUP_ENTRY") {
+          return res.status(409).json({
+            success: false,
+            message: "This email is already used by another account",
+            code: "email_taken",
+          });
+        }
+        throw dupErr;
+      }
     }
     if (assigned_plan_ids !== undefined && Array.isArray(assigned_plan_ids)) {
       await setAgentAssignedPlans(parseInt(id, 10), assigned_plan_ids.map((x) => parseInt(x, 10)));
@@ -815,6 +859,41 @@ export const updateAgent = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/**
+ * GET /admin/email-available?email=&excludeUserId=
+ * Check whether a login email is free (case-insensitive). Used by Admin UI before save.
+ */
+export const checkEmailAvailable = async (req, res) => {
+  try {
+    const email = req.query.email;
+    const rawExclude = Number(req.query.excludeUserId);
+    const excludeUserId =
+      Number.isInteger(rawExclude) && rawExclude > 0 ? rawExclude : null;
+    try {
+      await assertLoginEmailAvailable(email, excludeUserId);
+      return res.json({ success: true, available: true });
+    } catch (emailErr) {
+      if (emailErr.code === "email_taken") {
+        return res.json({
+          success: true,
+          available: false,
+          message: emailErr.message,
+          code: emailErr.code,
+        });
+      }
+      return res.status(emailErr.status || 400).json({
+        success: false,
+        available: false,
+        message: emailErr.message,
+        code: emailErr.code || "email_invalid",
+      });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -871,8 +950,16 @@ export const createSubAgent = async (req, res) => {
     if (!assigned_plan_ids || !Array.isArray(assigned_plan_ids) || assigned_plan_ids.length === 0) {
       return res.status(400).json({ message: 'At least one assigned plan is required' });
     }
-    const exists = await findUserByEmail(email);
-    if (exists) return res.status(400).json({ message: 'User with this email already exists' });
+    let emailNorm;
+    try {
+      emailNorm = await assertLoginEmailAvailable(email);
+    } catch (emailErr) {
+      return res.status(emailErr.status || 400).json({
+        success: false,
+        message: emailErr.message,
+        code: emailErr.code || "email_invalid",
+      });
+    }
 
     const password = generateStrongPassword(12);
     const hashed = await bcrypt.hash(password, 10);
@@ -880,7 +967,7 @@ export const createSubAgent = async (req, res) => {
 
     const userId = await createUser({
       name,
-      email: email.trim(),
+      email: emailNorm,
       password: hashed,
       role: 'agent',
       force_password_change: 1,
@@ -900,14 +987,14 @@ export const createSubAgent = async (req, res) => {
     try {
       const loginUrl = `${process.env.FRONTEND_URL || 'https://acareeracademy.com'}/login`;
       const emailTemplate = agentWelcomeTemplate(name, password, loginUrl);
-      await sendEmail(email.trim(), emailTemplate.subject, emailTemplate.text, emailTemplate.html);
+      await sendEmail(emailNorm, emailTemplate.subject, emailTemplate.text, emailTemplate.html);
     } catch (emailErr) {
       console.error('Failed to send welcome email to sub-agent:', emailErr);
     }
 
     res.status(201).json({
       success: true,
-      data: { id: userId, email: email.trim(), tempPassword: password },
+      data: { id: userId, email: emailNorm, tempPassword: password },
       message: 'Sub-agent created successfully. Welcome email sent.'
     });
   } catch (err) {
@@ -934,15 +1021,23 @@ export const createSubAdmin = async (req, res) => {
     const name = [first_name, last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ');
     if (!name) return res.status(400).json({ message: 'Name is required' });
 
-    const exists = await findUserByEmail(String(email).trim());
-    if (exists) return res.status(400).json({ message: 'User with this email already exists' });
+    let emailNorm;
+    try {
+      emailNorm = await assertLoginEmailAvailable(email);
+    } catch (emailErr) {
+      return res.status(emailErr.status || 400).json({
+        success: false,
+        message: emailErr.message,
+        code: emailErr.code || "email_invalid",
+      });
+    }
 
     const password = (tempPassword && String(tempPassword).trim()) || generateStrongPassword(12);
     const hashed = await bcrypt.hash(password, 10);
 
     const userId = await createUser({
       name,
-      email: String(email).trim(),
+      email: emailNorm,
       password: hashed,
       role: 'sub_admin',
       force_password_change: 1,
@@ -954,14 +1049,14 @@ export const createSubAdmin = async (req, res) => {
     try {
       const loginUrl = `${process.env.FRONTEND_URL || 'https://acareeracademy.com'}/login`;
       const emailTemplate = agentWelcomeTemplate(name, password, loginUrl);
-      await sendEmail(String(email).trim(), emailTemplate.subject, emailTemplate.text, emailTemplate.html);
+      await sendEmail(emailNorm, emailTemplate.subject, emailTemplate.text, emailTemplate.html);
     } catch (emailErr) {
       console.error('Failed to send welcome email to sub-administrator:', emailErr);
     }
 
     res.status(201).json({
       success: true,
-      data: { id: userId, email: String(email).trim(), tempPassword: password },
+      data: { id: userId, email: emailNorm, tempPassword: password },
       message: 'Sub-administrator created successfully. Welcome email sent.'
     });
   } catch (err) {

@@ -136,6 +136,10 @@ the endpoint.
 no API-key scope for it. See [§11b Agency reassignment](#11b-agency-reassignment--admin-jwt)
 and [`API.md`](./API.md) §7.
 
+**Login email changes** (`PATCH /admin/agents/{id}` with `email`) are also
+**admin JWT only**. The new address must not belong to any other login account
+(case-insensitive). Check first with `GET /admin/email-available?email=…&excludeUserId=…`.
+
 If you call an endpoint without the right scope you'll get:
 
 ```json
@@ -737,6 +741,36 @@ curl -s "$AAS/admin/agents/42/supervision-history" \
 
 Full request/response shapes: [`API.md`](./API.md) §7 and OpenAPI paths
 `/admin/agents/{id}/supervisor` + `/admin/agents/{id}/supervision-history`.
+
+---
+
+## 11c. Supervisor login email — admin JWT
+
+The main administrator may change a supervisor / agency login email. The new
+address must not belong to any other login user (case-insensitive).
+
+| Method | Path | Auth |
+|---|---|---|
+| GET | `/admin/email-available?email=&excludeUserId=` | Admin or sub-admin JWT |
+| PATCH | `/admin/agents/{id}` body `{ "email": "…" }` | **Admin JWT only** |
+
+```bash
+TOKEN=$(curl -s -X POST "$AAS/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@…","password":"…"}' | jq -r .token)
+
+# 1) Check uniqueness (exclude the account being edited)
+curl -s "$AAS/admin/email-available?email=supervisor.new@example.com&excludeUserId=42" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 2) Apply (409 email_taken if another account already uses it)
+curl -s -X PATCH "$AAS/admin/agents/42" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"supervisor.new@example.com"}'
+```
+
+See [`API.md`](./API.md#patch-adminagentsid--change-login-email-admin-jwt-only).
 
 ---
 

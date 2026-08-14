@@ -19,7 +19,8 @@ import {
   deleteSubAdmin,
   listPartners,
   reassignAgentSupervisor,
-  getAgentSupervisionHistory
+  getAgentSupervisionHistory,
+  checkEmailAvailable
 } from '../controllers/adminController.js';
 import authenticate from '../middlewares/authMiddleware.js';
 import { adminOnly, adminOrSubAdmin } from '../middlewares/roleMiddleware.js';
@@ -31,6 +32,7 @@ const router = express.Router();
 // Agency-management endpoints are usable by admin or sub-administrators (field sales reps).
 router.post('/create-agent', authenticate, adminOrSubAdmin, createAgent);
 router.get('/list-agents', authenticate, adminOrSubAdmin, listAgents);
+router.get('/email-available', authenticate, adminOrSubAdmin, checkEmailAvailable);
 // Superadmin: partners (agencies) listed once by partnership type, with descendant account counts.
 router.get('/partners', authenticate, adminOnly, listPartners);
 router.get('/agent-hierarchy/export', authenticate, adminOnly, exportAgentHierarchyCsv);

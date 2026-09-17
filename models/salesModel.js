@@ -134,11 +134,21 @@ export const updatePaymentStatus = async (saleId, payment_status, payment_notes)
 
 export const getMonthlyReconciliation = async (month) => {
   const pool = getPool();
-  // Billable amount = plan premium rate + tax when plan_price > 0; else legacy sale.total
+  // Billable amount = plan premium rate + tax when plan_price > 0; else legacy sale.total.
+  // Also resolve travel-agency company name and supervising sub-admin (sales rep).
   const [rows] = await pool.query(
     `SELECT 
         u.id as user_id,
         u.name as agent_name,
+        MAX(
+          COALESCE(
+            NULLIF(TRIM(agency.company_name), ''),
+            NULLIF(TRIM(agency.name), ''),
+            NULLIF(TRIM(u.company_name), ''),
+            u.name
+          )
+        ) AS agency_name,
+        MAX(COALESCE(NULLIF(TRIM(sup.name), ''), '')) AS sub_admin_name,
         DATE_FORMAT(s.confirmed_at, '%b-%Y') as month,
         COUNT(s.id) as total_sales,
         SUM(
@@ -189,8 +199,18 @@ export const getMonthlyReconciliation = async (month) => {
      FROM sales s
      JOIN cases c ON c.id = s.case_id
      JOIN users u ON u.id = c.created_by
+     LEFT JOIN users parent ON parent.id = u.parent_agent_id
+     LEFT JOIN users agency ON agency.id = CASE
+       WHEN u.role = 'agent' AND (u.parent_agent_id IS NULL OR u.parent_agent_id = 0) THEN u.id
+       WHEN u.role = 'agent' AND (parent.parent_agent_id IS NULL OR parent.parent_agent_id = 0) THEN parent.id
+       WHEN u.role = 'agent' THEN parent.parent_agent_id
+       ELSE NULL
+     END
+     LEFT JOIN users sup ON sup.id = COALESCE(agency.created_by_id, u.created_by_id)
+       AND sup.role IN ('sub_admin', 'admin', 'insurer_supervisor')
      WHERE DATE_FORMAT(s.confirmed_at, '%Y-%m') = ?
-     GROUP BY u.id, month`,
+     GROUP BY u.id, month
+     ORDER BY agency_name ASC, agent_name ASC`,
     [month]
   );
   return rows;

@@ -38,6 +38,8 @@ export const exportReconciliationCsv = async (req, res) => {
     const data = await getMonthlyReconciliation(sqlMonth);
 
     const fields = [
+      "agency_name",
+      "sub_admin_name",
       "agent_name",
       "month",
       "total_sales",

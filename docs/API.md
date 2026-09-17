@@ -756,10 +756,44 @@ If the agency has never been reassigned, the API may auto-record an open period 
 
 ## 10. Reconciliation — `/api/reconciliation` (JWT)
 
+Monthly totals per issuing account. Each row includes the **travel agency**
+name and the supervising **sub-admin (sales representative)**.
+
 | Method | Path | Description |
 |---|---|---|
 | GET | `/reconciliation` | Monthly reconciliation (`?month=Sep&year=2026`). |
 | GET | `/reconciliation/export` | CSV (Excel-friendly). |
+
+**Row fields (JSON + CSV):** `agency_name` (travel agency / `company_name`),
+`sub_admin_name` (supervising sales rep), `agent_name` (issuing account),
+`month`, `total_sales`, `total_amount`, `paid_amount`, `unpaid_amount`,
+`partial_amount`, `balance_due`, `gross_collected`, `fees`, `net_due`.
+
+Example:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "user_id": 42,
+      "agency_name": "IT Voyages",
+      "sub_admin_name": "Esther Ahouman",
+      "agent_name": "Kofi Mensah",
+      "month": "Sep-2026",
+      "total_sales": 18,
+      "total_amount": 450000,
+      "paid_amount": 400000,
+      "unpaid_amount": 50000,
+      "partial_amount": 0,
+      "balance_due": 50000,
+      "gross_collected": 400000,
+      "fees": 0,
+      "net_due": 400000
+    }
+  ]
+}
+```
 
 ---
 

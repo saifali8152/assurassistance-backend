@@ -64,7 +64,10 @@ tags:
   - name: Users
     description: Self-service profile, dashboard, and password endpoints for the logged-in user (JWT only).
   - name: Reconciliation
-    description: Monthly agent reconciliation view and CSV export (JWT only).
+    description: >
+      Monthly agent reconciliation view and CSV export (JWT only).
+      Each row includes travel agency name (`agency_name`) and supervising
+      sub-admin / sales representative (`sub_admin_name`).
   - name: Activity log
     description: Admin-only audit trail of user activity (JWT only).
   - name: Partner invoices
@@ -467,6 +470,35 @@ components:
         totalCollected: { type: number }
         totalCommissions: { type: number }
         netToTransfer: { type: number }
+
+    ReconciliationRow:
+      type: object
+      description: |
+        Monthly reconciliation line for one issuing account. Agency and
+        supervising sub-admin are resolved from the agent hierarchy.
+      properties:
+        user_id: { type: integer }
+        agency_name:
+          type: string
+          description: Travel agency company name (top-level partner).
+          example: IT Voyages
+        sub_admin_name:
+          type: string
+          description: Supervising sub-administrator / sales representative.
+          example: Esther Ahouman
+        agent_name:
+          type: string
+          description: Issuing user display name.
+        month: { type: string, example: Sep-2026 }
+        total_sales: { type: integer }
+        total_amount: { type: number }
+        paid_amount: { type: number }
+        unpaid_amount: { type: number }
+        partial_amount: { type: number }
+        balance_due: { type: number }
+        gross_collected: { type: number }
+        fees: { type: number }
+        net_due: { type: number }
 
     InvoiceLedgerRow:
       type: object
@@ -2381,6 +2413,10 @@ paths:
     get:
       tags: [Reconciliation]
       summary: Monthly agent reconciliation.
+      description: |
+        Returns one row per issuing account for the selected month/year.
+        Includes **travel agency** (`agency_name`) and supervising
+        **sub-admin / sales representative** (`sub_admin_name`).
       security:
         - bearerJWT: []
       parameters:
@@ -2406,7 +2442,7 @@ paths:
                   success: { type: boolean }
                   data:
                     type: array
-                    items: { type: object }
+                    items: { $ref: '#/components/schemas/ReconciliationRow' }
         "400":
           description: Missing or invalid month/year.
           content:
@@ -2417,6 +2453,9 @@ paths:
     get:
       tags: [Reconciliation]
       summary: CSV export of the monthly reconciliation.
+      description: |
+        Same filters as `GET /reconciliation`. CSV columns include
+        `agency_name`, `sub_admin_name`, `agent_name`, and amount fields.
       security:
         - bearerJWT: []
       parameters:

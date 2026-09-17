@@ -631,7 +631,7 @@
     },
     {
       "name": "Reconciliation (JWT)",
-      "description": "Monthly agent reconciliation. Uses {{jwt}}.",
+      "description": "Monthly agent reconciliation. Each row includes agency_name (travel agency) and sub_admin_name (sales rep). Uses {{jwt}}.",
       "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
       "item": [
         {

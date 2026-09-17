@@ -22,6 +22,9 @@ import fs from "fs";
 
 const DEFAULT_GENERAL_PHONE = (process.env.CERTIFICATE_GENERAL_PHONE || "+225 27 22 22 82 60").trim();
 const DEFAULT_WHATSAPP_PHONE = (process.env.CERTIFICATE_WHATSAPP_PHONE || "+225 07 18 92 31 94").trim();
+const DEFAULT_CENTRAL_AFRICA_PHONE = (
+  process.env.CERTIFICATE_CENTRAL_AFRICA_PHONE || "+(242)061603452"
+).trim();
 
 function resolvePublicUploadUrl(req, relativePath) {
   if (!relativePath || String(relativePath).trim() === "") return null;
@@ -207,6 +210,7 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
   const websiteUrl = (process.env.CERTIFICATE_WEBSITE_URL || "https://www.assurassistance.org").trim();
   const generalLine = DEFAULT_GENERAL_PHONE;
   const whatsappLine = DEFAULT_WHATSAPP_PHONE;
+  const centralAfricaLine = DEFAULT_CENTRAL_AFRICA_PHONE;
 
   const partnerRel = caseDetails.plan_partner_insurer_logo || null;
 
@@ -270,6 +274,7 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
     contact: {
       emergencyHelpline,
       generalLine,
+      centralAfricaLine,
       whatsapp: whatsappLine,
       websiteUrl
     },

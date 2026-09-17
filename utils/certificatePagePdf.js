@@ -328,11 +328,19 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
     y = doc.y + 2;
     const eh = contact.emergencyHelpline || "—";
     const gl = contact.generalLine || "—";
+    const ca = contact.centralAfricaLine || "—";
     const wa = contact.whatsapp || "—";
     const web = (contact.websiteUrl || "").replace(/^https?:\/\//i, "").replace(/\/$/, "") || "—";
     doc.text(`- Dedicated 24/7 Emergency Helpline : ${eh}`, left, y, { width: w });
     y = doc.y + 1;
     doc.text(`- General inquiries Line: ${gl}`, left, y, { width: w });
+    y = doc.y + 1;
+    doc.text(
+      `- Central Africa platform (calls and WhatsApp): ${ca}`,
+      left,
+      y,
+      { width: w }
+    );
     y = doc.y + 1;
     doc.text(`- WhatsApp: ${wa}`, left, y, { width: w });
     y = doc.y + 1;

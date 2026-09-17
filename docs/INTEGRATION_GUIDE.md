@@ -271,11 +271,20 @@ curl -fOJ "https://backend-api.assurassistancepro.org/api/sales/invoice/7912" \
 # Certificate (PDF binary):
 curl -fOJ "https://backend-api.assurassistancepro.org/api/sales/certificate/7912" \
   -H "Authorization: Bearer $AAS_KEY"
+
+# Certificate page JSON (same contact block as the PDF):
+curl -s "https://backend-api.assurassistancepro.org/api/sales/certificate/7912/page" \
+  -H "Authorization: Bearer $AAS_KEY" | jq .contact
 ```
 
 Both download as `application/pdf` with `Content-Disposition: attachment;
 filename="…"`. Stream them straight to your customer or store them in your
 own document vault.
+
+Every certificate (PDF + JSON `contact`) prints, after the general inquiries
+line, the **Central Africa platform** number (`contact.centralAfricaLine`,
+default `+(242)061603452` — calls and WhatsApp). Configure via
+`CERTIFICATE_CENTRAL_AFRICA_PHONE` on the API server.
 
 ### Step 5 — Mark as paid (optional)
 

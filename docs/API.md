@@ -384,6 +384,20 @@ Notes:
 The PDFs are generated on demand. Headers include `Content-Disposition:
 attachment; filename="…"`. Stream the body or persist to disk on your side.
 
+Certificate JSON (`/page` and `/public/:token`) and the downloaded PDF include a
+`contact` block printed on every certificate:
+
+| Field | Source (backend `.env`) | Example |
+|---|---|---|
+| `emergencyHelpline` | `CERTIFICATE_EMERGENCY_PHONE` | `+91 62916 62954` |
+| `generalLine` | `CERTIFICATE_GENERAL_PHONE` | `+225 27 22 22 82 60` |
+| `centralAfricaLine` | `CERTIFICATE_CENTRAL_AFRICA_PHONE` | `+(242)061603452` |
+| `whatsapp` | `CERTIFICATE_WHATSAPP_PHONE` | `+225 07 18 92 31 94` |
+| `websiteUrl` | `CERTIFICATE_WEBSITE_URL` | `https://www.assurassistance.org` |
+
+`centralAfricaLine` is shown immediately after the general inquiries line as
+**Central Africa platform (calls and WhatsApp)**.
+
 ---
 
 ## 6. Reports — `/api/ledger`, `/api/invoice-ledger`

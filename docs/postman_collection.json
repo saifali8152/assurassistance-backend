@@ -326,7 +326,11 @@
         },
         {
           "name": "Certificate page data (JSON)",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/certificate/7912/page", "host": ["{{baseUrl}}"], "path": ["sales","certificate","7912","page"] } }
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/sales/certificate/7912/page", "host": ["{{baseUrl}}"], "path": ["sales","certificate","7912","page"] },
+            "description": "JSON payload for the printable certificate. contact includes generalLine, centralAfricaLine (Central Africa calls/WhatsApp), whatsapp, emergencyHelpline, websiteUrl."
+          }
         },
         {
           "name": "Group invoices (ZIP)",

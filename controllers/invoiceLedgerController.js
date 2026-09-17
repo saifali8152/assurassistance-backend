@@ -135,16 +135,23 @@ export const exportInvoiceLedgerCsv = async (req, res) => {
         Region: r.region || "",
         "Invoice Number": r.invoice_number || "",
         "Issue Date": r.issue_date ? new Date(r.issue_date).toISOString() : "",
-        "Traveller": r.traveller_name || "",
+        "Last Name": r.last_name || "",
+        "First Name": r.first_name || "",
+        "Date of Birth": r.date_of_birth || "",
         "Traveller Country": r.traveller_country || "",
-        "Destination": r.destination || "",
+        Destination: r.destination || "",
+        "Travel Start": r.start_date || "",
+        "Travel End": r.end_date || "",
+        "Duration (days)": r.duration_days ?? "",
         "Plan Name": r.plan_name || "",
         "Product Type": r.product_type || "",
         "Policy Number": r.policy_number || "",
         "Certificate Number": r.certificate_number || "",
-        Subtotal: r.subtotal ?? 0,
+        Premium: r.plan_premium ?? r.subtotal ?? 0,
         Tax: r.tax ?? 0,
-        Total: r.total ?? 0,
+        "Premium including tax": r.premium_including_tax ?? r.total ?? 0,
+        "Agency Commission": r.agency_commission ?? r.commission ?? 0,
+        "Net to be transferred": r.net_to_transfer ?? 0,
         "Received Amount": r.received_amount ?? 0,
         "Payment Status": r.payment_status || "",
         Currency: r.currency || "XOF",
@@ -153,9 +160,7 @@ export const exportInvoiceLedgerCsv = async (req, res) => {
         "Agent Geo": r.agent_geo || "",
         "Sale ID": r.sale_id,
         "Case ID": r.case_id,
-        "Confirmed At": r.confirmed_at ? new Date(r.confirmed_at).toISOString() : "",
-        "Coverage Start": r.start_date || "",
-        "Coverage End": r.end_date || ""
+        "Confirmed At": r.confirmed_at ? new Date(r.confirmed_at).toISOString() : ""
       });
     });
 

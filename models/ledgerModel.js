@@ -43,16 +43,25 @@ function buildLedgerWhere({ role, agentId, agentIds, startDate, endDate, status,
   }
   if (search) {
     whereClauses.push(
-      "(CONCAT(t.first_name, ' ', t.last_name) LIKE ? OR s.policy_number LIKE ? OR s.certificate_number LIKE ? OR cat.name LIKE ?)"
+      "(CONCAT(t.first_name, ' ', t.last_name) LIKE ? OR t.first_name LIKE ? OR t.last_name LIKE ? OR s.policy_number LIKE ? OR s.certificate_number LIKE ? OR cat.name LIKE ? OR c.destination LIKE ?)"
     );
     const sterm = `%${search}%`;
-    params.push(sterm, sterm, sterm, sterm);
+    params.push(sterm, sterm, sterm, sterm, sterm, sterm, sterm);
   }
 
   return {
     whereSQL: whereClauses.length ? `WHERE ${whereClauses.join(" AND ")}` : "",
     params,
   };
+}
+
+function formatDateOnly(v) {
+  if (v == null || v === "") return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    return v.toISOString().slice(0, 10);
+  }
+  const s = String(v);
+  return s.length >= 10 ? s.slice(0, 10) : s;
 }
 
 function mapLedgerRow(r) {
@@ -72,13 +81,22 @@ function mapLedgerRow(r) {
         fixedDurationPremiums: !!Number(r.fixed_duration_premiums),
       });
   const reverseCount = Number(r.payment_reverse_count) || 0;
+  const firstName = r.first_name || "";
+  const lastName = r.last_name || "";
   const mapped = {
     sale_id: r.sale_id,
     case_id: r.case_id,
     agent_id: r.agent_id,
     created_by_name: r.created_by_name || "",
-    traveller_name: r.traveller_name,
+    first_name: firstName,
+    last_name: lastName,
+    traveller_name: r.traveller_name || [firstName, lastName].filter(Boolean).join(" "),
     traveller_phone: r.traveller_phone || "",
+    date_of_birth: formatDateOnly(r.date_of_birth),
+    destination: r.destination || "",
+    start_date: formatDateOnly(r.start_date),
+    end_date: formatDateOnly(r.end_date),
+    duration_days: r.duration_days != null ? Number(r.duration_days) : null,
     plan_name: r.plan_name || "",
     product_type: r.product_type || "",
     policy_number: r.policy_number || "",
@@ -88,12 +106,14 @@ function mapLedgerRow(r) {
     plan_premium: planPremium,
     tax,
     total: planPremium + tax,
+    premium_including_tax: planPremium + tax,
     received_amount: isDeleted ? 0 : Number(r.received_amount) || 0,
     payment_notes: r.payment_notes || "",
     payment_status: r.payment_status,
     confirmed_at: r.confirmed_at,
     currency: r.currency || "XOF",
     commission,
+    agency_commission: commission,
     net_to_transfer: planPremium + tax - commission,
     payment_reverse_count: reverseCount,
     payment_reverses_remaining: Math.max(0, MAX_PAYMENT_REVERSES - reverseCount),
@@ -149,9 +169,15 @@ export const getLedger = async ({
       s.case_id,
       c.created_by AS agent_id,
       u.name AS created_by_name,
+      t.first_name,
+      t.last_name,
       CONCAT(t.first_name, ' ', t.last_name) AS traveller_name,
       t.phone AS traveller_phone,
       t.date_of_birth,
+      c.destination,
+      c.start_date,
+      c.end_date,
+      c.duration_days,
       cat.name AS plan_name,
       cat.product_type,
       cat.fixed_duration_premiums,
@@ -168,8 +194,7 @@ export const getLedger = async ({
       s.confirmed_at,
       s.currency,
       s.deleted_at,
-      s.deletion_reason,
-      c.duration_days
+      s.deletion_reason
     ${baseSQL}
     ORDER BY s.confirmed_at DESC
     LIMIT ? OFFSET ?

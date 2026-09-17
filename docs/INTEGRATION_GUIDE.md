@@ -379,6 +379,8 @@ curl -fOJ "https://backend-api.assurassistancepro.org/api/sales/group/grp_8f0c1a
 
 ### Sales ledger
 
+Each ledger row and CSV export includes full policy fields: `first_name`, `last_name`, `date_of_birth`, `destination`, `start_date`, `end_date`, `premium_including_tax`, `agency_commission`, and `net_to_transfer` (aliases `commission` / `total` remain for compatibility).
+
 Financial consolidation view for admins, sub-admins and partner managers
 (supervisors). Each line includes **commission** and **net_to_transfer** using
 the same rules as partner invoices. `meta.summary` covers the full filtered

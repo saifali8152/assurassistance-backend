@@ -414,15 +414,23 @@ components:
     LedgerRow:
       type: object
       description: |
-        Sales-ledger line. Commission uses the same `commissionForSale` rules as
-        partner invoices (duration tiers, child ÷2, Agico fixed-duration → 0).
+        Sales-ledger line with full policy details. Commission uses the same
+        `commissionForSale` rules as partner invoices (duration tiers, child ÷2,
+        Agico fixed-duration → 0).
       properties:
         sale_id: { type: integer }
         case_id: { type: integer }
         agent_id: { type: integer }
         created_by_name: { type: string }
-        traveller_name: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        traveller_name: { type: string, description: Convenience concat of first + last }
         traveller_phone: { type: string }
+        date_of_birth: { type: string, format: date, nullable: true }
+        destination: { type: string, nullable: true }
+        start_date: { type: string, format: date, nullable: true }
+        end_date: { type: string, format: date, nullable: true }
+        duration_days: { type: integer, nullable: true }
         plan_name: { type: string }
         product_type: { type: string }
         policy_number: { type: string }
@@ -432,8 +440,10 @@ components:
         premium_amount: { type: number }
         tax: { type: number }
         total: { type: number, description: plan_premium + tax }
+        premium_including_tax: { type: number, description: Alias of total (premium + tax) }
         commission: { type: number }
-        net_to_transfer: { type: number, description: total − commission }
+        agency_commission: { type: number, description: Alias of commission }
+        net_to_transfer: { type: number, description: premium_including_tax − agency_commission }
         currency: { type: string, example: XOF }
         received_amount: { type: number }
         payment_status: { type: string }
@@ -470,11 +480,22 @@ components:
         payment_status: { type: string }
         sale_id: { type: integer }
         policy_number: { type: string, nullable: true }
+        first_name: { type: string }
+        last_name: { type: string }
         traveller_name: { type: string }
+        date_of_birth: { type: string, format: date, nullable: true }
         traveller_country: { type: string, nullable: true }
         destination: { type: string, nullable: true }
+        start_date: { type: string, format: date, nullable: true }
+        end_date: { type: string, format: date, nullable: true }
+        duration_days: { type: integer, nullable: true }
         plan_name: { type: string, nullable: true }
         product_type: { type: string, nullable: true }
+        plan_premium: { type: number }
+        premium_including_tax: { type: number }
+        commission: { type: number }
+        agency_commission: { type: number }
+        net_to_transfer: { type: number }
         currency: { type: string, nullable: true }
         created_by_id: { type: integer, nullable: true }
         created_by_name: { type: string, nullable: true }

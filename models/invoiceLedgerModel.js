@@ -11,6 +11,7 @@
 //
 // Visibility is enforced by the caller via `agentIds`; admins pass `agentIds = null`.
 import getPool from "../utils/db.js";
+import { commissionForSale } from "../utils/commissionRules.js";
 
 const REGION_EXPRESSIONS = {
   residence: "TRIM(COALESCE(NULLIF(t.country_of_residence, ''), 'Unknown'))",
@@ -95,6 +96,49 @@ const BASE_FROM = `
   LEFT JOIN users u ON c.created_by = u.id
 `;
 
+function formatDateOnly(v) {
+  if (v == null || v === "") return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) {
+    return v.toISOString().slice(0, 10);
+  }
+  const s = String(v);
+  return s.length >= 10 ? s.slice(0, 10) : s;
+}
+
+function mapInvoiceLedgerRow(r) {
+  const planPremium =
+    r.plan_price != null && Number(r.plan_price) > 0
+      ? Number(r.plan_price)
+      : Number(r.subtotal) || 0;
+  const tax = Number(r.tax) || 0;
+  const total = Number(r.total) != null && !Number.isNaN(Number(r.total))
+    ? Number(r.total)
+    : planPremium + tax;
+  const commission = commissionForSale({
+    premium: planPremium,
+    durationDays: r.duration_days,
+    dateOfBirth: r.date_of_birth,
+    fixedDurationPremiums: !!Number(r.fixed_duration_premiums),
+  });
+  const firstName = r.first_name || "";
+  const lastName = r.last_name || "";
+  return {
+    ...r,
+    first_name: firstName,
+    last_name: lastName,
+    traveller_name: r.traveller_name || [firstName, lastName].filter(Boolean).join(" "),
+    date_of_birth: formatDateOnly(r.date_of_birth),
+    start_date: formatDateOnly(r.start_date),
+    end_date: formatDateOnly(r.end_date),
+    destination: r.destination || "",
+    plan_premium: planPremium,
+    premium_including_tax: total,
+    commission,
+    agency_commission: commission,
+    net_to_transfer: total - commission,
+  };
+}
+
 /**
  * Paginated rows + total count for the table.
  * Returns { rows, total, page, limit, regionBy }.
@@ -160,11 +204,16 @@ export const getInvoiceLedger = async ({
       c.destination,
       c.start_date,
       c.end_date,
+      c.duration_days,
+      t.first_name,
+      t.last_name,
       CONCAT(t.first_name, ' ', t.last_name) AS traveller_name,
+      t.date_of_birth,
       t.country_of_residence AS traveller_country,
       cat.name AS plan_name,
       cat.product_type,
       cat.currency,
+      cat.fixed_duration_premiums,
       u.id AS created_by_id,
       u.name AS created_by_name,
       u.country_of_residence AS agent_country,
@@ -177,7 +226,13 @@ export const getInvoiceLedger = async ({
   `;
   const [rows] = await pool.query(dataSql, [...params, limitNum, offset]);
 
-  return { rows, total, page: pageNum, limit: limitNum, regionBy };
+  return {
+    rows: rows.map(mapInvoiceLedgerRow),
+    total,
+    page: pageNum,
+    limit: limitNum,
+    regionBy
+  };
 };
 
 /**

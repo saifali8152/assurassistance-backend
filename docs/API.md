@@ -409,9 +409,16 @@ duration tiers, child ÷2, Agico `fixed_duration_premiums` → 0).
       "case_id": 4821,
       "agent_id": 42,
       "created_by_name": "Aïcha Diallo",
+      "first_name": "Aïcha",
+      "last_name": "Diallo",
       "traveller_name": "Aïcha Diallo",
       "traveller_phone": "+225...",
-      "plan_name": "AGICO Worldwide 30 Days",
+      "date_of_birth": "1990-04-12",
+      "destination": "France, Spain",
+      "start_date": "2026-06-01",
+      "end_date": "2026-06-15",
+      "duration_days": 15,
+      "plan_name": "GNA Retail",
       "product_type": "Travel",
       "policy_number": "AAS-2026-007912",
       "certificate_number": "CERT-2026-007912",
@@ -420,7 +427,9 @@ duration tiers, child ÷2, Agico `fixed_duration_premiums` → 0).
       "premium_amount": 25000,
       "tax": 0,
       "total": 25000,
+      "premium_including_tax": 25000,
       "commission": 4000,
+      "agency_commission": 4000,
       "net_to_transfer": 21000,
       "currency": "XOF",
       "received_amount": 25000,
@@ -443,6 +452,10 @@ duration tiers, child ÷2, Agico `fixed_duration_premiums` → 0).
 }
 ```
 
+Each ledger row includes full policy identity (first/last name, DOB, travel
+dates, destination), financials (**premium including tax**, **agency
+commission**, **net to be transferred**), and payment metadata.
+
 `meta.summary` covers the **full filtered set** (not only the current page):
 total policies issued, total commissions, and net amount to transfer
 (`totalPremiums − totalCommissions`), matching partner-invoice consolidation.
@@ -450,8 +463,10 @@ total policies issued, total commissions, and net amount to transfer
 ### GET /ledger/export
 
 Same filters; returns `text/csv` with a UTF-8 BOM (Excel-friendly). Filename:
-`sales_ledger_<timestamp>.csv`. Includes **Commission**, **Net to transfer**,
-and a SUMMARY footer row with the same totals as `meta.summary`.
+`sales_ledger_<timestamp>.csv`. Columns include Last Name, First Name, Date of
+Birth, Destination, Travel Start/End, Premium, Tax, Premium including tax,
+Agency Commission, Net to be transferred, plus a SUMMARY footer row with the
+same totals as `meta.summary`.
 
 ### GET /invoice-ledger
 

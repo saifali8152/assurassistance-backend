@@ -78,19 +78,19 @@ export const createUser = async ({
   name, email, password, role, force_password_change = 0,
   company_name = null, partnership_type = null, country_of_residence = null,
   iata_number = null, geographical_location = null, work_phone = null, whatsapp_phone = null,
-  parent_agent_id = null, created_by_id = null
+  parent_agent_id = null, created_by_id = null, partner_insurer = null
 }) => {
   const pool = getPool();
   const [result] = await pool.execute(
     `INSERT INTO users (name, email, password, role, force_password_change,
       company_name, partnership_type, country_of_residence, iata_number,
-      geographical_location, work_phone, whatsapp_phone, parent_agent_id, created_by_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      geographical_location, work_phone, whatsapp_phone, parent_agent_id, created_by_id, partner_insurer)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       name, email, password, role, force_password_change ? 1 : 0,
       company_name || null, partnership_type || null, country_of_residence || null,
       iata_number || null, geographical_location || null, work_phone || null, whatsapp_phone || null,
-      parent_agent_id || null, created_by_id || null
+      parent_agent_id || null, created_by_id || null, partner_insurer || null
     ]
   );
   return result.insertId;
@@ -198,14 +198,14 @@ export const getAllDescendantIds = async (supervisorId) => {
   return [...agentIds, ...subAgentIds];
 };
 
-/** Agency (top-level agent / supervisor) user IDs that a sub-administrator owns. */
-export const getOwnedAgencyIds = async (subAdminId) => {
+/** Agency (top-level agent / supervisor) user IDs that a supervisor owns. */
+export const getOwnedAgencyIds = async (supervisorId) => {
   const pool = getPool();
   const [rows] = await pool.query(
     `SELECT id FROM users
      WHERE role = 'agent' AND created_by_id = ?
        AND (parent_agent_id IS NULL OR parent_agent_id = 0)`,
-    [subAdminId]
+    [supervisorId]
   );
   return rows.map((r) => r.id);
 };
@@ -213,7 +213,7 @@ export const getOwnedAgencyIds = async (subAdminId) => {
 /**
  * Visibility:
  *   - admin: returns [userId] (admin bypasses visibility filters elsewhere).
- *   - sub_admin: every agency they created + every descendant of those agencies (+ self).
+ *   - sub_admin / insurer_supervisor: every agency they created + descendants (+ self).
  *   - agent (supervisor): self + all descendants.
  *   - agent (mid-level): self + direct sub-agents.
  *   - agent (sub-agent): self only.
@@ -222,7 +222,7 @@ export const getAgentVisibilityIds = async (userId) => {
   const user = await findUserById(userId);
   if (!user) return [userId];
 
-  if (user.role_name === 'sub_admin') {
+  if (user.role_name === 'sub_admin' || user.role_name === 'insurer_supervisor') {
     const agencyIds = await getOwnedAgencyIds(userId);
     const allIds = new Set([userId, ...agencyIds]);
     for (const aid of agencyIds) {
@@ -242,6 +242,55 @@ export const getAgentVisibilityIds = async (userId) => {
     return [userId, ...(await getSubAgentIds(userId))];
   }
   return [userId];
+};
+
+/** Catalogue plan IDs belonging to a partner insurer key. */
+export const getCatalogueIdsForPartnerInsurer = async (partnerInsurer) => {
+  if (!partnerInsurer) return [];
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT id FROM catalogue WHERE partner_insurer = ?`,
+    [String(partnerInsurer).trim().toLowerCase()]
+  );
+  return rows.map((r) => r.id);
+};
+
+/** Assert plan IDs all belong to the given insurer (for assignment / issuing). */
+export const assertPlansBelongToInsurer = async (planIds, partnerInsurer) => {
+  const ids = (planIds || []).map((x) => parseInt(x, 10)).filter((n) => !Number.isNaN(n));
+  if (ids.length === 0) return true;
+  const allowed = new Set(await getCatalogueIdsForPartnerInsurer(partnerInsurer));
+  return ids.every((id) => allowed.has(id));
+};
+
+export const getInsurerSupervisors = async () => {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT u.id, u.name, u.email, u.role as role_name, u.status,
+            u.force_password_change, u.last_login, u.created_at,
+            u.work_phone, u.whatsapp_phone, u.partner_insurer,
+            (SELECT COUNT(*) FROM users a
+              WHERE a.role = 'agent'
+                AND a.created_by_id = u.id
+                AND (a.parent_agent_id IS NULL OR a.parent_agent_id = 0)
+            ) AS owned_agency_count
+     FROM users u
+     WHERE u.role = 'insurer_supervisor'
+     ORDER BY u.created_at DESC`
+  );
+  return rows;
+};
+
+/** Distinct partner_insurer keys present on catalogue plans. */
+export const listPartnerInsurerKeys = async () => {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT DISTINCT partner_insurer AS key_slug
+     FROM catalogue
+     WHERE partner_insurer IS NOT NULL AND TRIM(partner_insurer) <> ''
+     ORDER BY partner_insurer ASC`
+  );
+  return rows.map((r) => r.key_slug);
 };
 
 /** Sub-agents under an agent (for admin list) */

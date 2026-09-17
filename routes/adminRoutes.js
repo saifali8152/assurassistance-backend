@@ -17,43 +17,53 @@ import {
   createSubAdmin,
   listSubAdmins,
   deleteSubAdmin,
+  createInsurerSupervisor,
+  listInsurerSupervisors,
+  deleteInsurerSupervisor,
+  listPartnerInsurers,
   listPartners,
   reassignAgentSupervisor,
   getAgentSupervisionHistory,
   checkEmailAvailable
 } from '../controllers/adminController.js';
 import authenticate from '../middlewares/authMiddleware.js';
-import { adminOnly, adminOrSubAdmin } from '../middlewares/roleMiddleware.js';
+import { adminOnly, adminOrAgencyManager } from '../middlewares/roleMiddleware.js';
 import { findUserById } from '../models/userModel.js';
 import getPool from '../utils/db.js';
 
 const router = express.Router();
 
-// Agency-management endpoints are usable by admin or sub-administrators (field sales reps).
-router.post('/create-agent', authenticate, adminOrSubAdmin, createAgent);
-router.get('/list-agents', authenticate, adminOrSubAdmin, listAgents);
-router.get('/email-available', authenticate, adminOrSubAdmin, checkEmailAvailable);
+// Agency-management endpoints: admin, sub-admin, or insurer supervisor.
+router.post('/create-agent', authenticate, adminOrAgencyManager, createAgent);
+router.get('/list-agents', authenticate, adminOrAgencyManager, listAgents);
+router.get('/email-available', authenticate, adminOrAgencyManager, checkEmailAvailable);
 // Superadmin: partners (agencies) listed once by partnership type, with descendant account counts.
 router.get('/partners', authenticate, adminOnly, listPartners);
 router.get('/agent-hierarchy/export', authenticate, adminOnly, exportAgentHierarchyCsv);
 router.get('/agent-hierarchy', authenticate, adminOnly, listAgentHierarchy);
-router.get('/agents/:id', authenticate, adminOrSubAdmin, getAgent);
-router.patch('/agents/:id', authenticate, adminOrSubAdmin, updateAgent);
-router.delete('/agents/:id', authenticate, adminOrSubAdmin, deleteAgentOrHierarchy);
+router.get('/agents/:id', authenticate, adminOrAgencyManager, getAgent);
+router.patch('/agents/:id', authenticate, adminOrAgencyManager, updateAgent);
+router.delete('/agents/:id', authenticate, adminOrAgencyManager, deleteAgentOrHierarchy);
 // Admin-only: reassign partner/agency to another sub-admin (keeps historical sales/policies).
 router.patch('/agents/:id/supervisor', authenticate, adminOnly, reassignAgentSupervisor);
 router.get('/agents/:id/supervision-history', authenticate, adminOnly, getAgentSupervisionHistory);
-router.get('/agents/:id/sub-agents', authenticate, adminOrSubAdmin, listSubAgents);
-router.post('/agents/:id/sub-agents', authenticate, adminOrSubAdmin, createSubAgent);
-router.patch('/users/status', authenticate, adminOrSubAdmin, changeUserStatus);
-router.post('/send-reset-link', authenticate, adminOrSubAdmin, sendPasswordResetLink);
-router.get('/dashboard', authenticate, adminOrSubAdmin, getAdminDashboardStats);
+router.get('/agents/:id/sub-agents', authenticate, adminOrAgencyManager, listSubAgents);
+router.post('/agents/:id/sub-agents', authenticate, adminOrAgencyManager, createSubAgent);
+router.patch('/users/status', authenticate, adminOrAgencyManager, changeUserStatus);
+router.post('/send-reset-link', authenticate, adminOrAgencyManager, sendPasswordResetLink);
+router.get('/dashboard', authenticate, adminOrAgencyManager, getAdminDashboardStats);
 router.get('/production-trend', authenticate, adminOnly, getProductionTrend);
 
 // Sub-administrator management is admin-only.
 router.post('/create-sub-admin', authenticate, adminOnly, createSubAdmin);
 router.get('/sub-admins', authenticate, adminOnly, listSubAdmins);
 router.delete('/sub-admins/:id', authenticate, adminOnly, deleteSubAdmin);
+
+// Insurer supervisor management is admin-only.
+router.get('/partner-insurers', authenticate, adminOnly, listPartnerInsurers);
+router.post('/create-insurer-supervisor', authenticate, adminOnly, createInsurerSupervisor);
+router.get('/insurer-supervisors', authenticate, adminOnly, listInsurerSupervisors);
+router.delete('/insurer-supervisors/:id', authenticate, adminOnly, deleteInsurerSupervisor);
 
 // Get admin profile
 router.get('/profile', authenticate, async (req, res) => {

@@ -54,10 +54,13 @@ tags:
     description: Aggregated ledger and "invoices by region" views.
   - name: Agents
     description: |
-      Agency-management endpoints (used by AssurAssistance staff and field-sales
-      sub-administrators). Admin-only reassignment endpoints move a partner /
-      travel agency between supervising accounts without losing historical
-      policies or identifiers (`PATCH/GET …/supervisor` and `…/supervision-history`).
+      Agency-management endpoints (used by AssurAssistance staff, field-sales
+      sub-administrators, and insurer supervisors). Admin-only reassignment
+      endpoints move a partner / travel agency between supervising accounts
+      without losing historical policies or identifiers
+      (`PATCH/GET …/supervisor` and `…/supervision-history`).
+      Insurer supervisors are scoped to a `partner_insurer` key and may only
+      assign / report on catalogue plans tagged with that key.
   - name: Users
     description: Self-service profile, dashboard, and password endpoints for the logged-in user (JWT only).
   - name: Reconciliation
@@ -221,8 +224,12 @@ components:
         email: { type: string, format: email }
         role:
           type: string
-          enum: [admin, sub_admin, agent]
+          enum: [admin, sub_admin, insurer_supervisor, agent]
         force_password_change: { type: boolean }
+        partner_insurer:
+          type: string
+          nullable: true
+          description: Insurer key for `insurer_supervisor` accounts (e.g. gna, agico).
 
     Plan:
       type: object
@@ -245,6 +252,10 @@ components:
         theme_color: { type: string, example: "#E4590F" }
         extra_id_fields: { type: boolean }
         partner_insurer_logo: { type: string, nullable: true }
+        partner_insurer:
+          type: string
+          nullable: true
+          description: Owning insurer key used to scope insurer supervisors (e.g. gna, agico).
         status:
           type: string
           enum: [active, inactive]
@@ -712,6 +723,7 @@ paths:
         Visibility follows the caller's role:
           * **admin** — every case.
           * **sub_admin** — cases under agencies the sub_admin owns.
+          * **insurer_supervisor** — all cases whose selected plan has matching `partner_insurer`.
           * **agent** — own cases + sub-agents' cases.
       security:
         - bearerJWT: []
@@ -2152,6 +2164,82 @@ paths:
     delete:
       tags: [Agents]
       summary: Delete a sub-administrator (admin only). Agencies they created are kept.
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: Deleted. }
+
+  /admin/partner-insurers:
+    get:
+      tags: [Agents]
+      summary: List distinct partner_insurer keys from the catalogue (admin only).
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: Array of insurer key strings (e.g. gna, agico).
+
+  /admin/create-insurer-supervisor:
+    post:
+      tags: [Agents]
+      summary: Create an insurer supervisor scoped to a partner_insurer key (admin only).
+      description: |
+        The account may issue travel policies, create agencies/subaccounts, and
+        report only on policies linked to plans tagged with the same
+        `partner_insurer` (e.g. `gna` → GNA Retail / Inbound / Road).
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name, email, partner_insurer]
+              properties:
+                first_name: { type: string }
+                last_name: { type: string }
+                email: { type: string, format: email }
+                partner_insurer:
+                  type: string
+                  example: gna
+                  description: Must match catalogue.partner_insurer on the insurer's plans.
+                work_phone: { type: string, nullable: true }
+                whatsapp_phone: { type: string, nullable: true }
+                tempPassword: { type: string, nullable: true }
+      responses:
+        "201":
+          description: Created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      email: { type: string }
+                      partner_insurer: { type: string }
+                      tempPassword: { type: string }
+                  message: { type: string }
+
+  /admin/insurer-supervisors:
+    get:
+      tags: [Agents]
+      summary: List insurer supervisors with owned-agency counts (admin only).
+      security:
+        - bearerJWT: []
+      responses:
+        "200": { description: Insurer supervisors array. }
+
+  /admin/insurer-supervisors/{id}:
+    delete:
+      tags: [Agents]
+      summary: Delete an insurer supervisor (admin only). Agencies they created are kept.
       security:
         - bearerJWT: []
       parameters:

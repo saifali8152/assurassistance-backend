@@ -22,8 +22,16 @@ function normalizeRegionBy(raw) {
 
 async function resolveAgentIds(req) {
   if (req.user.role === "admin") return null;
+  if (req.user.role === "insurer_supervisor") return null; // plan-scoped via partnerInsurer
   const { getAgentVisibilityIds } = await import("../models/userModel.js");
   return getAgentVisibilityIds(req.user.id);
+}
+
+async function resolvePartnerInsurer(req) {
+  if (req.user.role !== "insurer_supervisor") return null;
+  const { findUserById } = await import("../models/userModel.js");
+  const u = await findUserById(req.user.id);
+  return u?.partner_insurer || null;
 }
 
 /** GET /api/invoice-ledger */
@@ -32,6 +40,7 @@ export const listInvoiceLedger = async (req, res) => {
     const role = req.user.role;
     const agentId = req.user.id;
     const agentIds = await resolveAgentIds(req);
+    const partnerInsurer = await resolvePartnerInsurer(req);
 
     const {
       startDate,
@@ -49,6 +58,7 @@ export const listInvoiceLedger = async (req, res) => {
       role,
       agentId,
       agentIds,
+      partnerInsurer,
       startDate,
       endDate,
       paymentStatus,
@@ -103,6 +113,7 @@ export const exportInvoiceLedgerCsv = async (req, res) => {
       role,
       agentId,
       agentIds,
+      partnerInsurer: await resolvePartnerInsurer(req),
       startDate,
       endDate,
       paymentStatus,

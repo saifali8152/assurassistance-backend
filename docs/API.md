@@ -9,7 +9,7 @@ and rendered as Swagger UI at `/api/docs`).
 - **Local:** `http://localhost:3000/api`
 - **Auth:** `Authorization: Bearer <jwt|api-key>` (see [SECURITY.md](./SECURITY.md))
 
-Notable recent additions: [partner invoices / receipts](#11-partner-invoices--api-partner-invoices-admin--sub-admin-jwt) (`documentType`, `stamp`), [contractual documents](#12-contractual-documents--api-contractual-documents-jwt) (Terms & Conditions `full` / `brief`), [supervisor login email](#patch-adminagentsid--change-login-email-admin-jwt-only) (`PATCH /admin/agents/:id` `email` + `GET /admin/email-available`).
+Notable recent additions: [partner invoices / receipts](#11-partner-invoices--api-partner-invoices-admin--sub-admin-jwt) (`documentType`, `stamp`), [contractual documents](#12-contractual-documents--api-contractual-documents-jwt) (Terms & Conditions `full` / `brief`), [supervisor login email](#patch-adminagentsid--change-login-email-admin-jwt-only) (`PATCH /admin/agents/:id` `email` + `GET /admin/email-available`), [insurer supervisors](#insurer-supervisors) (`insurer_supervisor` + `partner_insurer` plan scoping).
 
 Legend:
 
@@ -747,6 +747,21 @@ If the agency has never been reassigned, the API may auto-record an open period 
 | GET | `/reconciliation/export` | CSV (Excel-friendly). |
 
 ---
+
+
+
+## Insurer supervisors
+
+Admin-only management:
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/admin/partner-insurers` | Distinct `catalogue.partner_insurer` keys |
+| POST | `/admin/create-insurer-supervisor` | Requires `first_name`, `last_name`, `email`, `partner_insurer` |
+| GET | `/admin/insurer-supervisors` | List with owned-agency counts |
+| DELETE | `/admin/insurer-supervisors/{id}` | Agencies kept |
+
+Role `insurer_supervisor` uses the staff shell. Catalogue, plan assignment, case listing, ledger, and invoices-by-region are limited to plans tagged with the same `partner_insurer` (e.g. Côte d’Ivoire `gna` → GNA Retail / Inbound / Road). Set `partner_insurer` on catalogue create/update.
 
 ## 11. Partner invoices — `/api/partner-invoices` (admin / sub-admin JWT)
 

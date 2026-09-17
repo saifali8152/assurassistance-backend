@@ -16,7 +16,10 @@ import {
   updateUserStatus,
   getOwnedAgencyIds,
   getAgentVisibilityIds,
-  getSubAdmins
+  getSubAdmins,
+  getInsurerSupervisors,
+  listPartnerInsurerKeys,
+  assertPlansBelongToInsurer
 } from '../models/userModel.js';
 import crypto from 'crypto';
 import getPool from '../utils/db.js';
@@ -31,13 +34,13 @@ import {
   getTopLevelAgencyById,
   ensureOpenSupervisionPeriod
 } from '../models/agencySupervisionModel.js';
+import { normalizePartnerInsurer } from '../middlewares/roleMiddleware.js';
 
 const REQUIRED_AGENT_FIELDS = ['company_name', 'partnership_type', 'country_of_residence', 'whatsapp_phone'];
 
 /**
- * Returns the set of agency IDs (top-level agents) a sub-administrator owns, and the
- * list of every user ID under those agencies (incl. nested sub-agents). Used to scope
- * agency endpoints when the caller is a sub-administrator.
+ * Returns the set of agency IDs (top-level agents) a supervisor owns, and the
+ * list of every user ID under those agencies (incl. nested sub-agents).
  */
 async function subAdminVisibility(subAdminId) {
   const visibility = await getAgentVisibilityIds(subAdminId);
@@ -45,10 +48,35 @@ async function subAdminVisibility(subAdminId) {
   return { visibility, ownedAgencyIds };
 }
 
-/** Verify a sub-administrator may access the given agent user id (must be inside their tree). */
-async function assertSubAdminMayAccessAgent(subAdminId, targetUserId) {
-  const ids = await getAgentVisibilityIds(subAdminId);
+/** Verify a sub-admin or insurer supervisor may access the given agent user id. */
+async function assertAgencyManagerMayAccessAgent(managerId, targetUserId) {
+  const ids = await getAgentVisibilityIds(managerId);
   return ids.includes(Number(targetUserId));
+}
+
+/** @deprecated alias */
+async function assertSubAdminMayAccessAgent(subAdminId, targetUserId) {
+  return assertAgencyManagerMayAccessAgent(subAdminId, targetUserId);
+}
+
+function isScopedManager(role) {
+  return role === 'sub_admin' || role === 'insurer_supervisor';
+}
+
+async function rejectIfPlansOutsideInsurer(req, planIds) {
+  if (req.user?.role !== 'insurer_supervisor') return null;
+  const u = await findUserById(req.user.id);
+  if (!u?.partner_insurer) {
+    return { status: 403, message: 'Insurer supervisor has no partner insurer configured' };
+  }
+  const ok = await assertPlansBelongToInsurer(planIds || [], u.partner_insurer);
+  if (!ok) {
+    return {
+      status: 403,
+      message: 'You may only assign plans that belong to your insurer'
+    };
+  }
+  return null;
 }
 
 export const createAgent = async (req, res) => {
@@ -92,6 +120,10 @@ export const createAgent = async (req, res) => {
     });
 
     if (assigned_plan_ids && Array.isArray(assigned_plan_ids) && assigned_plan_ids.length > 0) {
+      const planReject = await rejectIfPlansOutsideInsurer(req, assigned_plan_ids);
+      if (planReject) {
+        return res.status(planReject.status).json({ success: false, message: planReject.message });
+      }
       await setAgentAssignedPlans(userId, assigned_plan_ids.map((id) => parseInt(id, 10)));
     }
 
@@ -347,8 +379,8 @@ export const listAgents = async (req, res) => {
     let whereClause = "WHERE u.role = 'agent' AND (u.parent_agent_id IS NULL OR u.parent_agent_id = 0)";
     const params = [];
 
-    // Sub-administrators only see the agencies they created themselves.
-    if (req.user?.role === 'sub_admin') {
+    // Sub-administrators / insurer supervisors only see agencies they created.
+    if (isScopedManager(req.user?.role)) {
       whereClause += " AND u.created_by_id = ?";
       params.push(req.user.id);
     }
@@ -631,7 +663,7 @@ export const getAgent = async (req, res) => {
     if (!user || user.role_name !== 'agent') {
       return res.status(404).json({ message: 'Agent not found' });
     }
-    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
+    if (isScopedManager(req.user?.role) && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
       return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
     }
     const assigned_plan_ids = await getAgentAssignedPlanIds(parseInt(id, 10));
@@ -804,7 +836,7 @@ export const updateAgent = async (req, res) => {
     if (!user || user.role_name !== 'agent') {
       return res.status(404).json({ message: 'Agent not found' });
     }
-    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
+    if (isScopedManager(req.user?.role) && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
       return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
     }
     const {
@@ -853,6 +885,10 @@ export const updateAgent = async (req, res) => {
       }
     }
     if (assigned_plan_ids !== undefined && Array.isArray(assigned_plan_ids)) {
+      const planReject = await rejectIfPlansOutsideInsurer(req, assigned_plan_ids);
+      if (planReject) {
+        return res.status(planReject.status).json({ success: false, message: planReject.message });
+      }
       await setAgentAssignedPlans(parseInt(id, 10), assigned_plan_ids.map((x) => parseInt(x, 10)));
     }
     res.json({ success: true, message: 'Agent updated successfully' });
@@ -904,7 +940,7 @@ export const listSubAgents = async (req, res) => {
     if (!parent || parent.role_name !== 'agent') {
       return res.status(404).json({ message: 'Agent not found' });
     }
-    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
+    if (isScopedManager(req.user?.role) && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
       return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
     }
     const subAgents = await getSubAgents(parseInt(id, 10));
@@ -939,7 +975,7 @@ export const createSubAgent = async (req, res) => {
     if (!parent || parent.role_name !== 'agent') {
       return res.status(404).json({ message: 'Agent not found' });
     }
-    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
+    if (isScopedManager(req.user?.role) && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
       return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
     }
     const { first_name, last_name, email, work_phone, whatsapp_phone, assigned_plan_ids } = req.body;
@@ -949,6 +985,10 @@ export const createSubAgent = async (req, res) => {
     }
     if (!assigned_plan_ids || !Array.isArray(assigned_plan_ids) || assigned_plan_ids.length === 0) {
       return res.status(400).json({ message: 'At least one assigned plan is required' });
+    }
+    const planReject = await rejectIfPlansOutsideInsurer(req, assigned_plan_ids);
+    if (planReject) {
+      return res.status(planReject.status).json({ success: false, message: planReject.message });
     }
     let emailNorm;
     try {
@@ -1108,11 +1148,134 @@ export const deleteSubAdmin = async (req, res) => {
   }
 };
 
+const REQUIRED_INSURER_SUPERVISOR_FIELDS = ['first_name', 'last_name', 'email', 'partner_insurer'];
+
+/**
+ * Admin creates an insurer supervisor scoped to a partner_insurer key
+ * (e.g. gna → only GNA Retail / Inbound / Road plans).
+ */
+export const createInsurerSupervisor = async (req, res) => {
+  try {
+    const { first_name, last_name, email, work_phone, whatsapp_phone, tempPassword, partner_insurer } = req.body;
+    for (const field of REQUIRED_INSURER_SUPERVISOR_FIELDS) {
+      const val = req.body[field];
+      if (val == null || (typeof val === 'string' && val.trim() === '')) {
+        return res.status(400).json({ message: `${field.replace(/_/g, ' ')} is required` });
+      }
+    }
+    const insurerKey = normalizePartnerInsurer(partner_insurer);
+    if (!insurerKey) {
+      return res.status(400).json({ message: 'partner_insurer is required (e.g. gna, agico)' });
+    }
+
+    const name = [first_name, last_name].map((s) => String(s || '').trim()).filter(Boolean).join(' ');
+    if (!name) return res.status(400).json({ message: 'Name is required' });
+
+    let emailNorm;
+    try {
+      emailNorm = await assertLoginEmailAvailable(email);
+    } catch (emailErr) {
+      return res.status(emailErr.status || 400).json({
+        success: false,
+        message: emailErr.message,
+        code: emailErr.code || 'email_invalid',
+      });
+    }
+
+    const password = (tempPassword && String(tempPassword).trim()) || generateStrongPassword(12);
+    const hashed = await bcrypt.hash(password, 10);
+
+    const userId = await createUser({
+      name,
+      email: emailNorm,
+      password: hashed,
+      role: 'insurer_supervisor',
+      force_password_change: 1,
+      work_phone: (work_phone && String(work_phone).trim()) || null,
+      whatsapp_phone: (whatsapp_phone && String(whatsapp_phone).trim()) || null,
+      created_by_id: req.user?.id ?? null,
+      partner_insurer: insurerKey
+    });
+
+    try {
+      const loginUrl = `${process.env.FRONTEND_URL || 'https://acareeracademy.com'}/login`;
+      const emailTemplate = agentWelcomeTemplate(name, password, loginUrl);
+      await sendEmail(emailNorm, emailTemplate.subject, emailTemplate.text, emailTemplate.html);
+    } catch (emailErr) {
+      console.error('Failed to send welcome email to insurer supervisor:', emailErr);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: { id: userId, email: emailNorm, partner_insurer: insurerKey, tempPassword: password },
+      message: 'Insurer supervisor created successfully. Welcome email sent.'
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/** Admin lists insurer supervisors with owned-agency counts. */
+export const listInsurerSupervisors = async (req, res) => {
+  try {
+    const rows = await getInsurerSupervisors();
+    res.json({
+      success: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        status: r.status,
+        force_password_change: !!r.force_password_change,
+        last_login: r.last_login,
+        created_at: r.created_at,
+        work_phone: r.work_phone,
+        whatsapp_phone: r.whatsapp_phone,
+        partner_insurer: r.partner_insurer,
+        owned_agency_count: Number(r.owned_agency_count) || 0
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/** Admin deletes an insurer supervisor. Agencies they created are kept. */
+export const deleteInsurerSupervisor = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await findUserById(id);
+    if (!user || user.role_name !== 'insurer_supervisor') {
+      return res.status(404).json({ message: 'Insurer supervisor not found' });
+    }
+    const pool = getPool();
+    await pool.execute('DELETE FROM user_activity WHERE user_id = ?', [user.id]);
+    await pool.execute('DELETE FROM users WHERE id = ? AND role = ?', [user.id, 'insurer_supervisor']);
+    res.json({ success: true, message: 'Insurer supervisor deleted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+/** Admin lists known partner_insurer keys from catalogue (for create form). */
+export const listPartnerInsurers = async (req, res) => {
+  try {
+    const keys = await listPartnerInsurerKeys();
+    res.json({ success: true, data: keys });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 /** DELETE /admin/agents/:id — delete supervisor (whole tree), agent (+ sub-agents), or sub-agent only */
 export const deleteAgentOrHierarchy = async (req, res) => {
   try {
     const { id } = req.params;
-    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
+    if (isScopedManager(req.user?.role) && !(await assertSubAdminMayAccessAgent(req.user.id, id))) {
       return res.status(403).json({ success: false, message: 'Forbidden: agent is outside your scope' });
     }
     const result = await deleteAgentHierarchy(id);
@@ -1140,7 +1303,7 @@ export const changeUserStatus = async (req, res) => {
     if (Number(userId) === Number(req.user?.id)) {
       return res.status(400).json({ message: "You cannot change your own status" });
     }
-    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, userId))) {
+    if (isScopedManager(req.user?.role) && !(await assertSubAdminMayAccessAgent(req.user.id, userId))) {
       return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
     }
     await updateUserStatus(userId, status);
@@ -1156,7 +1319,7 @@ export const sendPasswordResetLink = async (req, res) => {
     const { userId } = req.body;
     if (!userId) return res.status(400).json({ message: "User ID required" });
 
-    if (req.user?.role === 'sub_admin' && !(await assertSubAdminMayAccessAgent(req.user.id, userId))) {
+    if (isScopedManager(req.user?.role) && !(await assertSubAdminMayAccessAgent(req.user.id, userId))) {
       return res.status(403).json({ message: 'Forbidden: agent is outside your scope' });
     }
 

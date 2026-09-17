@@ -35,7 +35,8 @@ function buildFilters({
   endDate,
   paymentStatus,
   region,
-  search
+  search,
+  partnerInsurer
 }) {
   const params = [];
   const whereClauses = [];
@@ -49,6 +50,11 @@ function buildFilters({
       whereClauses.push(`c.created_by IN (${ids.map(() => "?").join(",")})`);
       params.push(...ids);
     }
+  }
+
+  if (role === "insurer_supervisor" && partnerInsurer) {
+    whereClauses.push("cat.partner_insurer = ?");
+    params.push(String(partnerInsurer).trim().toLowerCase());
   }
 
   if (startDate) {
@@ -103,6 +109,7 @@ export const getInvoiceLedger = async ({
   region,
   regionBy = "residence",
   search,
+  partnerInsurer,
   page = 1,
   limit = 25
 }) => {
@@ -120,7 +127,8 @@ export const getInvoiceLedger = async ({
     endDate,
     paymentStatus,
     region,
-    search
+    search,
+    partnerInsurer
   });
 
   const whereSql = whereClauses.length
@@ -186,6 +194,7 @@ export const getInvoiceRegionSummary = async ({
   region,
   regionBy = "residence",
   search,
+  partnerInsurer,
   topN = 50
 }) => {
   const pool = getPool();
@@ -198,7 +207,8 @@ export const getInvoiceRegionSummary = async ({
     endDate,
     paymentStatus,
     region,
-    search
+    search,
+    partnerInsurer
   });
 
   const whereSql = whereClauses.length
@@ -236,6 +246,7 @@ export const getInvoiceLedgerAll = async ({
   region,
   regionBy = "residence",
   search,
+  partnerInsurer,
   hardLimit = 50000
 }) => {
   const { rows } = await getInvoiceLedger({
@@ -248,6 +259,7 @@ export const getInvoiceLedgerAll = async ({
     region,
     regionBy,
     search,
+    partnerInsurer,
     page: 1,
     limit: Math.min(hardLimit, 50000)
   });

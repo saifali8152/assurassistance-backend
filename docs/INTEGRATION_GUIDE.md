@@ -751,7 +751,20 @@ address must not belong to any other login user (case-insensitive).
 
 | Method | Path | Auth |
 |---|---|---|
-| GET | `/admin/email-available?email=&excludeUserId=` | Admin or sub-admin JWT |
+| GET | `/admin/email-available?email=&excludeUserId=` | Admin, sub-admin, or insurer supervisor JWT |
+| GET | `/admin/partner-insurers` | Admin JWT — distinct `catalogue.partner_insurer` keys |
+| POST | `/admin/create-insurer-supervisor` | Admin JWT — body includes `partner_insurer` (e.g. `gna`) |
+| GET | `/admin/insurer-supervisors` | Admin JWT |
+| DELETE | `/admin/insurer-supervisors/{id}` | Admin JWT |
+
+### Insurer supervisors
+
+Admin-created accounts with role `insurer_supervisor` and a `partner_insurer` key.
+They use the staff shell to issue travel policies, create agencies/subaccounts, and
+report only on policies whose catalogue plan has the same `partner_insurer`
+(example Côte d’Ivoire: `gna` → GNA Retail, GNA Inbound, GNA Road). Tag plans via
+`partner_insurer` on create/update catalogue (Create Plan UI).
+
 | PATCH | `/admin/agents/{id}` body `{ "email": "…" }` | **Admin JWT only** |
 
 ```bash

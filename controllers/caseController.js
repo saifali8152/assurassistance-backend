@@ -28,18 +28,42 @@ import { commissionForSale } from "../utils/commissionRules.js";
 
 const MAX_GROUP_MEMBERS = 500;
 
+async function assertInsurerMayUsePlan(req, planId) {
+  if (req.user?.role !== "insurer_supervisor") return null;
+  const { findUserById, assertPlansBelongToInsurer } = await import("../models/userModel.js");
+  const u = await findUserById(req.user.id);
+  if (!u?.partner_insurer) {
+    return { status: 403, message: "Insurer supervisor has no partner insurer configured" };
+  }
+  const ok = await assertPlansBelongToInsurer([planId], u.partner_insurer);
+  if (!ok) {
+    return { status: 403, message: "You may only issue policies for your insurer's plans" };
+  }
+  return null;
+}
+
 async function assertUserCanAccessCase(req, caseId) {
   const row = await getCaseDetailsById(caseId);
   if (!row) return { error: 404, message: "Case not found" };
   if (req.user.role === "admin") return { caseRow: row };
+  if (req.user.role === "insurer_supervisor") {
+    const { findUserById } = await import("../models/userModel.js");
+    const u = await findUserById(req.user.id);
+    const insurer = String(u?.partner_insurer || "").toLowerCase();
+    const planInsurer = String(row.plan_partner_insurer || "").toLowerCase();
+    if (!insurer || !planInsurer || insurer !== planInsurer) {
+      return { error: 403, message: "Forbidden" };
+    }
+    return { caseRow: row };
+  }
   const ids = await getAgentVisibilityIds(req.user.id);
   if (!ids.includes(row.created_by)) return { error: 403, message: "Forbidden" };
   return { caseRow: row };
 }
 
-/** Sub-administrators have admin-grade policy-edit powers within their visibility. */
+/** Sub-administrators / insurer supervisors have admin-grade policy-edit powers within their scope. */
 function hasAdminEditPowers(user) {
-  return user?.role === "admin" || user?.role === "sub_admin";
+  return user?.role === "admin" || user?.role === "sub_admin" || user?.role === "insurer_supervisor";
 }
 
 function normalizeDestinationInput(dest) {
@@ -144,6 +168,10 @@ export const createGroupCasesWithTravellers = async (req, res) => {
     if (!caseData?.selected_plan_id || !caseData?.start_date || !caseData?.end_date) {
       return res.status(400).json({ message: "Missing case details (plan, dates)" });
     }
+    const planReject = await assertInsurerMayUsePlan(req, caseData.selected_plan_id);
+    if (planReject) {
+      return res.status(planReject.status).json({ message: planReject.message });
+    }
 
     const group_id = uuidv4();
     const caseIds = [];
@@ -183,7 +211,14 @@ export const createGroupCasesWithTravellers = async (req, res) => {
 export const createCaseWithTraveller = async (req, res) => {
   try {
     const { traveller, caseData } = req.body;
-    const created_by = req.user.id; 
+    const created_by = req.user.id;
+
+    if (caseData?.selected_plan_id) {
+      const planReject = await assertInsurerMayUsePlan(req, caseData.selected_plan_id);
+      if (planReject) {
+        return res.status(planReject.status).json({ message: planReject.message });
+      }
+    }
 
     // 1. Create traveller
     const travellerId = await createTraveller(traveller);
@@ -244,7 +279,8 @@ export const changeCaseStatus = async (req, res) => {
   }
 };
 
-// Get all cases with pagination. Admin → unfiltered; sub-admin → only cases in their scope.
+// Get all cases with pagination. Admin → unfiltered; sub-admin → owned agencies;
+// insurer_supervisor → all policies on their insurer's plans.
 export const getAllCases = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
@@ -259,6 +295,16 @@ export const getAllCases = async (req, res) => {
     if (req.user.role === "sub_admin") {
       const agentIds = await getAgentVisibilityIds(req.user.id);
       const result = await getCasesByAgentIdsWithPagination(agentIds, listOpts);
+      return res.json(result);
+    }
+    if (req.user.role === "insurer_supervisor") {
+      const { findUserById } = await import("../models/userModel.js");
+      const u = await findUserById(req.user.id);
+      const partnerInsurer = u?.partner_insurer || null;
+      if (!partnerInsurer) {
+        return res.json({ cases: [], totalCases: 0, totalPages: 0, currentPage: page, limit });
+      }
+      const result = await getAllCasesWithPagination({ ...listOpts, partnerInsurer });
       return res.json(result);
     }
     return res.status(403).json({ message: "Forbidden" });

@@ -547,6 +547,28 @@
           "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/admin/sub-admins/7", "host": ["{{baseUrl}}"], "path": ["admin","sub-admins","7"] } }
         },
         {
+          "name": "List partner insurer keys (admin)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/partner-insurers", "host": ["{{baseUrl}}"], "path": ["admin","partner-insurers"] } }
+        },
+        {
+          "name": "Create insurer supervisor (admin)",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/admin/create-insurer-supervisor", "host": ["{{baseUrl}}"], "path": ["admin","create-insurer-supervisor"] },
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Awa\",\n  \"last_name\": \"Kone\",\n  \"email\": \"gna.supervisor@example.com\",\n  \"partner_insurer\": \"gna\",\n  \"whatsapp_phone\": \"+225...\"\n}" },
+            "description": "Admin JWT only. Scopes the account to catalogue plans with matching partner_insurer (e.g. gna → GNA Retail / Inbound / Road)."
+          }
+        },
+        {
+          "name": "List insurer supervisors (admin)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/insurer-supervisors", "host": ["{{baseUrl}}"], "path": ["admin","insurer-supervisors"] } }
+        },
+        {
+          "name": "Delete insurer supervisor (admin)",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/admin/insurer-supervisors/8", "host": ["{{baseUrl}}"], "path": ["admin","insurer-supervisors","8"] } }
+        },
+        {
           "name": "Get admin profile",
           "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/profile", "host": ["{{baseUrl}}"], "path": ["admin","profile"] } }
         },

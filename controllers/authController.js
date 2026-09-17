@@ -46,6 +46,7 @@ export const login = async (req, res) => {
         email: user.email,
         role: user.role_name,
         force_password_change: !!user.force_password_change,
+        partner_insurer: user.partner_insurer || null,
       },
     });
   } catch (err) {
@@ -118,6 +119,7 @@ export const changePassword = async (req, res) => {
         email: updatedUser.email,
         role: updatedUser.role_name,
         force_password_change: !!updatedUser.force_password_change,
+        partner_insurer: updatedUser.partner_insurer || null,
       }
     });
   } catch (err) {

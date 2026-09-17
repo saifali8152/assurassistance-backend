@@ -3,7 +3,7 @@ import getPool from "../utils/db.js";
 import { commissionForSale } from "../utils/commissionRules.js";
 import { applySoftDeletedSaleDisplay, MAX_PAYMENT_REVERSES } from "../utils/policyLifecycle.js";
 
-function buildLedgerWhere({ role, agentId, agentIds, startDate, endDate, status, paymentStatus, search }) {
+function buildLedgerWhere({ role, agentId, agentIds, startDate, endDate, status, paymentStatus, search, partnerInsurer }) {
   const params = [];
   const whereClauses = [];
 
@@ -17,6 +17,12 @@ function buildLedgerWhere({ role, agentId, agentIds, startDate, endDate, status,
       whereClauses.push(`c.created_by IN (${ids.map(() => "?").join(",")})`);
       params.push(...ids);
     }
+  }
+
+  // Insurer supervisors: all policies on plans belonging to their insurer.
+  if (role === "insurer_supervisor" && partnerInsurer) {
+    whereClauses.push("cat.partner_insurer = ?");
+    params.push(String(partnerInsurer).trim().toLowerCase());
   }
 
   if (startDate) {
@@ -107,6 +113,7 @@ export const getLedger = async ({
   status,
   paymentStatus,
   search,
+  partnerInsurer,
   page = 1,
   limit = 25,
 }) => {
@@ -121,6 +128,7 @@ export const getLedger = async ({
     status,
     paymentStatus,
     search,
+    partnerInsurer,
   });
 
   const baseSQL = `
@@ -189,6 +197,7 @@ export const getLedgerSummary = async ({
   status,
   paymentStatus,
   search,
+  partnerInsurer,
 }) => {
   const pool = getPool();
   const { whereSQL, params } = buildLedgerWhere({
@@ -200,6 +209,7 @@ export const getLedgerSummary = async ({
     status,
     paymentStatus,
     search,
+    partnerInsurer,
   });
 
   const [rows] = await pool.query(

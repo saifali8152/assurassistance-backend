@@ -5,16 +5,22 @@ import { format } from "@fast-csv/format";
 async function resolveVisibility(req) {
   const role = req.user.role;
   let agentIds = null;
+  let partnerInsurer = null;
   if (role === "agent" || role === "sub_admin") {
     const { getAgentVisibilityIds } = await import("../models/userModel.js");
     agentIds = await getAgentVisibilityIds(req.user.id);
   }
-  return { role, agentId: req.user.id, agentIds };
+  if (role === "insurer_supervisor") {
+    const { findUserById } = await import("../models/userModel.js");
+    const u = await findUserById(req.user.id);
+    partnerInsurer = u?.partner_insurer || null;
+  }
+  return { role, agentId: req.user.id, agentIds, partnerInsurer };
 }
 
 export const listLedger = async (req, res) => {
   try {
-    const { role, agentId, agentIds } = await resolveVisibility(req);
+    const { role, agentId, agentIds, partnerInsurer } = await resolveVisibility(req);
     const {
       startDate,
       endDate,
@@ -29,6 +35,7 @@ export const listLedger = async (req, res) => {
       role,
       agentId,
       agentIds,
+      partnerInsurer,
       startDate,
       endDate,
       status,
@@ -59,13 +66,14 @@ export const listLedger = async (req, res) => {
 
 export const exportLedgerCsv = async (req, res) => {
   try {
-    const { role, agentId, agentIds } = await resolveVisibility(req);
+    const { role, agentId, agentIds, partnerInsurer } = await resolveVisibility(req);
     const { startDate, endDate, status, paymentStatus, search } = req.query;
 
     const filters = {
       role,
       agentId,
       agentIds,
+      partnerInsurer,
       startDate,
       endDate,
       status,

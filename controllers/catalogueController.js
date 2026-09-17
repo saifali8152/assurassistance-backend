@@ -1,5 +1,5 @@
 import getPool from "../utils/db.js";
-import { isPrivilegedRole } from "../middlewares/roleMiddleware.js";
+import { isPrivilegedRole, normalizePartnerInsurer } from "../middlewares/roleMiddleware.js";
 import path from "path";
 import fs from "fs";
 import multer from "multer";
@@ -72,7 +72,8 @@ export const createCatalogue = async (req, res) => {
       currency,
       theme_color,
       extra_id_fields,
-      fixed_duration_premiums
+      fixed_duration_premiums,
+      partner_insurer
     } = req.body;
 
     const countryValue =
@@ -84,10 +85,11 @@ export const createCatalogue = async (req, res) => {
       route_type && typeof route_type === "string" && route_type.trim() !== "" ? route_type.trim() : null;
 
     const coverageValue = coverage != null && String(coverage).trim() !== "" ? String(coverage).trim() : null;
+    const partnerInsurerValue = normalizePartnerInsurer(partner_insurer);
 
     const [result] = await pool.query(
-      `INSERT INTO catalogue (product_type, name, coverage, pricing_rules, flat_price, country_of_residence, route_type, currency, theme_color, extra_id_fields, fixed_duration_premiums)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO catalogue (product_type, name, coverage, pricing_rules, flat_price, country_of_residence, route_type, currency, theme_color, extra_id_fields, fixed_duration_premiums, partner_insurer)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         product_type,
         name,
@@ -99,7 +101,8 @@ export const createCatalogue = async (req, res) => {
         currency || "XOF",
         sanitizeThemeColor(theme_color),
         toBoolFlag(extra_id_fields),
-        toBoolFlag(fixed_duration_premiums)
+        toBoolFlag(fixed_duration_premiums),
+        partnerInsurerValue
       ]
     );
     res.status(201).json({
@@ -113,7 +116,7 @@ export const createCatalogue = async (req, res) => {
   }
 };
 
-// Get all catalogues (Admin / sub-admin: all plans; Agent: only assigned plans)
+// Get all catalogues (Admin / sub-admin: all plans; insurer_supervisor: insurer plans; Agent: assigned)
 export const getCatalogues = async (req, res) => {
   try {
     const pool = getPool();
@@ -121,6 +124,15 @@ export const getCatalogues = async (req, res) => {
     const params = [];
     if (isPrivilegedRole(req.user.role)) {
       query = "SELECT * FROM catalogue";
+    } else if (req.user.role === "insurer_supervisor") {
+      const { findUserById } = await import("../models/userModel.js");
+      const u = await findUserById(req.user.id);
+      const insurer = u?.partner_insurer;
+      if (!insurer) {
+        return res.json({ success: true, data: [] });
+      }
+      query = "SELECT * FROM catalogue WHERE partner_insurer = ?";
+      params.push(String(insurer).toLowerCase());
     } else {
       query = `SELECT c.* FROM catalogue c
                 INNER JOIN user_assigned_plans uap ON uap.catalogue_id = c.id AND uap.user_id = ?
@@ -166,7 +178,8 @@ export const updateCatalogue = async (req, res) => {
       currency,
       theme_color,
       extra_id_fields,
-      fixed_duration_premiums
+      fixed_duration_premiums,
+      partner_insurer
     } = req.body;
 
     const countryValue =
@@ -178,25 +191,49 @@ export const updateCatalogue = async (req, res) => {
       route_type && typeof route_type === "string" && route_type.trim() !== "" ? route_type.trim() : null;
 
     const coverageValue = coverage != null && String(coverage).trim() !== "" ? String(coverage).trim() : null;
+    const partnerInsurerValue =
+      partner_insurer !== undefined ? normalizePartnerInsurer(partner_insurer) : undefined;
 
-    await pool.query(
-      `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=?, theme_color=?, extra_id_fields=?, fixed_duration_premiums=? WHERE id=?`,
-      [
-        product_type,
-        name,
-        coverageValue,
-        JSON.stringify(pricing_rules),
-        flat_price,
-        active,
-        countryValue,
-        routeValue,
-        currency || "XOF",
-        sanitizeThemeColor(theme_color),
-        toBoolFlag(extra_id_fields),
-        toBoolFlag(fixed_duration_premiums),
-        id
-      ]
-    );
+    if (partnerInsurerValue !== undefined) {
+      await pool.query(
+        `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=?, theme_color=?, extra_id_fields=?, fixed_duration_premiums=?, partner_insurer=? WHERE id=?`,
+        [
+          product_type,
+          name,
+          coverageValue,
+          JSON.stringify(pricing_rules),
+          flat_price,
+          active,
+          countryValue,
+          routeValue,
+          currency || "XOF",
+          sanitizeThemeColor(theme_color),
+          toBoolFlag(extra_id_fields),
+          toBoolFlag(fixed_duration_premiums),
+          partnerInsurerValue,
+          id
+        ]
+      );
+    } else {
+      await pool.query(
+        `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=?, theme_color=?, extra_id_fields=?, fixed_duration_premiums=? WHERE id=?`,
+        [
+          product_type,
+          name,
+          coverageValue,
+          JSON.stringify(pricing_rules),
+          flat_price,
+          active,
+          countryValue,
+          routeValue,
+          currency || "XOF",
+          sanitizeThemeColor(theme_color),
+          toBoolFlag(extra_id_fields),
+          toBoolFlag(fixed_duration_premiums),
+          id
+        ]
+      );
+    }
     res.json({ success: true, message: "Catalogue updated successfully" });
   } catch (err) {
     console.error(err);

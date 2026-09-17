@@ -148,7 +148,7 @@ export const deleteCaseById = async (caseId) => {
 export const getCaseDetailsById = async (caseId) => {
   const pool = getPool();
   const [rows] = await pool.query(
-    `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, CONCAT(t.first_name, ' ', t.last_name) as full_name, t.phone, t.email, t.passport_or_id, t.address, cat.id AS plan_id, cat.name AS plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules, cat.currency, cat.partner_insurer_logo AS plan_partner_insurer_logo, cat.theme_color AS plan_theme_color, cat.extra_id_fields AS plan_extra_id_fields, cat.fixed_duration_premiums AS plan_fixed_duration_premiums, c.duration_days
+    `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, CONCAT(t.first_name, ' ', t.last_name) as full_name, t.phone, t.email, t.passport_or_id, t.address, cat.id AS plan_id, cat.name AS plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules, cat.currency, cat.partner_insurer AS plan_partner_insurer, cat.partner_insurer_logo AS plan_partner_insurer_logo, cat.theme_color AS plan_theme_color, cat.extra_id_fields AS plan_extra_id_fields, cat.fixed_duration_premiums AS plan_fixed_duration_premiums, c.duration_days
      FROM cases c
      JOIN travellers t ON c.traveller_id = t.id
      LEFT JOIN catalogue cat ON c.selected_plan_id = cat.id
@@ -179,13 +179,17 @@ const CASE_LIST_SELECT = `
 `;
 
 /** Shared WHERE builder for paginated case listings (admin, sub-admin scope, agents). */
-function buildCaseListFilters({ agentIds, status, startDate, endDate, search }) {
+function buildCaseListFilters({ agentIds, status, startDate, endDate, search, partnerInsurer }) {
   const params = [];
   const whereClauses = [];
 
   if (agentIds && agentIds.length > 0) {
     whereClauses.push(`c.created_by IN (${agentIds.map(() => "?").join(",")})`);
     params.push(...agentIds);
+  }
+  if (partnerInsurer) {
+    whereClauses.push("cat.partner_insurer = ?");
+    params.push(String(partnerInsurer).trim().toLowerCase());
   }
   if (status && String(status).trim()) {
     whereClauses.push("c.status = ?");
@@ -219,7 +223,7 @@ function buildCaseListFilters({ agentIds, status, startDate, endDate, search }) 
   return { whereSQL, params };
 }
 
-async function queryCasesPaginated({ agentIds, page, limit, status, startDate, endDate, search }) {
+async function queryCasesPaginated({ agentIds, page, limit, status, startDate, endDate, search, partnerInsurer }) {
   const pool = getPool();
   const pageNum = Math.max(1, Number(page) || 1);
   const limitNum = Math.min(200, Math.max(1, Number(limit) || 25));
@@ -234,7 +238,8 @@ async function queryCasesPaginated({ agentIds, page, limit, status, startDate, e
     status,
     startDate,
     endDate,
-    search
+    search,
+    partnerInsurer
   });
 
   const [countRows] = await pool.query(
@@ -259,16 +264,17 @@ async function queryCasesPaginated({ agentIds, page, limit, status, startDate, e
   };
 }
 
-// Get all cases with pagination + filters (admin: no agent scope)
+// Get all cases with pagination + filters (admin: no agent scope; optional partnerInsurer)
 export const getAllCasesWithPagination = async ({
   page = 1,
   limit = 25,
   search,
   status,
   startDate,
-  endDate
+  endDate,
+  partnerInsurer
 } = {}) => {
-  return queryCasesPaginated({ page, limit, search, status, startDate, endDate });
+  return queryCasesPaginated({ page, limit, search, status, startDate, endDate, partnerInsurer });
 };
 
 // Get cases by agent with pagination (single id)

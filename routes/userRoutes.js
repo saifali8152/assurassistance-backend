@@ -18,7 +18,8 @@ router.get('/me', authenticate, async (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role_name,  // Example: 'admin' or 'agent'
+      role: user.role_name,
+      partner_insurer: user.partner_insurer || null,
       last_login: user.last_login
     });
 

@@ -90,7 +90,7 @@ Authorization is layered:
 ```
 ┌─ JWT or API key (proves who you are) ──────────────────────────────┐
 │                                                                    │
-│  ┌─ Role check (admin, sub_admin, agent) ────────────────────────┐ │
+│  ┌─ Role check (admin, sub_admin, insurer_supervisor, agent) ────┐ │
 │  │                                                               │ │
 │  │  ┌─ Scope check (API keys only) ───────────────────────────┐  │ │
 │  │  │                                                         │  │ │
@@ -103,12 +103,12 @@ Authorization is layered:
 ```
 
 1. **Authentication** — middleware sets `req.user` and (for API keys) `req.apiKey`.
-2. **Role gate** — `adminOnly`, `adminOrSubAdmin` for sensitive endpoints.
+2. **Role gate** — `adminOnly`, `adminOrSubAdmin`, `adminOrAgencyManager` for sensitive endpoints.
 3. **Scope gate** — `requireScope("cases:write")` for API-key calls only
    (JWT users are gated by role instead).
-4. **Visibility filter** — every controller that returns lists calls
-   `getAgentVisibilityIds()` so a sub-admin or agent can only see rows in
-   their hierarchy.
+4. **Visibility filter** — list controllers call `getAgentVisibilityIds()` and/or
+   filter by `catalogue.partner_insurer` so a sub-admin, insurer supervisor, or
+   agent only sees rows in their hierarchy / insurer scope.
 
 ---
 

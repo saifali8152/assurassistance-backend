@@ -28,6 +28,11 @@ DEFAULTS_FILE="${DEFAULTS_FILE:-$HOME/.my.cnf}"
 STAMP="$(date +%F_%H%M)"
 TARGET="${OUT_DIR}/${DB_NAME}_${STAMP}.sql.gz"
 
+# mysqldump failing mid-pipe aborts the script under `set -e` BEFORE the size
+# check below ever runs, which would leave a half-written archive sitting in the
+# backup directory looking like a real backup. Remove it on any failure.
+trap 'rm -f "$TARGET"' ERR
+
 log() { echo "$(date -Is) backup: $*"; }
 
 [ -r "$DEFAULTS_FILE" ] || { log "FATAL: $DEFAULTS_FILE not readable"; exit 1; }
@@ -60,6 +65,8 @@ fi
 gzip -t "$TARGET"
 
 DELETED="$(find "$OUT_DIR" -name "${DB_NAME}_*.sql.gz" -mtime "+${RETAIN_DAYS}" -print -delete | wc -l)"
+
+trap - ERR
 
 log "ok ${TARGET} (${SIZE} bytes), pruned ${DELETED} old backup(s), keeping ${RETAIN_DAYS} days"
 

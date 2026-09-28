@@ -30,6 +30,13 @@ import activityLogRoutes from './routes/activityLogRoute.js';
 import apiKeyRoutes from './routes/apiKeyRoute.js';
 import partnerInvoiceRoutes from './routes/partnerInvoiceRoute.js';
 import contractualDocumentRoutes from './routes/contractualDocumentRoutes.js';
+import settingsRoutes from './routes/settingsRoutes.js';
+import { logger, requestIdMiddleware } from './utils/logger.js';
+import { initMonitoring, captureException } from './utils/monitoring.js';
+import whatsappWebhookRoutes from './routes/whatsappWebhookRoutes.js';
+import whatsappRoutes from './routes/whatsappRoutes.js';
+import quoteRoutes from './routes/quoteRoutes.js';
+import zoneRoutes from './routes/zoneRoutes.js';
 
 // Initialize database pool
 const pool = initializePool({
@@ -116,6 +123,26 @@ app.use(
 
 // Trust the first proxy (Hostinger / nginx) so req.ip reflects the real client.
 app.set('trust proxy', 1);
+
+// Every request carries an id, echoed back as X-Request-Id, so a customer's
+// report ("it broke at 14:03") can be traced through the logs in one grep.
+app.use(requestIdMiddleware);
+
+// ---------------------------------------------------------------------------
+// WhatsApp webhook — MOUNTED HERE ON PURPOSE, and the order matters.
+//
+// It must come BEFORE:
+//   * the global per-IP rate limiter — every webhook arrives from a handful of
+//     Meta IPs, so an IP-keyed limit would throttle all customers at once. The
+//     module rate-limits per phone number instead.
+//   * the input-sanitisation middleware and express.json() — Meta signs the RAW
+//     request bytes (X-Hub-Signature-256). Once the body is parsed, rewritten and
+//     re-serialised, no signature can ever verify again.
+//
+// The route applies express.raw() itself; see routes/whatsappWebhookRoutes.js.
+// ---------------------------------------------------------------------------
+app.use('/api/whatsapp/webhook', whatsappWebhookRoutes);
+
 
 // Security headers. CSP is intentionally relaxed for the Swagger UI sub-tree,
 // which inlines styles/scripts; the rest of the API is JSON-only so CSP is moot.
@@ -214,6 +241,7 @@ try {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin/api-keys', apiKeyRoutes);
+app.use('/api/admin/whatsapp-settings', settingsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/catalogue', catalogueRoutes);
@@ -230,6 +258,9 @@ app.use("/api/invoice-ledger", invoiceLedgerRoutes);
 app.use("/api/activity-log", activityLogRoutes);
 app.use("/api/partner-invoices", partnerInvoiceRoutes);
 app.use("/api/contractual-documents", contractualDocumentRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
+app.use("/api/quotes", quoteRoutes);
+app.use("/api/zones", zoneRoutes);
 
 // 404 for unknown API routes (so proxy gets a response, not hang)
 app.use('/api', (req, res, next) => {
@@ -249,12 +280,25 @@ app.use((err, req, res, next) => {
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   }
   if (res.headersSent) return next(err);
-  console.error('Unhandled error:', err);
+  captureException(err, { requestId: req.id, path: req.originalUrl, method: req.method });
   res.status(500).json({ message: 'Server error' });
 });
 
+// Initialise monitoring before accepting traffic; it is a no-op without SENTRY_DSN.
+await initMonitoring();
+
 app.listen(PORT, '0.0.0.0', () => {
+  logger.info({ port: PORT, env: process.env.NODE_ENV || 'development' }, 'server started');
   console.log(`server is running on ${PORT}`);
+});
+
+// A rejected promise with no catch would otherwise terminate the process silently
+// under some Node versions, taking every in-flight conversation with it.
+process.on('unhandledRejection', (reason) => {
+  captureException(reason instanceof Error ? reason : new Error(String(reason)), { kind: 'unhandledRejection' });
+});
+process.on('uncaughtException', (err) => {
+  captureException(err, { kind: 'uncaughtException' });
 });
 
 

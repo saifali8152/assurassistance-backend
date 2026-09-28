@@ -1,0 +1,200 @@
+{
+  "common": {
+    "yes": "Oui",
+    "no": "Non",
+    "back": "Retour",
+    "restart": "Recommencer",
+    "help": "Aide",
+    "agent": "Conseiller",
+    "more": "Voir plus",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "modify": "Modifier",
+    "choose": "Choisir",
+    "select": "Sélectionner",
+    "continue": "Continuer",
+    "skip": "Passer",
+    "notProvided": "Non renseigné"
+  },
+  "welcome": {
+    "greeting": "Bonjour{{name}} et bienvenue chez Assur'Assistance. 👋\n\nJe peux vous établir un devis d'assurance voyage en quelques questions.",
+    "menu": "Que souhaitez-vous faire ?",
+    "optionBuy": "Souscrire une assurance",
+    "optionQuestion": "Poser une question",
+    "optionAgent": "Parler à un conseiller",
+    "languageHint": "À tout moment, écrivez ENGLISH pour continuer en anglais.",
+    "resumePrompt": "Nous avions commencé un devis pour vous. Souhaitez-vous reprendre là où nous nous étions arrêtés ?",
+    "resumeYes": "Reprendre",
+    "resumeNo": "Nouveau devis"
+  },
+  "step": {
+    "personalInfo": {
+      "prompt": "Pour commencer, envoyez-moi en un seul message :\n\n*Nom*, *Prénom*, *Date de naissance*\n\nPar exemple : Ali, Saif, 12/03/1990",
+      "promptSimple": "Reprenons plus simplement, une question à la fois."
+    },
+    "lastName": {
+      "prompt": "Quel est votre *nom de famille* ?"
+    },
+    "firstName": {
+      "prompt": "Quel est votre *prénom* ?"
+    },
+    "dateOfBirth": {
+      "prompt": "Quelle est votre *date de naissance* ? (JJ/MM/AAAA)"
+    },
+    "gender": {
+      "prompt": "Quel est votre sexe ?",
+      "male": "Masculin",
+      "female": "Féminin",
+      "other": "Autre"
+    },
+    "nationality": {
+      "prompt": "Quelle est votre *nationalité* ? Écrivez le nom du pays.",
+      "listPrompt": "Choisissez votre nationalité :",
+      "listButton": "Nationalité",
+      "candidates": "Plusieurs pays correspondent. Lequel est le bon ?",
+      "notFound": "Je n'ai pas trouvé ce pays. Réessayez en écrivant le nom complet, ou choisissez dans la liste."
+    },
+    "residence": {
+      "prompt": "Dans quel *pays résidez-vous* ?",
+      "listPrompt": "Choisissez votre pays de résidence :",
+      "listButton": "Résidence"
+    },
+    "passport": {
+      "prompt": "Quel est votre *numéro de passeport* (ou de pièce d'identité) ?"
+    },
+    "destination": {
+      "prompt": "Quelle est votre *destination* ? Écrivez le nom du pays.",
+      "listPrompt": "Choisissez votre destination :",
+      "listButton": "Destination",
+      "candidates": "Plusieurs destinations correspondent. Laquelle est la bonne ?",
+      "notFound": "Je n'ai pas trouvé cette destination. Réessayez, ou choisissez dans la liste."
+    },
+    "travelDates": {
+      "prompt": "Quelles sont vos *dates de voyage* ?\n\nEnvoyez le départ et le retour, par exemple : 01/10/2026, 15/10/2026"
+    },
+    "duration": {
+      "prompt": "Quelle est la *durée de votre séjour* ?",
+      "listPrompt": "Choisissez la durée de couverture :",
+      "listButton": "Durée",
+      "option": "{{days}} jours"
+    },
+    "email": {
+      "prompt": "Quelle est votre *adresse e-mail* ? Nous y enverrons votre attestation."
+    },
+    "phone": {
+      "prompt": "Nous utiliserons ce numéro WhatsApp ({{number}}) comme numéro de contact. Est-ce correct ?",
+      "useThis": "Oui, ce numéro",
+      "useOther": "Un autre numéro",
+      "otherPrompt": "Envoyez le numéro à utiliser, avec l'indicatif du pays. Par exemple : +225 07 18 92 31 94"
+    },
+    "plan": {
+      "prompt": "Voici les formules disponibles pour votre voyage :",
+      "listPrompt": "Choisissez votre formule :",
+      "listButton": "Formules",
+      "rowDescription": "{{premium}} · {{days}} jours de couverture",
+      "none": "Aucune formule n'est disponible pour cette combinaison de destination et de durée. Un conseiller va vous contacter."
+    }
+  },
+  "review": {
+    "title": "Merci. Voici le récapitulatif de vos informations :",
+    "lastName": "Nom",
+    "firstName": "Prénom",
+    "dateOfBirth": "Date de naissance",
+    "gender": "Sexe",
+    "nationality": "Nationalité",
+    "residence": "Pays de résidence",
+    "passport": "Passeport / pièce d'identité",
+    "destination": "Destination",
+    "dates": "Dates de voyage",
+    "duration": "Durée",
+    "email": "E-mail",
+    "phone": "Téléphone",
+    "question": "Tout est correct ?",
+    "confirm": "Tout est correct",
+    "edit": "Modifier une information",
+    "editPrompt": "Quelle information souhaitez-vous corriger ?",
+    "editButton": "Modifier",
+    "editDone": "C'est modifié. Revenons au récapitulatif."
+  },
+  "quote": {
+    "title": "🛡️ *Votre devis {{reference}}*",
+    "titleDraft": "🛡️ *Votre devis*",
+    "plan": "Formule : *{{plan}}*",
+    "destination": "Destination : {{destination}}",
+    "dates": "Dates : du {{start}} au {{end}}",
+    "duration": "Durée de couverture : {{days}} jours",
+    "traveller": "Assuré : {{name}} ({{age}} ans)",
+    "coverage": "Garanties principales :\n{{coverage}}",
+    "premium": "*Prime à payer : {{amount}}*",
+    "question": "Souhaitez-vous confirmer ce devis ?",
+    "confirm": "Confirmer",
+    "changePlan": "Changer de formule",
+    "cancel": "Annuler",
+    "confirmed": "✅ Parfait. Votre devis *{{reference}}* est enregistré.\n\nUn conseiller vous contactera pour finaliser le paiement, puis votre attestation vous sera envoyée par e-mail.",
+    "cancelled": "Votre demande a été annulée. Écrivez *RECOMMENCER* à tout moment pour établir un nouveau devis.",
+    "ineligible": "Compte tenu de l'âge de l'assuré, ce devis nécessite une dérogation spécifique. Un conseiller va vous contacter.",
+    "noPrice": "Je n'arrive pas à calculer une prime pour cette combinaison. Un conseiller va vous contacter."
+  },
+  "error": {
+    "required": "Cette information est nécessaire pour continuer. Pouvez-vous la renvoyer ?",
+    "name_too_short": "Ce nom semble trop court. Pouvez-vous le renvoyer en entier ?",
+    "name_too_long": "Ce nom est trop long. Pouvez-vous le raccourcir ?",
+    "name_has_digits": "Un nom ne contient pas de chiffres. Pouvez-vous le renvoyer ?",
+    "name_invalid": "Ce nom contient des caractères non autorisés. Pouvez-vous le renvoyer ?",
+    "passport_too_short": "Ce numéro semble trop court. Pouvez-vous le vérifier ?",
+    "passport_too_long": "Ce numéro semble trop long. Pouvez-vous le vérifier ?",
+    "passport_invalid": "Utilisez uniquement des lettres et des chiffres, sans caractères spéciaux.",
+    "passport_no_digit": "Un numéro de passeport contient normalement au moins un chiffre. Pouvez-vous le vérifier ?",
+    "email_invalid": "Cette adresse e-mail ne semble pas valide. Pouvez-vous la renvoyer ?",
+    "email_too_long": "Cette adresse e-mail est trop longue.",
+    "phone_invalid": "Ce numéro ne semble pas valide. Utilisez uniquement des chiffres, avec l'indicatif du pays.",
+    "phone_no_country_code": "Merci d'indiquer l'indicatif du pays, par exemple +225…",
+    "phone_too_short": "Ce numéro est trop court.",
+    "phone_too_long": "Ce numéro est trop long.",
+    "dob_unparseable": "Je n'ai pas compris cette date. Écrivez-la sous la forme JJ/MM/AAAA, par exemple 12/03/1990.",
+    "dob_future": "Une date de naissance ne peut pas être dans le futur. Pouvez-vous la vérifier ?",
+    "dob_implausible": "Cette année de naissance semble inhabituelle. Pouvez-vous la vérifier ?",
+    "date_unparseable": "Je n'ai pas compris cette date. Écrivez-la sous la forme JJ/MM/AAAA.",
+    "dates_out_of_order": "La date de retour doit être après la date de départ.",
+    "dates_too_long": "La couverture est disponible jusqu'à 365 jours.",
+    "start_in_past": "La date de départ ne peut pas être dans le passé.",
+    "gender_invalid": "Choisissez Masculin, Féminin ou Autre.",
+    "grouped_ambiguous": "Pour éviter toute erreur, séparez les informations par des virgules : Nom, Prénom, Date de naissance.",
+    "grouped_incomplete": "Il me manque une information. Envoyez les trois : Nom, Prénom, Date de naissance.",
+    "generic": "Je n'ai pas compris. Pouvez-vous reformuler ?",
+    "tooManyRetries": "Je n'arrive pas à enregistrer cette information. Reprenons plus simplement."
+  },
+  "session": {
+    "expired": "Notre échange précédent a expiré. Écrivez *BONJOUR* pour commencer un nouveau devis.",
+    "expiredResume": "Notre échange précédent a expiré, mais j'ai conservé vos informations. Souhaitez-vous reprendre ?",
+    "restarted": "C'est reparti de zéro. 🔄",
+    "noPrevious": "Nous sommes au début, il n'y a rien à modifier avant cette question.",
+    "cancelled": "Conversation annulée."
+  },
+  "help": {
+    "text": "Voici ce que vous pouvez écrire à tout moment :\n\n*RECOMMENCER* — repartir de zéro\n*RETOUR* — revenir à la question précédente\n*AIDE* — afficher ce message\n*CONSEILLER* — être mis en relation avec une personne\n*ENGLISH* — continue in English"
+  },
+  "agent": {
+    "requested": "C'est noté. Un conseiller va prendre le relais dès que possible.",
+    "withNumber": "C'est noté. Vous pouvez aussi joindre directement un conseiller au {{number}}.",
+    "resume": "En attendant, nous pouvons continuer. Écrivez *RECOMMENCER* si vous préférez repartir de zéro."
+  },
+  "language": {
+    "switched": "Parfait, je continue en français. 🇫🇷"
+  },
+  "unsupported": {
+    "image": "Je ne peux pas lire les images. Pouvez-vous écrire votre réponse ?",
+    "audio": "Je ne peux pas écouter les messages vocaux. Pouvez-vous écrire votre réponse ?",
+    "video": "Je ne peux pas lire les vidéos. Pouvez-vous écrire votre réponse ?",
+    "document": "Je ne peux pas ouvrir les documents ici. Pouvez-vous écrire votre réponse ?",
+    "location": "Merci, mais je ne peux pas utiliser une position. Pouvez-vous écrire le nom du pays ?",
+    "sticker": "😊 Pouvez-vous écrire votre réponse ?",
+    "generic": "Je ne peux traiter que du texte et les boutons proposés. Pouvez-vous écrire votre réponse ?",
+    "emptyMessage": "Je n'ai rien reçu. Pouvez-vous renvoyer votre réponse ?",
+    "tooLong": "Ce message est très long. Pouvez-vous répondre plus brièvement ?"
+  },
+  "system": {
+    "unavailable": "Le service de devis est momentanément indisponible. Merci de réessayer un peu plus tard.",
+    "error": "Une erreur technique est survenue de notre côté. Nous la corrigeons ; merci de réessayer dans quelques minutes."
+  }
+}

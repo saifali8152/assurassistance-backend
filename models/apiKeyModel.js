@@ -34,7 +34,22 @@ export const ALLOWED_SCOPES = [
 
   // Agent self-service (read own profile + manage own sub-agents).
   "agents:read",
-  "agents:write"
+  "agents:write",
+
+  // ---- Milestone 2 (WhatsApp purchase flow) -------------------------------
+  // Quoting: price a traveller, and store a quote as a case awaiting payment.
+  // `quotes:read` covers stateless pricing because it persists nothing.
+  "quotes:read",
+  "quotes:write",
+
+  // Destination zone map (country -> pricing zone). Read-only for keys; only a
+  // superadmin JWT can reassign a country to another zone.
+  "zones:read",
+
+  // WhatsApp conversations. Transcripts contain personal data, so reading them
+  // needs its own scope rather than riding along with cases:read.
+  "whatsapp:read",
+  "whatsapp:write"
 ];
 
 const ALLOWED_SCOPE_SET = new Set(ALLOWED_SCOPES);

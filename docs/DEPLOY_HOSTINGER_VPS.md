@@ -386,6 +386,146 @@ chmod 755 uploads
 
 ---
 
+---
+
+## Part 11: Milestone 2 — WhatsApp module on this VPS
+
+### 11.1 Encryption key (required)
+
+WhatsApp credentials are stored encrypted in the database. The key for that
+encryption is the one secret that stays in the environment.
+
+```bash
+openssl rand -hex 32
+nano ~/assurassistance/backend/.env     # SETTINGS_ENCRYPTION_KEY=<paste>
+```
+
+Generate it **once per environment** and never change it afterwards without
+re-entering the credentials — an old value encrypted under a lost key cannot be
+recovered, and the settings page will tell you so rather than failing silently.
+
+```bash
+pm2 restart backend --update-env
+```
+
+`--update-env` matters. PM2 caches the environment from when the process started,
+so a plain `pm2 restart` will not pick up a new `.env` value, and every
+credential read will fail with a confusing decryption error.
+
+### 11.2 Database migrations
+
+```bash
+cd ~/assurassistance/backend
+
+# Once per database: record the pre-Milestone-2 migrations as already applied,
+# WITHOUT executing them. They are already live; re-running them would error.
+npm run migrate:baseline
+
+npm run migrate:status    # review what is pending
+npm run migrate:dry       # print the plan, change nothing
+npm run migrate           # apply
+```
+
+Every Milestone 2 migration is additive and guarded, so running it twice is a
+no-op. Take a backup first anyway (Part 12) — that habit costs a minute.
+
+### 11.3 Webhook requirements
+
+Meta will not register a webhook without valid HTTPS, so Part 9's Certbot step
+is a prerequisite, not an optional extra.
+
+Leave the Nginx `location` block as a plain `proxy_pass`. The webhook verifies a
+signature computed over the **raw** request bytes; any directive that rewrites or
+re-encodes the body makes every signature fail.
+
+Keep PM2 in fork mode (`pm2 start server.js --name backend`, as in Part 7). In
+cluster mode each worker keeps its own settings cache and its own per-number rate
+limit counter, so the effective flood limit multiplies by the number of workers.
+
+### 11.4 Transcript retention (cron)
+
+Conversation transcripts contain names, dates of birth and passport numbers. The
+retention window is set in the admin UI; this job enforces it.
+
+```bash
+crontab -e
+# Sundays at 03:15
+15 3 * * 0 cd /home/YOURUSER/assurassistance/backend && /usr/bin/node scripts/pruneMessages.js >> /var/log/aas-prune.log 2>&1
+```
+
+Check what it would remove before trusting it:
+
+```bash
+npm run prune:messages:dry
+```
+
+### 11.5 Logging (optional but recommended)
+
+```bash
+npm i pino @sentry/node
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 50M
+pm2 set pm2-logrotate:retain 14
+```
+
+Without `pm2-logrotate` the PM2 log grows until it fills the disk, which takes
+the database down with it. Set `SENTRY_DSN` in `.env` to turn on error
+reporting; with it unset, monitoring is a no-op and nothing else changes.
+
+---
+
+## Part 12: Database backups
+
+There were no backups configured before Milestone 2. Set this up **before** the
+first migration.
+
+```bash
+# 1. Credentials the dump can read, not visible in `ps`
+nano ~/.my.cnf
+```
+
+```ini
+[client]
+user=assurapp
+password=YOUR_DB_PASSWORD
+```
+
+```bash
+chmod 600 ~/.my.cnf
+
+# 2. Install the script that ships with the backend
+cp ~/assurassistance/backend/scripts/backup-db.sh ~/backup-db.sh
+chmod +x ~/backup-db.sh
+sudo mkdir -p /var/backups/mysql && sudo chown "$USER" /var/backups/mysql
+
+# 3. Run it once by hand and read the output
+~/backup-db.sh
+
+# 4. Schedule it
+crontab -e
+0 2 * * * /home/YOURUSER/backup-db.sh >> /var/log/aas-backup.log 2>&1
+```
+
+The script uses `--single-transaction`, so the site keeps serving while it runs.
+It refuses to keep a dump smaller than 10 KB and verifies the gzip archive before
+reporting success — a backup that only *looks* like it worked is worse than none.
+
+**Two steps people skip and regret.**
+
+*Test a restore.* A backup you have never restored is a hypothesis:
+
+```bash
+mysql -e "CREATE DATABASE restore_test;"
+gunzip < /var/backups/mysql/assurassistance_2026-09-28_0200.sql.gz | mysql restore_test
+mysql -e "SELECT COUNT(*) FROM restore_test.sales;"
+mysql -e "DROP DATABASE restore_test;"
+```
+
+*Copy them off the VPS.* A backup on the same disk as the database dies with that
+disk. Uncomment one of the off-site lines at the bottom of `backup-db.sh`
+(rclone, S3 or scp) and give it somewhere to go.
+
+
 ## Checklist summary
 
 | Step | Action |

@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      # The unit suite needs no database — the pricing, validation, conversation
+      # and webhook tests are all pure. Anything that needs MySQL lives in
+      # tests/integration and runs in the job below.
+      - run: npm test
+
+  integration:
+    name: Integration tests (MySQL)
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_root_password
+          MYSQL_DATABASE: assur_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pci_root_password"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+
+      - name: Build the schema
+        env:
+          MYSQL_PWD: ci_root_password
+        run: |
+          mysql -h 127.0.0.1 -uroot assur_ci < database_dump.sql
+          # Legacy migrations were applied by hand historically and some overlap
+          # with the dump; --force lets the already-present ones fail harmlessly.
+          for f in migrations/*.sql; do
+            case "$f" in migrations/m2_*) continue ;; esac
+            mysql -h 127.0.0.1 -uroot --force assur_ci < "$f" || true
+          done
+
+      - name: Apply the Milestone 2 migrations through the runner
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci_root_password
+          DB_NAME: assur_ci
+        run: |
+          npm run migrate:baseline
+          npm run migrate
+
+      - name: Migrations must be re-runnable
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: '3306'
+          DB_USER: root
+          DB_PASSWORD: ci_root_password
+          DB_NAME: assur_ci
+        # This is the guarantee the live database depends on: applying twice is a
+        # no-op, not an error.
+        run: |
+          for f in migrations/m2_*.sql; do
+            MYSQL_PWD=ci_root_password mysql -h 127.0.0.1 -uroot assur_ci < "$f"
+          done
+          npm run migrate:status
+
+      - name: Integration tests
+        env:
+          IT_DB_HOST: 127.0.0.1
+          IT_DB_PORT: '3306'
+          IT_DB_USER: root
+          IT_DB_PASSWORD: ci_root_password
+          IT_DB_NAME: assur_ci
+        run: npm run test:integration

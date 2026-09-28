@@ -82,6 +82,30 @@ tags:
       Terms & Conditions downloads (full / brief). Any JWT may list and download.
       Only admin JWT may upload, replace, update metadata, or delete.
 
+  - name: Quotes
+    description: >
+      Pricing as an endpoint: destination zone, validity tier and age band applied
+      to a plan's rate table. `/quotes/price` stores nothing; `/quotes` persists the
+      result as a case awaiting payment, which the existing confirm-sale flow then
+      turns into a policy. The same engine serves the web app and the WhatsApp
+      conversation, so identical inputs always produce an identical premium.
+  - name: Zones
+    description: >
+      Country to pricing-zone map. A country's zone selects a column in each plan's
+      pricing table. All countries ship in a single "Worldwide" zone, so pricing is
+      unchanged until a real map is supplied. Read with `zones:read`; only a
+      superadmin JWT may reassign.
+  - name: WhatsApp
+    description: >
+      The conversational purchase channel. The webhook is authenticated by Meta's
+      X-Hub-Signature-256 over the raw body, not by a bearer token. Transcripts
+      contain personal data, so reading them requires `whatsapp:read` rather than
+      riding along with `cases:read`.
+  - name: WhatsApp settings
+    description: >
+      Superadmin configuration of the WhatsApp integration. Admin JWT only — API
+      keys can never reach these endpoints, whatever scopes they hold. Credentials
+      are stored encrypted and saved changes apply without a restart.
 security:
   - bearerJWT: []
   - bearerApiKey: []
@@ -143,6 +167,233 @@ components:
         enum: [Paid, Unpaid, Partial]
 
   schemas:
+    ValidationError:
+      type: object
+      description: >
+        Every field error is collected rather than failing on the first, so an
+        integrator can fix a payload in one pass.
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: validation_error }
+            message: { type: string, example: Some fields are invalid }
+            fields:
+              type: array
+              items:
+                type: object
+                properties:
+                  field: { type: string, example: date_of_birth }
+                  code: { type: string, example: dob_future }
+                  message: { type: string, example: A date of birth cannot be in the future }
+            candidates:
+              type: array
+              description: Close matches, when a country could not be resolved.
+              items:
+                type: object
+                properties:
+                  code: { type: string }
+                  name: { type: string }
+
+    QuotePriceRequest:
+      type: object
+      required: [date_of_birth, start_date, end_date]
+      properties:
+        date_of_birth:
+          type: string
+          description: "DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, YYYY-MM-DD, or a French month name."
+          example: "12/03/1990"
+        start_date: { type: string, example: "01/10/2026" }
+        end_date: { type: string, example: "20/10/2026" }
+        destination_code:
+          type: string
+          description: ISO 3166-1 alpha-2. Preferred over `destination`.
+          example: CI
+        destination:
+          type: string
+          description: Country name in French or English; fuzzy-matched.
+          example: Cote d'Ivoire
+        plan_id:
+          type: integer
+          description: Omit to price every plan the caller may sell.
+          example: 1
+
+    QuoteCreateRequest:
+      allOf:
+        - $ref: '#/components/schemas/QuotePriceRequest'
+        - type: object
+          required: [first_name, last_name, passport_or_id, email, plan_id]
+          properties:
+            first_name: { type: string, example: Saif }
+            last_name: { type: string, example: Ali }
+            gender: { type: string, enum: [male, female, other, Male, Female, Other, homme, femme, autre] }
+            nationality: { type: string, example: Pakistan }
+            country_of_residence: { type: string, example: Pakistan }
+            passport_or_id: { type: string, example: AB1234567 }
+            email: { type: string, format: email, example: info@devzz.tech }
+            phone: { type: string, example: "+225 07 18 92 31 94" }
+            whatsapp_number: { type: string, example: "2250718923194" }
+            language: { type: string, enum: [fr, en] }
+            source: { type: string, enum: [api, whatsapp], default: api }
+
+    QuotePricing:
+      type: object
+      properties:
+        basePremium: { type: number, nullable: true, example: 39, description: Price from the rate table, before the age multiplier. }
+        premium: { type: number, example: 39 }
+        tax: { type: number, example: 0 }
+        total: { type: number, example: 39 }
+        currency: { type: string, example: USD }
+
+    Quote:
+      type: object
+      properties:
+        plan:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            productType: { type: string }
+            currency: { type: string }
+            coverageSummaryFr: { type: string, nullable: true }
+            coverageSummaryEn: { type: string, nullable: true }
+        destination:
+          type: object
+          nullable: true
+          properties:
+            code: { type: string }
+            nameEn: { type: string }
+            nameFr: { type: string }
+            zone: { type: string }
+        zone:
+          type: object
+          properties:
+            resolved: { type: string, nullable: true }
+            column: { type: string, nullable: true, description: The plan pricing column actually used. }
+            matchedPlanColumn:
+              type: boolean
+              description: False when the plan has no column for this zone and its first column was used instead.
+        travel:
+          type: object
+          properties:
+            startDate: { type: string, nullable: true }
+            endDate: { type: string, nullable: true }
+            stayDays: { type: integer, description: Inclusive of both travel days. }
+            validityDays: { type: integer, nullable: true, description: The plan tier the stay was rounded up to. }
+        traveller:
+          type: object
+          properties:
+            dateOfBirth: { type: string }
+            age: { type: integer, nullable: true }
+            ageBand: { type: string, enum: [child, standard, senior76_80, senior81_85, ineligible, unknown] }
+            ageMultiplier: { type: number, nullable: true }
+        pricing: { $ref: '#/components/schemas/QuotePricing' }
+
+    StoredQuote:
+      type: object
+      properties:
+        quote_reference: { type: string, example: QT-BF664C18 }
+        case_id: { type: integer }
+        status: { type: string, example: AwaitingPayment }
+        source: { type: string, enum: [web, whatsapp, api] }
+        created_at: { type: string, format: date-time }
+        traveller: { type: object }
+        travel: { type: object }
+        plan: { type: object }
+        pricing:
+          allOf: [{ $ref: '#/components/schemas/QuotePricing' }]
+          nullable: true
+          description: Recomputed from today's catalogue, so a moved price is visible.
+        pricing_error:
+          type: object
+          nullable: true
+          description: Set instead of `pricing` when the stored inputs can no longer be priced.
+        sale:
+          type: object
+          nullable: true
+          description: Present once the case has been confirmed into a sale.
+
+    ZoneCountry:
+      type: object
+      properties:
+        country_code: { type: string, example: CI }
+        name_en: { type: string, example: "Côte-d'Ivoire" }
+        name_fr: { type: string, example: "Côte-d'Ivoire" }
+        zone: { type: string, example: Worldwide }
+        active: { type: boolean, description: False means the country is not offered as a destination. }
+
+    WhatsAppSession:
+      type: object
+      properties:
+        id: { type: integer }
+        waNumber: { type: string, example: "2250718923194" }
+        profileName: { type: string, nullable: true }
+        language: { type: string, enum: [fr, en] }
+        flowKey: { type: string, example: purchase }
+        currentStep: { type: string, nullable: true, example: email }
+        stepHistory: { type: array, items: { type: string }, description: Visited steps; powers the BACK command. }
+        collectedData: { type: object, description: Partial traveller and travel data gathered so far. }
+        retryCount: { type: integer }
+        status: { type: string, enum: [active, completed, expired, cancelled, escalated] }
+        customerMessageCount: { type: integer, description: Measured against the 6-8 message target. }
+        travellerId: { type: integer, nullable: true }
+        caseId: { type: integer, nullable: true }
+        quoteReference: { type: string, nullable: true }
+        lastActivityAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time, nullable: true }
+
+    WhatsAppMessage:
+      type: object
+      properties:
+        id: { type: integer }
+        sessionId: { type: integer, nullable: true }
+        waNumber: { type: string }
+        direction: { type: string, enum: [inbound, outbound] }
+        waMessageId: { type: string, nullable: true, description: Meta's id. Unique, which is what makes redelivery safe. }
+        messageType: { type: string, example: text }
+        body: { type: string, nullable: true }
+        stepKey: { type: string, nullable: true }
+        status: { type: string, nullable: true, enum: [received, queued, sent, delivered, read, failed] }
+        errorCode: { type: string, nullable: true }
+        errorMessage: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    WhatsAppSettings:
+      type: object
+      properties:
+        settings:
+          type: array
+          items:
+            type: object
+            properties:
+              key: { type: string, example: whatsapp.access_token }
+              group: { type: string, enum: [status, connection, conversation, attribution] }
+              type: { type: string, enum: [string, number, boolean, json] }
+              secret: { type: boolean }
+              description: { type: string, nullable: true }
+              allowed: { type: array, nullable: true, items: { type: string } }
+              min: { type: number, nullable: true }
+              max: { type: number, nullable: true }
+              value: { nullable: true, description: Always null for secrets. }
+              masked: { type: string, nullable: true, example: "••••••••wxyz" }
+              isSet: { type: boolean }
+              updated_at: { type: string, format: date-time, nullable: true }
+        status:
+          type: object
+          properties:
+            enabled: { type: boolean }
+            ready: { type: boolean, description: Enabled AND every required credential present. }
+            missing: { type: array, items: { type: string } }
+            encryptionAvailable: { type: boolean, description: False when SETTINGS_ENCRYPTION_KEY is not set on the server. }
+            decryptionErrors: { type: array, items: { type: string }, description: Values encrypted under a different key; they must be re-entered. }
+        webhook:
+          type: object
+          properties:
+            url: { type: string, example: https://backend-api.assurassistancepro.org/api/whatsapp/webhook }
+            methods: { type: array, items: { type: string } }
+            verifyTokenSet: { type: boolean }
+
     Error:
       type: object
       required: [success, error]
@@ -2844,3 +3095,745 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+
+  /quotes/price:
+    post:
+      tags: [Quotes]
+      summary: Price a traveller without storing anything.
+      description: |
+        Applies, in order: destination zone -> validity tier -> age band.
+
+        Omit `plan_id` to price every plan the caller may sell, cheapest first.
+        An API key is limited to plans flagged for programmatic sale; a staff JWT
+        sees every active plan. Plans that cannot be priced are returned in
+        `rejected` with a reason, so a short list is never silently shorter.
+
+        Age bands (travel products only): under 16 x0.5, 16-75 x1, 76-80 x2,
+        81-85 x4, over 85 not eligible.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuotePriceRequest' }
+            examples:
+              singlePlan:
+                summary: Price one plan
+                value:
+                  date_of_birth: "12/03/1990"
+                  start_date: "01/10/2026"
+                  end_date: "20/10/2026"
+                  destination_code: "CI"
+                  plan_id: 1
+              allPlans:
+                summary: Price everything available
+                value:
+                  date_of_birth: "12/03/1990"
+                  start_date: "01/10/2026"
+                  end_date: "20/10/2026"
+                  destination: "Cote d'Ivoire"
+      responses:
+        "200":
+          description: A priced quote, or a list of them when `plan_id` was omitted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: object
+                    properties:
+                      quote: { $ref: '#/components/schemas/Quote' }
+                      quotes:
+                        type: array
+                        items: { $ref: '#/components/schemas/Quote' }
+                      rejected:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            planId: { type: integer }
+                            planName: { type: string }
+                            code: { type: string }
+                            message: { type: string }
+        "400":
+          description: Field validation failed, or the destination could not be resolved.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+        "404":
+          description: plan_not_found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "422":
+          description: age_ineligible (over 85) or no_price_for_inputs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /quotes:
+    post:
+      tags: [Quotes]
+      summary: Create and store a quote (case awaiting payment).
+      description: |
+        Creates the traveller and a `cases` row with status `AwaitingPayment` and a
+        customer-facing reference `QT-XXXXXXXX`.
+
+        The premium is RECALCULATED from the live catalogue at this moment: a price
+        quoted in a conversation hours earlier is never trusted.
+
+        The resulting case is an ordinary case — `POST /cases/{caseId}/confirm-sale`
+        issues the policy, certificate and invoice from it unchanged.
+
+        Inputs are normalised: passport uppercased and stripped of spaces/dashes,
+        email lowercased, phone converted to E.164.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/QuoteCreateRequest' }
+      responses:
+        "201":
+          description: Quote stored.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  message: { type: string, example: "Quote created. Confirm the sale to issue a policy." }
+                  data:
+                    type: object
+                    properties:
+                      quote_reference: { type: string, example: "QT-BF664C18" }
+                      case_id: { type: integer, example: 512 }
+                      traveller_id: { type: integer, example: 388 }
+                      status: { type: string, example: AwaitingPayment }
+                      pricing: { $ref: '#/components/schemas/QuotePricing' }
+        "400":
+          description: Validation failed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+        "409":
+          description: |
+            attribution_missing — no owning account is configured for this source.
+            Every case belongs to a user because commissions, partner invoices, the
+            ledger and reconciliation are keyed to one.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "422":
+          description: age_ineligible or no_price.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    get:
+      tags: [Quotes]
+      summary: List stored quotes.
+      description: An API key sees only quotes owned by its own account.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 25, maximum: 100 } }
+        - { name: source, in: query, schema: { type: string, enum: [web, whatsapp, api] } }
+        - { name: status, in: query, schema: { type: string, enum: [Draft, AwaitingPayment, Confirmed, Cancelled] } }
+      responses:
+        "200":
+          description: Paginated quotes.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: array, items: { type: object } }
+                  pagination: { type: object }
+
+  /quotes/{reference}:
+    get:
+      tags: [Quotes]
+      summary: One quote, re-priced against the live catalogue.
+      description: |
+        Returns the stored inputs plus a fresh `pricing` block, so an integrator can
+        tell when a price has moved since the quote was taken. `pricing_error` is
+        populated instead when the stored inputs can no longer be priced.
+
+        An API key requesting another account's reference receives `404 not_found`
+        rather than confirmation that it exists.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      parameters:
+        - name: reference
+          in: path
+          required: true
+          schema: { type: string, example: QT-BF664C18 }
+      responses:
+        "200":
+          description: The quote.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/StoredQuote' }
+        "404":
+          description: not_found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /zones:
+    get:
+      tags: [Zones]
+      summary: Zones in use, with country counts.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      responses:
+        "200":
+          description: Zones.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        zone: { type: string, example: Worldwide }
+                        countryCount: { type: integer, example: 195 }
+                        activeCount: { type: integer, example: 195 }
+
+  /zones/countries:
+    get:
+      tags: [Zones]
+      summary: The full country to zone map.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      parameters:
+        - { name: zone, in: query, schema: { type: string }, description: Filter to one zone. }
+      responses:
+        "200":
+          description: Countries with their zone, in English and French.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ZoneCountry' }
+
+  /zones/resolve:
+    get:
+      tags: [Zones]
+      summary: Resolve one country to its zone.
+      description: Accepts an ISO 3166-1 alpha-2 code or a country name in either language, fuzzy-matched.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      parameters:
+        - { name: country, in: query, required: true, schema: { type: string, example: CI } }
+      responses:
+        "200":
+          description: Resolved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/ZoneCountry' }
+        "404":
+          description: not_found, with close matches in `error.candidates` when there are any.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /zones/assign:
+    patch:
+      tags: [Zones]
+      summary: Reassign countries to a zone (admin JWT only).
+      description: |
+        An update of one column. No country is created or removed, and unrecognised
+        codes are returned in `data.unknown` rather than silently ignored.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [country_codes, zone]
+              properties:
+                country_codes:
+                  type: array
+                  maxItems: 300
+                  items: { type: string, example: FR }
+                zone: { type: string, example: Zone A }
+                active: { type: boolean, description: Optional; also switches the countries on or off as destinations. }
+      responses:
+        "200":
+          description: Updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      updated: { type: integer }
+                      unknown: { type: array, items: { type: string } }
+                      zone: { type: string }
+
+  /whatsapp/webhook:
+    get:
+      tags: [WhatsApp]
+      summary: Meta verification handshake.
+      description: Echoes `hub.challenge` as plain text when `hub.verify_token` matches the configured token. No bearer auth.
+      security: []
+      parameters:
+        - { name: hub.mode, in: query, schema: { type: string, example: subscribe } }
+        - { name: hub.verify_token, in: query, schema: { type: string } }
+        - { name: hub.challenge, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: The challenge, echoed.
+          content:
+            text/plain:
+              schema: { type: string }
+        "403":
+          description: Token mismatch, wrong mode, or no token configured.
+    post:
+      tags: [WhatsApp]
+      summary: Inbound messages and delivery receipts from Meta.
+      description: |
+        Authenticated by `X-Hub-Signature-256` (HMAC-SHA256 of the RAW body with the
+        Meta app secret), not by a bearer token.
+
+        Returns `403` when the signature is absent or does not verify. Returns `200`
+        in every other case, including internal failures: a non-2xx answer makes Meta
+        retry with growing delay and eventually disable the webhook, so a database
+        problem must not cost the integration.
+
+        Redelivery is safe — messages are deduplicated on Meta's `wa_message_id`.
+        Concurrent messages from one number are serialised, so a customer sending
+        three messages in two seconds cannot advance the flow three times.
+      security: []
+      parameters:
+        - name: X-Hub-Signature-256
+          in: header
+          required: true
+          schema: { type: string, example: "sha256=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: Meta webhook envelope. }
+      responses:
+        "200":
+          description: Accepted (also returned on internal failure, by design).
+        "403":
+          description: Signature missing or invalid.
+
+  /whatsapp/status:
+    get:
+      tags: [WhatsApp]
+      summary: Non-secret runtime status.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      responses:
+        "200":
+          description: Status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      enabled: { type: boolean }
+                      ready: { type: boolean }
+                      businessNumber: { type: string, nullable: true }
+                      defaultLanguage: { type: string, enum: [fr, en] }
+                      supportedLanguages: { type: array, items: { type: string } }
+                      sessionTimeoutHours: { type: integer }
+
+  /whatsapp/sessions:
+    get:
+      tags: [WhatsApp]
+      summary: List conversations.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 25, maximum: 100 } }
+        - { name: status, in: query, schema: { type: string, enum: [active, completed, expired, cancelled, escalated] } }
+        - { name: search, in: query, schema: { type: string }, description: Matches number, profile name or quote reference. }
+      responses:
+        "200":
+          description: Paginated conversations.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: array, items: { $ref: '#/components/schemas/WhatsAppSession' } }
+                  pagination: { type: object }
+
+  /whatsapp/sessions/{id}:
+    get:
+      tags: [WhatsApp]
+      summary: One conversation, with the data collected so far.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: The conversation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/WhatsAppSession' }
+        "404":
+          description: not_found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /whatsapp/sessions/{id}/messages:
+    get:
+      tags: [WhatsApp]
+      summary: Full transcript of one conversation.
+      description: Contains personal data. Subject to the retention policy configured in the WhatsApp settings.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, default: 200, maximum: 500 } }
+      responses:
+        "200":
+          description: Messages, oldest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: array, items: { $ref: '#/components/schemas/WhatsAppMessage' } }
+
+  /whatsapp/stats:
+    get:
+      tags: [WhatsApp]
+      summary: Customer-message counts against the 6-8 message target.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      parameters:
+        - { name: days, in: query, schema: { type: integer, default: 30 } }
+      responses:
+        "200":
+          description: Instrumentation.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      windowDays: { type: integer }
+                      completedSessions: { type: integer }
+                      averageCustomerMessages: { type: number, nullable: true }
+                      minCustomerMessages: { type: integer, nullable: true }
+                      maxCustomerMessages: { type: integer, nullable: true }
+                      target:
+                        type: object
+                        properties:
+                          min: { type: integer, example: 6 }
+                          max: { type: integer, example: 8 }
+
+  /whatsapp/messages:
+    post:
+      tags: [WhatsApp]
+      summary: Send an outbound text message.
+      security:
+        - bearerJWT: []
+        - bearerApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to, text]
+              properties:
+                to: { type: string, example: "2250718923194", description: E.164 without the plus. }
+                text: { type: string }
+      responses:
+        "200":
+          description: Sent.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      waMessageId: { type: string, nullable: true }
+                      to: { type: string }
+        "503":
+          description: not_configured — the integration is not fully set up.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /whatsapp/maintenance/prune:
+    post:
+      tags: [WhatsApp]
+      summary: Apply the transcript retention policy (admin JWT only).
+      description: |
+        Deletes message transcripts older than the configured retention window.
+        This is the only operation in the module that deletes anything, and it never
+        touches a session, case, traveller or sale.
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: Applied.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      deleted: { type: integer }
+                      retentionDays: { type: integer }
+
+  /admin/whatsapp-settings:
+    get:
+      tags: [WhatsApp settings]
+      summary: Read the WhatsApp settings (admin JWT only).
+      description: |
+        Secrets are returned as `masked` with `value: null` — never in clear.
+        `status.ready` says whether the integration can send and receive right now.
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: Settings, status and webhook details.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { $ref: '#/components/schemas/WhatsAppSettings' }
+        "401":
+          description: An API key was used. These endpoints are JWT-only by design.
+        "403":
+          description: Not an admin.
+    put:
+      tags: [WhatsApp settings]
+      summary: Save the WhatsApp settings (admin JWT only).
+      description: |
+        Secrets are write-only: omit a secret field, or send `""`, to leave the
+        stored value untouched — so saving the phone number ID can never blank the
+        access token. Send explicit `null` to clear one.
+
+        Changes take effect without restarting the server.
+      security:
+        - bearerJWT: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                settings:
+                  type: object
+                  additionalProperties: true
+            example:
+              settings:
+                whatsapp.phone_number_id: "123456789012345"
+                whatsapp.access_token: "EAAG..."
+                whatsapp.default_language: fr
+                whatsapp.session_timeout_hours: 24
+                whatsapp.attribution_user_id: 42
+                whatsapp.enabled: true
+      responses:
+        "200":
+          description: Saved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      changed: { type: array, items: { type: string } }
+                      skipped: { type: array, items: { type: string }, description: Secrets left unchanged. }
+                      status: { type: object }
+        "400":
+          description: validation_error, with per-field detail in `error.fields`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationError' }
+        "503":
+          description: encryption_unavailable — SETTINGS_ENCRYPTION_KEY is not configured on the server.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/whatsapp-settings/test:
+    post:
+      tags: [WhatsApp settings]
+      summary: Live Graph API connection check (admin JWT only).
+      description: Confirms the token is valid, that it can access this phone number id, and that the number is usable.
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: Meta confirmed the number.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      phoneNumberId: { type: string }
+                      displayPhoneNumber: { type: string, nullable: true }
+                      verifiedName: { type: string, nullable: true }
+                      qualityRating: { type: string, nullable: true }
+                      apiVersion: { type: string }
+        "400":
+          description: incomplete_configuration, or graph_error with Meta's own code.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "504":
+          description: graph_timeout or graph_unreachable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/whatsapp-settings/verify-token:
+    post:
+      tags: [WhatsApp settings]
+      summary: Generate a webhook verify token (admin JWT only).
+      description: Returned once in clear so it can be pasted into the Meta dashboard. Regenerating breaks the connection until Meta is updated too.
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: The new token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      verifyToken: { type: string }
+                      webhookUrl: { type: string }
+    get:
+      tags: [WhatsApp settings]
+      summary: Reveal the webhook verify token (admin JWT only).
+      description: The one secret that can be read back, because the operator must copy it into Meta. Every reveal is written to the activity log.
+      security:
+        - bearerJWT: []
+      responses:
+        "200":
+          description: The token.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      verifyToken: { type: string }
+                      webhookUrl: { type: string }
+        "404":
+          description: not_set
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /admin/whatsapp-settings/attribution-candidates:
+    get:
+      tags: [WhatsApp settings]
+      summary: Accounts that can own WhatsApp-originated business (admin JWT only).
+      security:
+        - bearerJWT: []
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Active admin, sub-admin and agent accounts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        email: { type: string }
+                        role: { type: string }

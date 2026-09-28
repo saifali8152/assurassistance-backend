@@ -239,6 +239,14 @@ tables.
 
 ---
 
+**WhatsApp transcripts.** `whatsapp_messages` stores what customers wrote and
+what we replied, which includes names, dates of birth, passport numbers and email
+addresses. Retention is bounded by a superadmin setting (180 days by default) and
+enforced by `POST /api/whatsapp/maintenance/prune`, which is the only operation in
+the module that deletes anything and never touches a session, case, traveller or
+sale. Reading a transcript requires the separate `whatsapp:read` scope rather than
+riding along with `cases:read`.
+
 ## 11. Endpoints that intentionally have no auth
 
 | Endpoint | Why |
@@ -249,6 +257,65 @@ tables.
 | `GET /api/docs`, `GET /api/openapi.json`, `GET /api/openapi.yaml` | Public API documentation. |
 
 Every other endpoint requires either a JWT or an API key.
+
+---
+
+## 11b. The WhatsApp webhook — signature authentication
+
+`POST /api/whatsapp/webhook` is the one endpoint that accepts unauthenticated
+requests in the bearer-token sense. It is authenticated differently:
+
+- Meta signs each delivery with `X-Hub-Signature-256`: HMAC-SHA256 of the **raw**
+  request body, keyed with the Meta app secret.
+- The signature is verified before anything else happens, and compared in
+  constant time. A fast-exit comparison would leak how much of a forged signature
+  was correct.
+- **The route is mounted before `express.json()` and before the input-sanitisation
+  middleware, on purpose.** The signature covers the exact bytes Meta sent; once a
+  body has been parsed, rewritten and re-serialised, no signature can ever verify
+  again. This is the single most common way a WhatsApp integration ends up either
+  broken or silently unauthenticated.
+- Verification fails closed. With no app secret configured, nothing verifies.
+
+Responses are deliberately asymmetric:
+
+| Outcome | Status | Why |
+|---|---|---|
+| Signature missing or invalid | `403` | The request did not come from Meta. |
+| Anything else, including our own failures | `200` | A non-2xx answer makes Meta retry with growing delay and eventually disable the webhook. A database outage must not cost the integration. |
+
+Flood protection is applied **per phone number**, not per IP: every delivery
+arrives from a handful of Meta addresses, so an IP-keyed limit would either never
+trigger or throttle every customer at once.
+
+Replay and ordering are handled at the data layer — messages are deduplicated on
+Meta's `wa_message_id`, and concurrent messages from one number are serialised
+with an advisory lock, so a customer sending three messages in two seconds cannot
+advance the conversation three times.
+
+---
+
+## 11c. Stored credentials
+
+WhatsApp credentials (access token, app secret, webhook verify token) are stored
+AES-256-GCM encrypted in `app_settings`. GCM rather than CBC because it
+authenticates the ciphertext: a tampered row fails to decrypt instead of quietly
+yielding garbage we would then send to Meta.
+
+- The master key lives only in `SETTINGS_ENCRYPTION_KEY`, never in the database.
+  Encrypting at rest with the key stored beside the data would be theatre.
+- Secrets are **write-only** over the API: reads return `••••••••wxyz`. The one
+  exception is the webhook verify token, which the operator must copy into Meta —
+  revealing it is a separate, audited request rather than something that rides
+  along with every page load.
+- Writing a secret with no master key configured is refused (`503
+  encryption_unavailable`) rather than silently stored in clear.
+- A value encrypted under a different key is reported as a decryption error and
+  must be re-entered; it is never treated as valid.
+- `/api/admin/whatsapp-settings*` is admin-JWT only and has **no API-key scope**.
+  No 3rd-party key, however broad, can read or rewrite these credentials.
+- Every change, connection test and token reveal is written to the activity log —
+  which keys changed, never their values.
 
 ---
 

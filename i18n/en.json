@@ -1,0 +1,200 @@
+{
+  "common": {
+    "yes": "Yes",
+    "no": "No",
+    "back": "Back",
+    "restart": "Restart",
+    "help": "Help",
+    "agent": "Agent",
+    "more": "See more",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "modify": "Change",
+    "choose": "Choose",
+    "select": "Select",
+    "continue": "Continue",
+    "skip": "Skip",
+    "notProvided": "Not provided"
+  },
+  "welcome": {
+    "greeting": "Hello{{name}}, and welcome to Assur'Assistance. 👋\n\nI can prepare a travel insurance quote for you in just a few questions.",
+    "menu": "What would you like to do?",
+    "optionBuy": "Buy insurance",
+    "optionQuestion": "Ask a question",
+    "optionAgent": "Speak to an agent",
+    "languageHint": "At any time, write FRANCAIS to continue in French.",
+    "resumePrompt": "We had already started a quote for you. Would you like to pick up where we left off?",
+    "resumeYes": "Resume",
+    "resumeNo": "Start fresh"
+  },
+  "step": {
+    "personalInfo": {
+      "prompt": "To begin, send me in a single message:\n\n*Last name*, *First name*, *Date of birth*\n\nFor example: Ali, Saif, 12/03/1990",
+      "promptSimple": "Let's do this more simply, one question at a time."
+    },
+    "lastName": {
+      "prompt": "What is your *last name*?"
+    },
+    "firstName": {
+      "prompt": "What is your *first name*?"
+    },
+    "dateOfBirth": {
+      "prompt": "What is your *date of birth*? (DD/MM/YYYY)"
+    },
+    "gender": {
+      "prompt": "What is your gender?",
+      "male": "Male",
+      "female": "Female",
+      "other": "Other"
+    },
+    "nationality": {
+      "prompt": "What is your *nationality*? Write the country name.",
+      "listPrompt": "Choose your nationality:",
+      "listButton": "Nationality",
+      "candidates": "Several countries match. Which one is right?",
+      "notFound": "I could not find that country. Try writing the full name, or choose from the list."
+    },
+    "residence": {
+      "prompt": "Which *country do you live in*?",
+      "listPrompt": "Choose your country of residence:",
+      "listButton": "Residence"
+    },
+    "passport": {
+      "prompt": "What is your *passport number* (or ID number)?"
+    },
+    "destination": {
+      "prompt": "Where are you *travelling to*? Write the country name.",
+      "listPrompt": "Choose your destination:",
+      "listButton": "Destination",
+      "candidates": "Several destinations match. Which one is right?",
+      "notFound": "I could not find that destination. Try again, or choose from the list."
+    },
+    "travelDates": {
+      "prompt": "What are your *travel dates*?\n\nSend departure and return, for example: 01/10/2026, 15/10/2026"
+    },
+    "duration": {
+      "prompt": "How *long is your stay*?",
+      "listPrompt": "Choose the length of cover:",
+      "listButton": "Duration",
+      "option": "{{days}} days"
+    },
+    "email": {
+      "prompt": "What is your *email address*? We will send your certificate there."
+    },
+    "phone": {
+      "prompt": "We will use this WhatsApp number ({{number}}) as your contact number. Is that correct?",
+      "useThis": "Yes, this number",
+      "useOther": "A different number",
+      "otherPrompt": "Send the number to use, including the country code. For example: +225 07 18 92 31 94"
+    },
+    "plan": {
+      "prompt": "Here are the plans available for your trip:",
+      "listPrompt": "Choose your plan:",
+      "listButton": "Plans",
+      "rowDescription": "{{premium}} · {{days}} days of cover",
+      "none": "No plan is available for this combination of destination and duration. An agent will contact you."
+    }
+  },
+  "review": {
+    "title": "Thank you. Here is a summary of your details:",
+    "lastName": "Last name",
+    "firstName": "First name",
+    "dateOfBirth": "Date of birth",
+    "gender": "Gender",
+    "nationality": "Nationality",
+    "residence": "Country of residence",
+    "passport": "Passport / ID",
+    "destination": "Destination",
+    "dates": "Travel dates",
+    "duration": "Duration",
+    "email": "Email",
+    "phone": "Phone",
+    "question": "Is everything correct?",
+    "confirm": "All correct",
+    "edit": "Change a detail",
+    "editPrompt": "Which detail would you like to correct?",
+    "editButton": "Change",
+    "editDone": "Updated. Back to the summary."
+  },
+  "quote": {
+    "title": "🛡️ *Your quote {{reference}}*",
+    "titleDraft": "🛡️ *Your quote*",
+    "plan": "Plan: *{{plan}}*",
+    "destination": "Destination: {{destination}}",
+    "dates": "Dates: {{start}} to {{end}}",
+    "duration": "Length of cover: {{days}} days",
+    "traveller": "Insured: {{name}} ({{age}} years old)",
+    "coverage": "Main benefits:\n{{coverage}}",
+    "premium": "*Premium due: {{amount}}*",
+    "question": "Would you like to confirm this quote?",
+    "confirm": "Confirm",
+    "changePlan": "Change plan",
+    "cancel": "Cancel",
+    "confirmed": "✅ Perfect. Your quote *{{reference}}* has been saved.\n\nAn agent will contact you to complete payment, and your certificate will then be emailed to you.",
+    "cancelled": "Your request has been cancelled. Write *RESTART* at any time to start a new quote.",
+    "ineligible": "Given the age of the insured, this quote requires a specific exemption. An agent will contact you.",
+    "noPrice": "I cannot calculate a premium for this combination. An agent will contact you."
+  },
+  "error": {
+    "required": "I need this detail to continue. Could you send it again?",
+    "name_too_short": "That name looks too short. Could you send it in full?",
+    "name_too_long": "That name is too long. Could you shorten it?",
+    "name_has_digits": "A name does not contain numbers. Could you send it again?",
+    "name_invalid": "That name contains characters that are not allowed. Could you send it again?",
+    "passport_too_short": "That number looks too short. Could you check it?",
+    "passport_too_long": "That number looks too long. Could you check it?",
+    "passport_invalid": "Use letters and numbers only, with no special characters.",
+    "passport_no_digit": "A passport number normally contains at least one digit. Could you check it?",
+    "email_invalid": "That email address does not look valid. Could you send it again?",
+    "email_too_long": "That email address is too long.",
+    "phone_invalid": "That number does not look valid. Use digits only, including the country code.",
+    "phone_no_country_code": "Please include the country code, for example +225…",
+    "phone_too_short": "That number is too short.",
+    "phone_too_long": "That number is too long.",
+    "dob_unparseable": "I did not understand that date. Please write it as DD/MM/YYYY, for example 12/03/1990.",
+    "dob_future": "A date of birth cannot be in the future. Could you check it?",
+    "dob_implausible": "That year of birth looks unusual. Could you check it?",
+    "date_unparseable": "I did not understand that date. Please write it as DD/MM/YYYY.",
+    "dates_out_of_order": "The return date must be after the departure date.",
+    "dates_too_long": "Cover is available for up to 365 days.",
+    "start_in_past": "The departure date cannot be in the past.",
+    "gender_invalid": "Please choose Male, Female or Other.",
+    "grouped_ambiguous": "To avoid a mistake, separate the details with commas: Last name, First name, Date of birth.",
+    "grouped_incomplete": "One detail is missing. Please send all three: Last name, First name, Date of birth.",
+    "generic": "I did not understand. Could you rephrase?",
+    "tooManyRetries": "I am having trouble recording this detail. Let's try a simpler way."
+  },
+  "session": {
+    "expired": "Our previous conversation has expired. Write *HELLO* to start a new quote.",
+    "expiredResume": "Our previous conversation expired, but I kept your details. Would you like to resume?",
+    "restarted": "Starting again from the beginning. 🔄",
+    "noPrevious": "We are at the start, so there is nothing before this question.",
+    "cancelled": "Conversation cancelled."
+  },
+  "help": {
+    "text": "Here is what you can write at any time:\n\n*RESTART* — start again from the beginning\n*BACK* — go back to the previous question\n*HELP* — show this message\n*AGENT* — be put in touch with a person\n*FRANCAIS* — continuer en français"
+  },
+  "agent": {
+    "requested": "Noted. An agent will take over as soon as possible.",
+    "withNumber": "Noted. You can also reach an agent directly on {{number}}.",
+    "resume": "In the meantime we can carry on. Write *RESTART* if you would rather begin again."
+  },
+  "language": {
+    "switched": "Great, I will continue in English. 🇬🇧"
+  },
+  "unsupported": {
+    "image": "I cannot read images. Could you type your answer instead?",
+    "audio": "I cannot listen to voice notes. Could you type your answer instead?",
+    "video": "I cannot watch videos. Could you type your answer instead?",
+    "document": "I cannot open documents here. Could you type your answer instead?",
+    "location": "Thank you, but I cannot use a location. Could you write the country name?",
+    "sticker": "😊 Could you type your answer?",
+    "generic": "I can only handle text and the buttons I offer. Could you type your answer?",
+    "emptyMessage": "I did not receive anything. Could you send your answer again?",
+    "tooLong": "That message is very long. Could you answer more briefly?"
+  },
+  "system": {
+    "unavailable": "The quote service is temporarily unavailable. Please try again shortly.",
+    "error": "A technical error occurred on our side. We are fixing it; please try again in a few minutes."
+  }
+}

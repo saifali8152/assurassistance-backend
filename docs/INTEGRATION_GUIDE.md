@@ -30,6 +30,14 @@ within the **scopes** your API key was issued with.
 
 ---
 
+- **Price a trip without selling it** — `POST /quotes/price` applies destination zone,
+  validity tier and age band to a plan's rate table, and `POST /quotes` stores the
+  result as a case awaiting payment.
+- **Read the destination zone map** — `GET /zones` explains why two destinations
+  cost differently.
+- **Follow WhatsApp conversations** — `GET /whatsapp/sessions` and its transcript
+  endpoints expose the conversational purchase channel.
+
 ## 2. Getting an API key
 
 API keys are minted by an AssurAssistance administrator. To request one,
@@ -130,11 +138,21 @@ the endpoint.
 | `invoices:read` | `GET /invoice-ledger`, `GET /invoice-ledger/export` |
 | `agents:read` | (reserved — agency list/profile for future key access) |
 | `agents:write` | (reserved — agency mutations for future key access) |
+| `quotes:read` | `POST /quotes/price`, `GET /quotes`, `GET /quotes/{reference}` |
+| `quotes:write` | `POST /quotes` |
+| `zones:read` | `GET /zones`, `GET /zones/countries`, `GET /zones/resolve` |
+| `whatsapp:read` | `GET /whatsapp/status`, `/whatsapp/sessions*`, `GET /whatsapp/stats` |
+| `whatsapp:write` | `POST /whatsapp/messages` |
 
 **Agency reassignment** (`PATCH /admin/agents/{id}/supervisor` and
 `GET /admin/agents/{id}/supervision-history`) is **admin JWT only** — there is
 no API-key scope for it. See [§11b Agency reassignment](#11b-agency-reassignment--admin-jwt)
 and [`API.md`](./API.md) §7.
+
+**WhatsApp settings** (`/api/admin/whatsapp-settings*`) are **admin JWT only** and
+have no scope at all: an integration must never be able to read or rewrite the
+platform's Meta credentials. Zone reassignment (`PATCH /zones/assign`) is also
+admin JWT only — a partner must not be able to move a country into a cheaper zone.
 
 **Login email changes** (`PATCH /admin/agents/{id}` with `email`) are also
 **admin JWT only**. The new address must not belong to any other login account
@@ -339,6 +357,54 @@ ids, set `is_deleted: true`, and force premium/commission to **0**.
 
 Full reference: [`API.md`](./API.md) §4 and OpenAPI paths
 `/sales/{id}/payment`, `/sales/{id}/soft-delete`, `/sales/meta/deletion-reasons`.
+
+---
+
+## 5b. Quoting without selling
+
+`POST /quotes/price` prices a traveller without creating anything. It is the same
+engine the web app and the WhatsApp conversation use, so a given set of inputs
+always produces the same premium — you no longer have to reimplement the age and
+duration rules described in §5 Step 2b on your side.
+
+```bash
+curl -X POST $AAS_BASE/quotes/price -H "Authorization: Bearer $AAS_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "date_of_birth": "12/03/1990",
+    "start_date": "01/10/2026",
+    "end_date": "20/10/2026",
+    "destination_code": "CI"
+  }'
+```
+
+Omit `plan_id` and you get every plan you may sell, cheapest first, plus a
+`rejected` list explaining any plan that could not be priced. Three things are
+applied, in order:
+
+1. **Destination zone** — the country's zone selects a column in the plan's rate
+   table (`GET /zones/resolve?country=CI` shows you which). A zone the plan does
+   not define falls back to the plan's first column.
+2. **Validity tier** — the stay is rounded up to the smallest duration the plan
+   sells. A 20-day trip on a plan with 10 / 32 / 63 tiers is priced as 32 days.
+3. **Age band** — under 16 halves the premium, 76–80 doubles it, 81–85 quadruples
+   it, and over 85 returns `422 age_ineligible` rather than a price.
+
+### Turning a price into a sale
+
+`POST /quotes` stores the quote as a case with status `AwaitingPayment` and a
+`QT-` reference. From there the normal flow applies: confirm the sale on the
+returned `case_id` (§5 Step 3) to issue the policy, certificate and invoice.
+
+Two behaviours worth knowing:
+
+- **The premium is recalculated when you store it**, from the live catalogue. A
+  price you quoted to a customer an hour ago is never taken on trust, so always
+  read `data.pricing.total` from the create response rather than your own copy.
+- **Every case belongs to an account.** Commissions, partner invoices, the ledger
+  and reconciliation are all keyed to a user, so a quote created with an API key
+  is attributed to that key's owner. If no owner can be determined you get
+  `409 attribution_missing` instead of an orphaned case.
 
 ---
 

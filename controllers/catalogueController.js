@@ -51,6 +51,18 @@ function sanitizeThemeColor(input) {
   return /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(s) ? s.toUpperCase() : DEFAULT_THEME_COLOR;
 }
 
+/**
+ * Optional short coverage blurb shown in the WhatsApp quote. Left NULL, the chat
+ * message derives its own from the plan's `guarantees`, so this is an override
+ * for the cases where the derived text reads badly — not a required field.
+ */
+function coverageSummaryValue(v) {
+  if (v === undefined) return undefined;
+  if (v === null) return null;
+  const s = String(v).trim();
+  return s === "" ? null : s.slice(0, 2000);
+}
+
 function toBoolFlag(v) {
   if (v === true || v === 1 || v === "1") return 1;
   if (typeof v === "string" && v.toLowerCase() === "true") return 1;
@@ -73,7 +85,10 @@ export const createCatalogue = async (req, res) => {
       theme_color,
       extra_id_fields,
       fixed_duration_premiums,
-      partner_insurer
+      partner_insurer,
+      whatsapp_enabled,
+      coverage_summary_fr,
+      coverage_summary_en
     } = req.body;
 
     const countryValue =
@@ -88,8 +103,8 @@ export const createCatalogue = async (req, res) => {
     const partnerInsurerValue = normalizePartnerInsurer(partner_insurer);
 
     const [result] = await pool.query(
-      `INSERT INTO catalogue (product_type, name, coverage, pricing_rules, flat_price, country_of_residence, route_type, currency, theme_color, extra_id_fields, fixed_duration_premiums, partner_insurer)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO catalogue (product_type, name, coverage, pricing_rules, flat_price, country_of_residence, route_type, currency, theme_color, extra_id_fields, fixed_duration_premiums, partner_insurer, whatsapp_enabled, coverage_summary_fr, coverage_summary_en)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         product_type,
         name,
@@ -102,7 +117,12 @@ export const createCatalogue = async (req, res) => {
         sanitizeThemeColor(theme_color),
         toBoolFlag(extra_id_fields),
         toBoolFlag(fixed_duration_premiums),
-        partnerInsurerValue
+        partnerInsurerValue,
+        // Defaults to 0: enabling the WhatsApp module must never silently expose
+        // every existing plan to chat customers.
+        toBoolFlag(whatsapp_enabled),
+        coverageSummaryValue(coverage_summary_fr) ?? null,
+        coverageSummaryValue(coverage_summary_en) ?? null
       ]
     );
     res.status(201).json({
@@ -179,7 +199,10 @@ export const updateCatalogue = async (req, res) => {
       theme_color,
       extra_id_fields,
       fixed_duration_premiums,
-      partner_insurer
+      partner_insurer,
+      whatsapp_enabled,
+      coverage_summary_fr,
+      coverage_summary_en
     } = req.body;
 
     const countryValue =
@@ -196,7 +219,7 @@ export const updateCatalogue = async (req, res) => {
 
     if (partnerInsurerValue !== undefined) {
       await pool.query(
-        `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=?, theme_color=?, extra_id_fields=?, fixed_duration_premiums=?, partner_insurer=? WHERE id=?`,
+        `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=?, theme_color=?, extra_id_fields=?, fixed_duration_premiums=?, partner_insurer=?, whatsapp_enabled=?, coverage_summary_fr=COALESCE(?, coverage_summary_fr), coverage_summary_en=COALESCE(?, coverage_summary_en) WHERE id=?`,
         [
           product_type,
           name,
@@ -211,12 +234,17 @@ export const updateCatalogue = async (req, res) => {
           toBoolFlag(extra_id_fields),
           toBoolFlag(fixed_duration_premiums),
           partnerInsurerValue,
+          toBoolFlag(whatsapp_enabled),
+          // COALESCE in the SQL: a payload that omits these keeps what is stored,
+          // so an edit from a form that does not render them cannot wipe them.
+          coverageSummaryValue(coverage_summary_fr) ?? null,
+          coverageSummaryValue(coverage_summary_en) ?? null,
           id
         ]
       );
     } else {
       await pool.query(
-        `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=?, theme_color=?, extra_id_fields=?, fixed_duration_premiums=? WHERE id=?`,
+        `UPDATE catalogue SET product_type=?, name=?, coverage=?, pricing_rules=?, flat_price=?, active=?, country_of_residence=?, route_type=?, currency=?, theme_color=?, extra_id_fields=?, fixed_duration_premiums=?, whatsapp_enabled=?, coverage_summary_fr=COALESCE(?, coverage_summary_fr), coverage_summary_en=COALESCE(?, coverage_summary_en) WHERE id=?`,
         [
           product_type,
           name,
@@ -230,6 +258,9 @@ export const updateCatalogue = async (req, res) => {
           sanitizeThemeColor(theme_color),
           toBoolFlag(extra_id_fields),
           toBoolFlag(fixed_duration_premiums),
+          toBoolFlag(whatsapp_enabled),
+          coverageSummaryValue(coverage_summary_fr) ?? null,
+          coverageSummaryValue(coverage_summary_en) ?? null,
           id
         ]
       );

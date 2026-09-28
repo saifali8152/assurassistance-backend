@@ -9,7 +9,7 @@ and rendered as Swagger UI at `/api/docs`).
 - **Local:** `http://localhost:3000/api`
 - **Auth:** `Authorization: Bearer <jwt|api-key>` (see [SECURITY.md](./SECURITY.md))
 
-Notable recent additions: [partner invoices / receipts](#11-partner-invoices--api-partner-invoices-admin--sub-admin-jwt) (`documentType`, `stamp`), [contractual documents](#12-contractual-documents--api-contractual-documents-jwt) (Terms & Conditions `full` / `brief`), [supervisor login email](#patch-adminagentsid--change-login-email-admin-jwt-only) (`PATCH /admin/agents/:id` `email` + `GET /admin/email-available`), [insurer supervisors](#insurer-supervisors) (`insurer_supervisor` + `partner_insurer` plan scoping).
+Notable recent additions: [partner invoices / receipts](#11-partner-invoices--api-partner-invoices-admin--sub-admin-jwt) (`documentType`, `stamp`), [contractual documents](#12-contractual-documents--api-contractual-documents-jwt) (Terms & Conditions `full` / `brief`), [supervisor login email](#patch-adminagentsid--change-login-email-admin-jwt-only) (`PATCH /admin/agents/:id` `email` + `GET /admin/email-available`), [insurer supervisors](#insurer-supervisors) (`insurer_supervisor` + `partner_insurer` plan scoping). Milestone 2 adds [quotes](#14-quotes--apiquotes) (`quotes:read` / `quotes:write`), [destination zones](#15-destination-zones--apizones) (`zones:read`), the [WhatsApp channel](#16-whatsapp--apiwhatsapp) (`whatsapp:read` / `whatsapp:write`) and [superadmin WhatsApp settings](#17-whatsapp-settings--apiadminwhatsapp-settings).
 
 Legend:
 
@@ -912,6 +912,260 @@ description=Complete contractual terms for Assur'Assistance travel insurance.
 | GET | `/api/openapi.yaml` | OpenAPI spec (YAML). |
 
 ---
+
+---
+
+## 14. Quotes — `/api/quotes`
+
+Pricing as a first-class endpoint. Until Milestone 2 the premium was computed in
+the browser and the API only accepted an already-priced case; the WhatsApp flow
+needs to price a traveller *before* any policy exists, so that capability is now
+available to every integration.
+
+The same engine serves the web app, the WhatsApp conversation and this API, so a
+given set of inputs always produces the same premium.
+
+| Method | Path | Auth | Scope | Description |
+|---|---|---|---|---|
+| POST | `/quotes/price` | JWT, KEY | `quotes:read` | Price a traveller. Stores nothing. |
+| POST | `/quotes` | JWT, KEY | `quotes:write` | Price **and** store as a case awaiting payment. |
+| GET | `/quotes` | JWT, KEY | `quotes:read` | List stored quotes. |
+| GET | `/quotes/:reference` | JWT, KEY | `quotes:read` | One quote, re-priced against the live catalogue. |
+
+### How a premium is calculated
+
+1. **Destination → zone.** The country is resolved through `destination_zones`
+   and its zone selects a column in the plan's `pricing_rules.pricingColumns`.
+   A zone the plan does not define falls back to the plan's first column.
+2. **Stay length → validity tier.** The number of days is rounded up to the
+   smallest tier the plan sells (10 / 45 / 93 / 180 / 365 by default; a plan may
+   define its own, e.g. 32 / 63).
+3. **Age band multiplier**, from the date of birth at quote time:
+
+   | Age | Multiplier |
+   |---|---|
+   | under 16 | × 0.5 |
+   | 16 – 75 | × 1 |
+   | 76 – 80 | × 2 |
+   | 81 – 85 | × 4 |
+   | over 85 | not eligible — `422 age_ineligible` |
+
+Age multipliers apply to travel-type products (`Travel`, `Travel Inbound`,
+`Road travel`). Other product types are priced from the table or flat price only.
+
+### POST /quotes/price
+
+Omit `plan_id` to price every plan the caller may sell, cheapest first. An API
+key is limited to plans flagged for programmatic sale; a staff JWT sees every
+active plan.
+
+**Request**
+
+```json
+{
+  "date_of_birth": "12/03/1990",
+  "start_date": "01/10/2026",
+  "end_date": "20/10/2026",
+  "destination_code": "CI",
+  "plan_id": 1
+}
+```
+
+`destination` (a country name in French or English, fuzzy-matched) may be sent
+instead of `destination_code`. Dates accept `DD/MM/YYYY`, `DD-MM-YYYY`,
+`DD.MM.YYYY`, `YYYY-MM-DD` and French month names.
+
+**200 OK**
+
+```json
+{
+  "success": true,
+  "data": {
+    "quote": {
+      "plan": { "id": 1, "name": "AGICO Retail Burundi", "productType": "Travel", "currency": "USD" },
+      "destination": { "code": "CI", "nameEn": "Côte-d'Ivoire", "nameFr": "Côte-d'Ivoire", "zone": "Worldwide" },
+      "zone": { "resolved": "Worldwide", "column": "Worldwide", "matchedPlanColumn": true },
+      "travel": { "startDate": "2026-10-01", "endDate": "2026-10-20", "stayDays": 20, "validityDays": 32 },
+      "traveller": { "dateOfBirth": "1990-03-12", "age": 36, "ageBand": "standard", "ageMultiplier": 1 },
+      "pricing": { "basePremium": 39, "premium": 39, "tax": 0, "total": 39, "currency": "USD" }
+    }
+  }
+}
+```
+
+Without `plan_id` the payload is `{ "quotes": [...], "rejected": [...] }`, where
+`rejected` names each plan that could not be priced and why — a short list is
+never silently shorter.
+
+**Errors**
+
+| Status | `code` | Meaning |
+|---|---|---|
+| 400 | `validation_error` | Per-field errors in `error.fields[]`. |
+| 400 | `destination_unresolved` | Unknown country; `error.candidates[]` when close matches exist. |
+| 404 | `plan_not_found` | `plan_id` does not exist. |
+| 422 | `age_ineligible` | Traveller is over 85; a specific exemption is required. |
+| 422 | `no_price_for_inputs` | No price for that duration / zone combination. |
+
+### POST /quotes
+
+Stores the quote as a `cases` row with status `AwaitingPayment` and a customer
+facing `quote_reference` (`QT-XXXXXXXX`). The traveller is created at the same
+time. **The premium is recalculated from the live catalogue at this moment** — a
+price quoted in a conversation hours earlier is never trusted.
+
+The resulting case is an ordinary case: the existing
+`POST /cases/:caseId/confirm-sale` flow issues the policy, certificate and
+invoice from it with no special handling.
+
+**Request** — as `/quotes/price`, plus:
+
+```json
+{
+  "first_name": "Saif",
+  "last_name": "Ali",
+  "gender": "male",
+  "nationality": "Pakistan",
+  "country_of_residence": "Pakistan",
+  "passport_or_id": "AB1234567",
+  "email": "info@devzz.tech",
+  "phone": "+225 07 18 92 31 94",
+  "plan_id": 1
+}
+```
+
+Values are normalised on the way in: the passport is uppercased and stripped of
+spaces and dashes, the email is lowercased, and the phone is converted to E.164.
+
+**201 Created**
+
+```json
+{
+  "success": true,
+  "data": {
+    "quote_reference": "QT-BF664C18",
+    "case_id": 512,
+    "traveller_id": 388,
+    "status": "AwaitingPayment",
+    "pricing": { "premium": 39, "tax": 0, "total": 39, "currency": "USD" }
+  },
+  "message": "Quote created. Confirm the sale to issue a policy."
+}
+```
+
+`409 attribution_missing` means no owning account is configured for the source —
+every case belongs to a user, because commissions, partner invoices, the ledger
+and reconciliation are all keyed to one. For WhatsApp that account is set in the
+WhatsApp settings; for an API key it is the key's owner.
+
+### GET /quotes/:reference
+
+Returns the stored inputs **and** a fresh `pricing` block computed from today's
+catalogue, so an integrator can tell when a price has moved since the quote was
+taken. `pricing_error` is populated instead when the stored inputs can no longer
+be priced. An API key only sees quotes owned by its own account; anyone else's
+reference returns `404 not_found` rather than confirming it exists.
+
+---
+
+## 15. Destination zones — `/api/zones`
+
+The country → pricing-zone map behind step 1 of the premium calculation.
+
+| Method | Path | Auth | Scope | Description |
+|---|---|---|---|---|
+| GET | `/zones` | JWT, KEY | `zones:read` | Zones in use, with country counts. |
+| GET | `/zones/countries` | JWT, KEY | `zones:read` | Full map. Optional `?zone=Zone A`. |
+| GET | `/zones/resolve?country=CI` | JWT, KEY | `zones:read` | One lookup by ISO code or name (either language, fuzzy). |
+| PATCH | `/zones/assign` | ADMIN | — | Reassign countries to a zone. |
+
+All 195 countries ship mapped to the single zone `Worldwide`, which is the column
+existing plans already use — so pricing is unchanged until a real zone map is
+supplied. Reassigning is an update of one column: no country is ever created or
+removed, and unrecognised codes come back in `data.unknown`.
+
+```bash
+curl -X PATCH $AAS_BASE/zones/assign -H "Authorization: Bearer $AAS_JWT" \
+  -H 'Content-Type: application/json' \
+  -d '{"country_codes":["FR","ES","IT"],"zone":"Zone A"}'
+```
+
+---
+
+## 16. WhatsApp — `/api/whatsapp`
+
+The conversational purchase channel. The webhook is Meta-facing and
+signature-authenticated; everything else uses the normal auth stack.
+
+| Method | Path | Auth | Scope | Description |
+|---|---|---|---|---|
+| GET | `/whatsapp/webhook` | PUBLIC | — | Meta verification handshake. Echoes `hub.challenge`. |
+| POST | `/whatsapp/webhook` | SIGNATURE | — | Inbound messages and delivery receipts. |
+| GET | `/whatsapp/status` | JWT, KEY | `whatsapp:read` | Non-secret runtime status. |
+| GET | `/whatsapp/sessions` | JWT, KEY | `whatsapp:read` | Conversations (`?status=`, `?search=`, paginated). |
+| GET | `/whatsapp/sessions/:id` | JWT, KEY | `whatsapp:read` | One conversation with its collected data. |
+| GET | `/whatsapp/sessions/:id/messages` | JWT, KEY | `whatsapp:read` | Full transcript. |
+| GET | `/whatsapp/stats` | JWT, KEY | `whatsapp:read` | Customer-message counts vs the 6–8 target. |
+| POST | `/whatsapp/messages` | JWT, KEY | `whatsapp:write` | Send an outbound text. |
+| POST | `/whatsapp/maintenance/prune` | ADMIN | — | Apply the transcript retention policy. |
+
+### The webhook
+
+`POST /whatsapp/webhook` verifies `X-Hub-Signature-256` over the **raw** request
+bytes and returns:
+
+- `403` when the signature is absent or does not verify — that request did not
+  come from Meta.
+- `200` in every other case, including internal failures. A non-2xx answer makes
+  Meta retry with growing delay and eventually disable the webhook, so a database
+  problem must not cost the integration.
+
+Redelivery is safe: messages are deduplicated on Meta's `wa_message_id`.
+Concurrent messages from one number are serialised, so a customer sending three
+messages in two seconds cannot advance the flow three times.
+
+`whatsapp:read` is deliberately separate from `cases:read`: transcripts contain
+personal data that a partner with case access has no automatic right to read.
+
+### GET /whatsapp/stats
+
+```json
+{
+  "success": true,
+  "data": {
+    "windowDays": 30,
+    "completedSessions": 42,
+    "averageCustomerMessages": 7.4,
+    "minCustomerMessages": 6,
+    "maxCustomerMessages": 11,
+    "target": { "min": 6, "max": 8 }
+  }
+}
+```
+
+---
+
+## 17. WhatsApp settings — `/api/admin/whatsapp-settings` (admin JWT only)
+
+Superadmin configuration of the integration. **API keys cannot reach these
+endpoints at all**, whatever their scopes — an integration must never be able to
+read or rewrite the platform's Meta credentials.
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/admin/whatsapp-settings` | All settings; secrets masked. Includes readiness and the webhook URL. |
+| PUT | `/admin/whatsapp-settings` | Save. Omit a secret to leave it unchanged. |
+| POST | `/admin/whatsapp-settings/test` | Live Graph API check of the token and phone number. |
+| POST | `/admin/whatsapp-settings/verify-token` | Generate a webhook verify token (returned once). |
+| GET | `/admin/whatsapp-settings/verify-token` | Reveal it. Audited. |
+| GET | `/admin/whatsapp-settings/attribution-candidates` | Accounts that can own WhatsApp business. |
+
+Credentials are stored AES-256-GCM encrypted in `app_settings`; the master key
+lives only in `SETTINGS_ENCRYPTION_KEY`. Saved changes take effect without a
+restart. Secrets are returned as `"masked": "••••••••wxyz"` with
+`"value": null`; sending `""` or omitting a secret field keeps the stored value,
+so saving the phone number ID can never blank the access token.
+
 
 ## Appendix A — Standard error shapes
 

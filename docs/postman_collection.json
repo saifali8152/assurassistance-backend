@@ -6,13 +6,36 @@
     "_postman_id": "aas-public-api"
   },
   "variable": [
-    { "key": "baseUrl", "value": "https://backend-api.assurassistancepro.org/api", "type": "string" },
-    { "key": "apiKey",  "value": "aas_live_REPLACE_ME", "type": "string" },
-    { "key": "jwt",     "value": "REPLACE_ME", "type": "string" }
+    {
+      "key": "baseUrl",
+      "value": "https://backend-api.assurassistancepro.org/api",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "aas_live_REPLACE_ME",
+      "type": "string"
+    },
+    {
+      "key": "jwt",
+      "value": "REPLACE_ME",
+      "type": "string"
+    },
+    {
+      "key": "waVerifyToken",
+      "value": "",
+      "description": "Webhook verify token, from the WhatsApp settings page."
+    }
   ],
   "auth": {
     "type": "bearer",
-    "bearer": [{ "key": "token", "value": "{{apiKey}}", "type": "string" }]
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiKey}}",
+        "type": "string"
+      }
+    ]
   },
   "item": [
     {
@@ -22,58 +45,178 @@
           "name": "Login (in-house web app)",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth","login"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"agent@example.com\",\n  \"password\": \"...\"\n}" },
-            "auth": { "type": "noauth" }
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"agent@example.com\",\n  \"password\": \"...\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
           "name": "Forgot password",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/auth/forgot-password", "host": ["{{baseUrl}}"], "path": ["auth","forgot-password"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"email\": \"agent@example.com\" }" },
-            "auth": { "type": "noauth" }
+            "url": {
+              "raw": "{{baseUrl}}/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"email\": \"agent@example.com\" }"
+            },
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
           "name": "Verify reset code",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/auth/verify-reset-code", "host": ["{{baseUrl}}"], "path": ["auth","verify-reset-code"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"email\": \"agent@example.com\", \"code\": \"123456\" }" },
-            "auth": { "type": "noauth" }
+            "url": {
+              "raw": "{{baseUrl}}/auth/verify-reset-code",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "verify-reset-code"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"email\": \"agent@example.com\", \"code\": \"123456\" }"
+            },
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
           "name": "Reset password",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/auth/reset-password", "host": ["{{baseUrl}}"], "path": ["auth","reset-password"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"agent@example.com\",\n  \"code\": \"123456\",\n  \"newPassword\": \"NewPass#2026\",\n  \"confirmPassword\": \"NewPass#2026\"\n}" },
-            "auth": { "type": "noauth" }
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"agent@example.com\",\n  \"code\": \"123456\",\n  \"newPassword\": \"NewPass#2026\",\n  \"confirmPassword\": \"NewPass#2026\"\n}"
+            },
+            "auth": {
+              "type": "noauth"
+            }
           }
         },
         {
           "name": "Change password (logged in)",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/auth/change-password", "host": ["{{baseUrl}}"], "path": ["auth","change-password"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"oldPassword\": \"OldPass#2026\",\n  \"newPassword\": \"NewPass#2026\",\n  \"confirmPassword\": \"NewPass#2026\"\n}" },
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+            "url": {
+              "raw": "{{baseUrl}}/auth/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "change-password"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldPassword\": \"OldPass#2026\",\n  \"newPassword\": \"NewPass#2026\",\n  \"confirmPassword\": \"NewPass#2026\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         },
         {
           "name": "Logout",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth","logout"] },
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         }
       ]
@@ -85,52 +228,176 @@
           "name": "List plans",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{baseUrl}}/catalogue", "host": ["{{baseUrl}}"], "path": ["catalogue"] }
+            "url": {
+              "raw": "{{baseUrl}}/catalogue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalogue"
+              ]
+            }
           }
         },
         {
           "name": "Create plan (admin JWT)",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/catalogue", "host": ["{{baseUrl}}"], "path": ["catalogue"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"product_type\": \"Travel\",\n  \"name\": \"AGICO Worldwide 30 Days\",\n  \"coverage\": \"Medical: 60,000 EUR\",\n  \"flat_price\": 25000,\n  \"country_of_residence\": \"Burundi\",\n  \"route_type\": \"Outbound\",\n  \"currency\": \"XOF\",\n  \"theme_color\": \"#1E4D8B\",\n  \"extra_id_fields\": false\n}" },
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+            "url": {
+              "raw": "{{baseUrl}}/catalogue",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalogue"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_type\": \"Travel\",\n  \"name\": \"AGICO Worldwide 30 Days\",\n  \"coverage\": \"Medical: 60,000 EUR\",\n  \"flat_price\": 25000,\n  \"country_of_residence\": \"Burundi\",\n  \"route_type\": \"Outbound\",\n  \"currency\": \"XOF\",\n  \"theme_color\": \"#1E4D8B\",\n  \"extra_id_fields\": false\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         },
         {
           "name": "Update plan (admin JWT)",
           "request": {
             "method": "PUT",
-            "url": { "raw": "{{baseUrl}}/catalogue/12", "host": ["{{baseUrl}}"], "path": ["catalogue","12"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"product_type\": \"Travel\",\n  \"name\": \"AGICO Worldwide 45 Days\",\n  \"flat_price\": 30000,\n  \"currency\": \"XOF\"\n}" },
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+            "url": {
+              "raw": "{{baseUrl}}/catalogue/12",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalogue",
+                "12"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"product_type\": \"Travel\",\n  \"name\": \"AGICO Worldwide 45 Days\",\n  \"flat_price\": 30000,\n  \"currency\": \"XOF\"\n}"
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         },
         {
           "name": "Delete plan (admin JWT)",
           "request": {
             "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/catalogue/12", "host": ["{{baseUrl}}"], "path": ["catalogue","12"] },
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+            "url": {
+              "raw": "{{baseUrl}}/catalogue/12",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalogue",
+                "12"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         },
         {
           "name": "Upload partner logo (admin JWT)",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/catalogue/12/partner-logo", "host": ["{{baseUrl}}"], "path": ["catalogue","12","partner-logo"] },
-            "body": { "mode": "formdata", "formdata": [{ "key": "partner_logo", "type": "file", "src": [] }] },
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+            "url": {
+              "raw": "{{baseUrl}}/catalogue/12/partner-logo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalogue",
+                "12",
+                "partner-logo"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "partner_logo",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         },
         {
           "name": "Delete partner logo (admin JWT)",
           "request": {
             "method": "DELETE",
-            "url": { "raw": "{{baseUrl}}/catalogue/12/partner-logo", "host": ["{{baseUrl}}"], "path": ["catalogue","12","partner-logo"] },
-            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] }
+            "url": {
+              "raw": "{{baseUrl}}/catalogue/12/partner-logo",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "catalogue",
+                "12",
+                "partner-logo"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
           }
         }
       ]
@@ -142,7 +409,15 @@
           "name": "List cases",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{baseUrl}}/cases", "host": ["{{baseUrl}}"], "path": ["cases"] }
+            "url": {
+              "raw": "{{baseUrl}}/cases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases"
+              ]
+            }
           }
         },
         {
@@ -151,9 +426,23 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/cases/all?page=1&limit=25",
-              "host": ["{{baseUrl}}"],
-              "path": ["cases","all"],
-              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "25" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases",
+                "all"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "25"
+                }
+              ]
             }
           }
         },
@@ -163,9 +452,23 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/cases/my-cases?page=1&limit=25",
-              "host": ["{{baseUrl}}"],
-              "path": ["cases","my-cases"],
-              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "25" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases",
+                "my-cases"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "25"
+                }
+              ]
             }
           }
         },
@@ -173,31 +476,81 @@
           "name": "Pending sales",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{baseUrl}}/cases/pending-sales", "host": ["{{baseUrl}}"], "path": ["cases","pending-sales"] }
+            "url": {
+              "raw": "{{baseUrl}}/cases/pending-sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases",
+                "pending-sales"
+              ]
+            }
           }
         },
         {
           "name": "Change case status",
           "request": {
             "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/cases/4821/status", "host": ["{{baseUrl}}"], "path": ["cases","4821","status"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"status\": \"Cancelled\" }" }
+            "url": {
+              "raw": "{{baseUrl}}/cases/4821/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases",
+                "4821",
+                "status"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"status\": \"Cancelled\" }"
+            }
           }
         },
         {
           "name": "Policy edit meta",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{baseUrl}}/cases/4821/policy-edit-meta", "host": ["{{baseUrl}}"], "path": ["cases","4821","policy-edit-meta"] }
+            "url": {
+              "raw": "{{baseUrl}}/cases/4821/policy-edit-meta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases",
+                "4821",
+                "policy-edit-meta"
+              ]
+            }
           }
         },
         {
           "name": "Create case",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/cases", "host": ["{{baseUrl}}"], "path": ["cases"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/cases",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"traveller\": {\n    \"first_name\": \"Aïcha\",\n    \"last_name\": \"Diallo\",\n    \"date_of_birth\": \"1992-03-14\",\n    \"country_of_residence\": \"Ivory Coast\",\n    \"gender\": \"Female\",\n    \"nationality\": \"Ivorian\",\n    \"passport_or_id\": \"CI0123456\",\n    \"phone\": \"+225 07 12 34 56 78\",\n    \"email\": \"aicha@example.com\"\n  },\n  \"caseData\": {\n    \"destination\": \"France, Spain\",\n    \"start_date\": \"2026-06-01\",\n    \"end_date\": \"2026-06-15\",\n    \"selected_plan_id\": 12\n  }\n}"
@@ -208,8 +561,22 @@
           "name": "Create group case",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/cases/group", "host": ["{{baseUrl}}"], "path": ["cases","group"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/cases/group",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases",
+                "group"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"travellers\": [\n    { \"first_name\": \"Jean\",  \"last_name\": \"Kouassi\", \"date_of_birth\": \"1985-01-15\", \"country_of_residence\": \"Ivory Coast\", \"gender\": \"Male\",   \"nationality\": \"Ivorian\", \"passport_or_id\": \"CI001\", \"phone\": \"+225...\" },\n    { \"first_name\": \"Marie\", \"last_name\": \"Kouassi\", \"date_of_birth\": \"1987-09-02\", \"country_of_residence\": \"Ivory Coast\", \"gender\": \"Female\", \"nationality\": \"Ivorian\", \"passport_or_id\": \"CI002\", \"phone\": \"+225...\" }\n  ],\n  \"caseData\": {\n    \"destination\": \"France\",\n    \"start_date\": \"2026-07-01\",\n    \"end_date\": \"2026-07-21\",\n    \"selected_plan_id\": 12\n  }\n}"
@@ -220,31 +587,83 @@
           "name": "Get case",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{baseUrl}}/cases/4821", "host": ["{{baseUrl}}"], "path": ["cases","4821"] }
+            "url": {
+              "raw": "{{baseUrl}}/cases/4821",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases",
+                "4821"
+              ]
+            }
           }
         },
         {
           "name": "Confirm sale",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/cases/4821/confirm-sale", "host": ["{{baseUrl}}"], "path": ["cases","4821","confirm-sale"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"premium_amount\": 15250, \"tax\": 0, \"total\": 15250 }" }
+            "url": {
+              "raw": "{{baseUrl}}/cases/4821/confirm-sale",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases",
+                "4821",
+                "confirm-sale"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"premium_amount\": 15250, \"tax\": 0, \"total\": 15250 }"
+            }
           }
         },
         {
           "name": "Cancel case",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/cases/4821/cancel", "host": ["{{baseUrl}}"], "path": ["cases","4821","cancel"] }
+            "url": {
+              "raw": "{{baseUrl}}/cases/4821/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases",
+                "4821",
+                "cancel"
+              ]
+            }
           }
         },
         {
           "name": "Update case (recalculates sale premium if confirmed)",
           "request": {
             "method": "PUT",
-            "url": { "raw": "{{baseUrl}}/cases/4821/update", "host": ["{{baseUrl}}"], "path": ["cases","4821","update"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/cases/4821/update",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "cases",
+                "4821",
+                "update"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"traveller\": { \"first_name\": \"Aïcha\", \"last_name\": \"Diallo\", \"phone\": \"+225...\", \"date_of_birth\": \"1992-03-14\", \"country_of_residence\": \"Ivory Coast\", \"gender\": \"Female\", \"nationality\": \"Ivorian\", \"passport_or_id\": \"CI0123456\" },\n  \"caseData\": { \"destination\": \"France, Spain, Italy\", \"start_date\": \"2026-06-01\", \"end_date\": \"2026-06-26\", \"selected_plan_id\": 12 }\n}"
@@ -260,26 +679,83 @@
           "name": "Create sale (from confirmed case)",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"case_id\": 4821,\n  \"premium_amount\": 15250,\n  \"tax\": 0,\n  \"total\": 15250,\n  \"currency\": \"XOF\",\n  \"plan_price\": 15250,\n  \"guarantees_total\": 0\n}" }
+            "url": {
+              "raw": "{{baseUrl}}/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"case_id\": 4821,\n  \"premium_amount\": 15250,\n  \"tax\": 0,\n  \"total\": 15250,\n  \"currency\": \"XOF\",\n  \"plan_price\": 15250,\n  \"guarantees_total\": 0\n}"
+            }
           }
         },
         {
           "name": "List sales",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales", "host": ["{{baseUrl}}"], "path": ["sales"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales"
+              ]
+            }
+          }
         },
         {
           "name": "Get sale",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/7912", "host": ["{{baseUrl}}"], "path": ["sales","7912"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/7912",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "7912"
+              ]
+            }
+          }
         },
         {
           "name": "Update payment status (mark Paid)",
           "request": {
             "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/sales/7912/payment", "host": ["{{baseUrl}}"], "path": ["sales","7912","payment"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"payment_status\": \"Paid\", \"received_amount\": 25000, \"payment_notes\": \"Wire transfer ABC\" }" },
+            "url": {
+              "raw": "{{baseUrl}}/sales/7912/payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "7912",
+                "payment"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"payment_status\": \"Paid\", \"received_amount\": 25000, \"payment_notes\": \"Wire transfer ABC\" }"
+            },
             "description": "Admin JWT (or API key owned by admin) + sales:payment. Marks the sale as Paid."
           }
         },
@@ -287,9 +763,27 @@
           "name": "Reverse payment status (Paid → Unpaid, admin)",
           "request": {
             "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/sales/7912/payment", "host": ["{{baseUrl}}"], "path": ["sales","7912","payment"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"payment_status\": \"Unpaid\", \"received_amount\": 0, \"payment_notes\": \"\" }" },
+            "url": {
+              "raw": "{{baseUrl}}/sales/7912/payment",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "7912",
+                "payment"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"payment_status\": \"Unpaid\", \"received_amount\": 0, \"payment_notes\": \"\" }"
+            },
             "description": "Admin only. Unchecking Paid is limited to 2 occurrences per policy (payment_reverse_count). Audited in Activity Log."
           }
         },
@@ -297,7 +791,17 @@
           "name": "List policy deletion reasons (admin JWT)",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{baseUrl}}/sales/meta/deletion-reasons", "host": ["{{baseUrl}}"], "path": ["sales","meta","deletion-reasons"] },
+            "url": {
+              "raw": "{{baseUrl}}/sales/meta/deletion-reasons",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "meta",
+                "deletion-reasons"
+              ]
+            },
             "description": "Admin JWT only. Returns canonical soft-delete reasons."
           }
         },
@@ -305,9 +809,27 @@
           "name": "Soft-delete policy (admin JWT)",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/sales/7912/soft-delete", "host": ["{{baseUrl}}"], "path": ["sales","7912","soft-delete"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Test policy\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/sales/7912/soft-delete",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "7912",
+                "soft-delete"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Test policy\"\n}"
+            },
             "description": "Admin JWT only. Policy remains visible with premium/commission 0. Reasons: Test policy | Customer desistement | Error or duplicate | Cancellation before reversal."
           }
         }
@@ -318,34 +840,112 @@
       "item": [
         {
           "name": "Download invoice PDF",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/invoice/7912", "host": ["{{baseUrl}}"], "path": ["sales","invoice","7912"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/invoice/7912",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "invoice",
+                "7912"
+              ]
+            }
+          }
         },
         {
           "name": "Download certificate PDF",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/certificate/7912", "host": ["{{baseUrl}}"], "path": ["sales","certificate","7912"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/certificate/7912",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "certificate",
+                "7912"
+              ]
+            }
+          }
         },
         {
           "name": "Certificate page data (JSON)",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{baseUrl}}/sales/certificate/7912/page", "host": ["{{baseUrl}}"], "path": ["sales","certificate","7912","page"] },
+            "url": {
+              "raw": "{{baseUrl}}/sales/certificate/7912/page",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "certificate",
+                "7912",
+                "page"
+              ]
+            },
             "description": "JSON payload for the printable certificate. contact includes generalLine, centralAfricaLine (Central Africa calls/WhatsApp), whatsapp, emergencyHelpline, websiteUrl."
           }
         },
         {
           "name": "Group invoices (ZIP)",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/group/grp_abc/invoices-zip", "host": ["{{baseUrl}}"], "path": ["sales","group","grp_abc","invoices-zip"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/group/grp_abc/invoices-zip",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "group",
+                "grp_abc",
+                "invoices-zip"
+              ]
+            }
+          }
         },
         {
           "name": "Group certificates (ZIP)",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/sales/group/grp_abc/certificates-zip", "host": ["{{baseUrl}}"], "path": ["sales","group","grp_abc","certificates-zip"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/sales/group/grp_abc/certificates-zip",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "group",
+                "grp_abc",
+                "certificates-zip"
+              ]
+            }
+          }
         },
         {
           "name": "Public certificate (no auth)",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{baseUrl}}/sales/certificate/public/PUBLIC_TOKEN", "host": ["{{baseUrl}}"], "path": ["sales","certificate","public","PUBLIC_TOKEN"] },
-            "auth": { "type": "noauth" }
+            "url": {
+              "raw": "{{baseUrl}}/sales/certificate/public/PUBLIC_TOKEN",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "certificate",
+                "public",
+                "PUBLIC_TOKEN"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
           }
         }
       ]
@@ -359,13 +959,29 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/ledger?startDate=2026-01-01&endDate=2026-06-30&page=1&limit=50",
-              "host": ["{{baseUrl}}"],
-              "path": ["ledger"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ledger"
+              ],
               "query": [
-                { "key": "startDate", "value": "2026-01-01" },
-                { "key": "endDate", "value": "2026-06-30" },
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "50" }
+                {
+                  "key": "startDate",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-06-30"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
               ]
             },
             "description": "Returns sale lines with commission / net_to_transfer (same rules as partner invoices) and meta.summary: totalPolicies, totalCommissions, netToTransfer."
@@ -375,7 +991,26 @@
           "name": "Sales ledger — CSV",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{baseUrl}}/ledger/export?startDate=2026-01-01&endDate=2026-06-30", "host": ["{{baseUrl}}"], "path": ["ledger","export"], "query": [{"key":"startDate","value":"2026-01-01"},{"key":"endDate","value":"2026-06-30"}] },
+            "url": {
+              "raw": "{{baseUrl}}/ledger/export?startDate=2026-01-01&endDate=2026-06-30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "ledger",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-06-30"
+                }
+              ]
+            },
             "description": "CSV includes Commission, Net to transfer, and a SUMMARY footer row."
           }
         },
@@ -385,35 +1020,95 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/invoice-ledger?regionBy=residence&startDate=2026-01-01&page=1&limit=25",
-              "host": ["{{baseUrl}}"],
-              "path": ["invoice-ledger"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoice-ledger"
+              ],
               "query": [
-                { "key": "regionBy", "value": "residence" },
-                { "key": "startDate", "value": "2026-01-01" },
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "25" }
+                {
+                  "key": "regionBy",
+                  "value": "residence"
+                },
+                {
+                  "key": "startDate",
+                  "value": "2026-01-01"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "25"
+                }
               ]
             }
           }
         },
         {
           "name": "Invoices by region — CSV",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/invoice-ledger/export?regionBy=residence", "host": ["{{baseUrl}}"], "path": ["invoice-ledger","export"], "query": [{"key":"regionBy","value":"residence"}] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/invoice-ledger/export?regionBy=residence",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "invoice-ledger",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "regionBy",
+                  "value": "residence"
+                }
+              ]
+            }
+          }
         }
       ]
     },
     {
       "name": "Agents (admin / sub-admin JWT)",
       "description": "Agency-management endpoints. JWT only — no API-key scope grants access. Uses {{jwt}}. Includes admin-only reassignment (PATCH …/supervisor) and supervision history (GET …/supervision-history).",
-      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{jwt}}",
+            "type": "string"
+          }
+        ]
+      },
       "item": [
         {
           "name": "Create agent",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/admin/create-agent", "host": ["{{baseUrl}}"], "path": ["admin","create-agent"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme Travel\",\n  \"email\": \"agency@example.com\",\n  \"company_name\": \"Acme Travel Ltd\",\n  \"partnership_type\": \"Agency\",\n  \"country_of_residence\": \"Ivory Coast\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12]\n}" }
+            "url": {
+              "raw": "{{baseUrl}}/admin/create-agent",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "create-agent"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Travel\",\n  \"email\": \"agency@example.com\",\n  \"company_name\": \"Acme Travel Ltd\",\n  \"partnership_type\": \"Agency\",\n  \"country_of_residence\": \"Ivory Coast\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12]\n}"
+            }
           }
         },
         {
@@ -422,23 +1117,68 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/admin/list-agents?page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin","list-agents"],
-              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "list-agents"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
             }
           }
         },
         {
           "name": "Get agent",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/agents/42", "host": ["{{baseUrl}}"], "path": ["admin","agents","42"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/agents/42",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "agents",
+                "42"
+              ]
+            }
+          }
         },
         {
           "name": "Update agent",
           "request": {
             "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/admin/agents/42", "host": ["{{baseUrl}}"], "path": ["admin","agents","42"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme Travel\",\n  \"email\": \"acme.new@example.com\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12, 13]\n}" }
+            "url": {
+              "raw": "{{baseUrl}}/admin/agents/42",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "agents",
+                "42"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Travel\",\n  \"email\": \"acme.new@example.com\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12, 13]\n}"
+            }
           }
         },
         {
@@ -447,39 +1187,116 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/admin/email-available?email=acme.new@example.com&excludeUserId=42",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin","email-available"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "email-available"
+              ],
               "query": [
-                { "key": "email", "value": "acme.new@example.com" },
-                { "key": "excludeUserId", "value": "42", "description": "User being edited (optional)" }
+                {
+                  "key": "email",
+                  "value": "acme.new@example.com"
+                },
+                {
+                  "key": "excludeUserId",
+                  "value": "42",
+                  "description": "User being edited (optional)"
+                }
               ]
             }
           }
         },
         {
           "name": "Delete agent / hierarchy",
-          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/admin/agents/42", "host": ["{{baseUrl}}"], "path": ["admin","agents","42"] } }
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/admin/agents/42",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "agents",
+                "42"
+              ]
+            }
+          }
         },
         {
           "name": "List sub-agents",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/agents/42/sub-agents", "host": ["{{baseUrl}}"], "path": ["admin","agents","42","sub-agents"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/agents/42/sub-agents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "agents",
+                "42",
+                "sub-agents"
+              ]
+            }
+          }
         },
         {
           "name": "Create sub-agent",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/admin/agents/42/sub-agents", "host": ["{{baseUrl}}"], "path": ["admin","agents","42","sub-agents"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Kofi\",\n  \"last_name\": \"Mensah\",\n  \"email\": \"subagent@example.com\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12]\n}" }
+            "url": {
+              "raw": "{{baseUrl}}/admin/agents/42/sub-agents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "agents",
+                "42",
+                "sub-agents"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Kofi\",\n  \"last_name\": \"Mensah\",\n  \"email\": \"subagent@example.com\",\n  \"whatsapp_phone\": \"+225...\",\n  \"assigned_plan_ids\": [12]\n}"
+            }
           }
         },
         {
           "name": "Reassign agency supervisor (admin)",
           "request": {
             "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/admin/agents/42/supervisor", "host": ["{{baseUrl}}"], "path": ["admin","agents","42","supervisor"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"supervisor_user_id\": 7,\n  \"effective_from\": \"2026-05-01\",\n  \"reason\": \"Transfer IT Voyages to Esther Ahouman\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/admin/agents/42/supervisor",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "agents",
+                "42",
+                "supervisor"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supervisor_user_id\": 7,\n  \"effective_from\": \"2026-05-01\",\n  \"reason\": \"Transfer IT Voyages to Esther Ahouman\"\n}"
+            },
             "description": "Admin JWT only. Moves a top-level partner/agency to another sub-admin (or admin). Policies, policy numbers, identifiers and agency codes are retained. Writes agency_supervision_history periods."
           }
         },
@@ -487,7 +1304,18 @@
           "name": "Agency supervision history (admin)",
           "request": {
             "method": "GET",
-            "url": { "raw": "{{baseUrl}}/admin/agents/42/supervision-history", "host": ["{{baseUrl}}"], "path": ["admin","agents","42","supervision-history"] },
+            "url": {
+              "raw": "{{baseUrl}}/admin/agents/42/supervision-history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "agents",
+                "42",
+                "supervision-history"
+              ]
+            },
             "description": "Admin JWT only. Management periods by date for the agency (e.g. Mar–Apr Admin, from May Sub-Admin Esther)."
           }
         },
@@ -495,27 +1323,86 @@
           "name": "Change user status",
           "request": {
             "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/admin/users/status", "host": ["{{baseUrl}}"], "path": ["admin","users","status"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"userId\": 42, \"status\": \"inactive\" }" }
+            "url": {
+              "raw": "{{baseUrl}}/admin/users/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "users",
+                "status"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"userId\": 42, \"status\": \"inactive\" }"
+            }
           }
         },
         {
           "name": "Send reset link",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/admin/send-reset-link", "host": ["{{baseUrl}}"], "path": ["admin","send-reset-link"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"userId\": 42 }" }
+            "url": {
+              "raw": "{{baseUrl}}/admin/send-reset-link",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "send-reset-link"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"userId\": 42 }"
+            }
           }
         },
         {
           "name": "Dashboard KPIs",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/dashboard", "host": ["{{baseUrl}}"], "path": ["admin","dashboard"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "dashboard"
+              ]
+            }
+          }
         },
         {
           "name": "Production trend (admin)",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/production-trend", "host": ["{{baseUrl}}"], "path": ["admin","production-trend"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/production-trend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "production-trend"
+              ]
+            }
+          }
         },
         {
           "name": "Agent hierarchy (admin)",
@@ -523,75 +1410,244 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/admin/agent-hierarchy?page=1&limit=25",
-              "host": ["{{baseUrl}}"],
-              "path": ["admin","agent-hierarchy"],
-              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "25" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "agent-hierarchy"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "25"
+                }
+              ]
             }
           }
         },
         {
           "name": "Agent hierarchy — CSV (admin)",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/agent-hierarchy/export", "host": ["{{baseUrl}}"], "path": ["admin","agent-hierarchy","export"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/agent-hierarchy/export",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "agent-hierarchy",
+                "export"
+              ]
+            }
+          }
         },
         {
           "name": "Create sub-administrator (admin)",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/admin/create-sub-admin", "host": ["{{baseUrl}}"], "path": ["admin","create-sub-admin"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Fatou\",\n  \"last_name\": \"Bah\",\n  \"email\": \"subadmin@example.com\",\n  \"whatsapp_phone\": \"+225...\"\n}" }
+            "url": {
+              "raw": "{{baseUrl}}/admin/create-sub-admin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "create-sub-admin"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Fatou\",\n  \"last_name\": \"Bah\",\n  \"email\": \"subadmin@example.com\",\n  \"whatsapp_phone\": \"+225...\"\n}"
+            }
           }
         },
         {
           "name": "List sub-administrators (admin)",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/sub-admins", "host": ["{{baseUrl}}"], "path": ["admin","sub-admins"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/sub-admins",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "sub-admins"
+              ]
+            }
+          }
         },
         {
           "name": "Delete sub-administrator (admin)",
-          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/admin/sub-admins/7", "host": ["{{baseUrl}}"], "path": ["admin","sub-admins","7"] } }
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/admin/sub-admins/7",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "sub-admins",
+                "7"
+              ]
+            }
+          }
         },
         {
           "name": "List partner insurer keys (admin)",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/partner-insurers", "host": ["{{baseUrl}}"], "path": ["admin","partner-insurers"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/partner-insurers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "partner-insurers"
+              ]
+            }
+          }
         },
         {
           "name": "Create insurer supervisor (admin)",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/admin/create-insurer-supervisor", "host": ["{{baseUrl}}"], "path": ["admin","create-insurer-supervisor"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Awa\",\n  \"last_name\": \"Kone\",\n  \"email\": \"gna.supervisor@example.com\",\n  \"partner_insurer\": \"gna\",\n  \"whatsapp_phone\": \"+225...\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/admin/create-insurer-supervisor",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "create-insurer-supervisor"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Awa\",\n  \"last_name\": \"Kone\",\n  \"email\": \"gna.supervisor@example.com\",\n  \"partner_insurer\": \"gna\",\n  \"whatsapp_phone\": \"+225...\"\n}"
+            },
             "description": "Admin JWT only. Scopes the account to catalogue plans with matching partner_insurer (e.g. gna → GNA Retail / Inbound / Road)."
           }
         },
         {
           "name": "List insurer supervisors (admin)",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/insurer-supervisors", "host": ["{{baseUrl}}"], "path": ["admin","insurer-supervisors"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/insurer-supervisors",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "insurer-supervisors"
+              ]
+            }
+          }
         },
         {
           "name": "Delete insurer supervisor (admin)",
-          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/admin/insurer-supervisors/8", "host": ["{{baseUrl}}"], "path": ["admin","insurer-supervisors","8"] } }
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/admin/insurer-supervisors/8",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "insurer-supervisors",
+                "8"
+              ]
+            }
+          }
         },
         {
           "name": "Get admin profile",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/profile", "host": ["{{baseUrl}}"], "path": ["admin","profile"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "profile"
+              ]
+            }
+          }
         },
         {
           "name": "Update admin profile",
           "request": {
             "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/admin/profile", "host": ["{{baseUrl}}"], "path": ["admin","profile"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"name\": \"New Name\" }" }
+            "url": {
+              "raw": "{{baseUrl}}/admin/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "profile"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"name\": \"New Name\" }"
+            }
           }
         },
         {
           "name": "Change admin password",
           "request": {
             "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/admin/change-password", "host": ["{{baseUrl}}"], "path": ["admin","change-password"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"currentPassword\": \"OldPass#2026\", \"newPassword\": \"NewPass#2026\" }" }
+            "url": {
+              "raw": "{{baseUrl}}/admin/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "change-password"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"currentPassword\": \"OldPass#2026\", \"newPassword\": \"NewPass#2026\" }"
+            }
           }
         }
       ]
@@ -599,36 +1655,115 @@
     {
       "name": "Users (JWT)",
       "description": "Self-service profile / dashboard for the logged-in user. Uses {{jwt}}.",
-      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{jwt}}",
+            "type": "string"
+          }
+        ]
+      },
       "item": [
         {
           "name": "Me",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users/me", "host": ["{{baseUrl}}"], "path": ["users","me"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "me"
+              ]
+            }
+          }
         },
         {
           "name": "Dashboard",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users/dashboard", "host": ["{{baseUrl}}"], "path": ["users","dashboard"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "dashboard"
+              ]
+            }
+          }
         },
         {
           "name": "Profile",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users/profile", "host": ["{{baseUrl}}"], "path": ["users","profile"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "profile"
+              ]
+            }
+          }
         },
         {
           "name": "Update profile",
           "request": {
             "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/users/profile", "host": ["{{baseUrl}}"], "path": ["users","profile"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"name\": \"New Name\" }" }
+            "url": {
+              "raw": "{{baseUrl}}/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "profile"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"name\": \"New Name\" }"
+            }
           }
         },
         {
           "name": "Change password",
           "request": {
             "method": "PATCH",
-            "url": { "raw": "{{baseUrl}}/users/change-password", "host": ["{{baseUrl}}"], "path": ["users","change-password"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{ \"currentPassword\": \"OldPass#2026\", \"newPassword\": \"NewPass#2026\" }" }
+            "url": {
+              "raw": "{{baseUrl}}/users/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "users",
+                "change-password"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"currentPassword\": \"OldPass#2026\", \"newPassword\": \"NewPass#2026\" }"
+            }
           }
         }
       ]
@@ -636,7 +1771,16 @@
     {
       "name": "Reconciliation (JWT)",
       "description": "Monthly agent reconciliation. Each row includes agency_name (travel agency) and sub_admin_name (sales rep). Uses {{jwt}}.",
-      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{jwt}}",
+            "type": "string"
+          }
+        ]
+      },
       "item": [
         {
           "name": "Monthly reconciliation",
@@ -644,9 +1788,22 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/reconciliation?month=Sep&year=2026",
-              "host": ["{{baseUrl}}"],
-              "path": ["reconciliation"],
-              "query": [{ "key": "month", "value": "Sep" }, { "key": "year", "value": "2026" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reconciliation"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "Sep"
+                },
+                {
+                  "key": "year",
+                  "value": "2026"
+                }
+              ]
             }
           }
         },
@@ -656,9 +1813,23 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/reconciliation/export?month=Sep&year=2026",
-              "host": ["{{baseUrl}}"],
-              "path": ["reconciliation","export"],
-              "query": [{ "key": "month", "value": "Sep" }, { "key": "year", "value": "2026" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "reconciliation",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "month",
+                  "value": "Sep"
+                },
+                {
+                  "key": "year",
+                  "value": "2026"
+                }
+              ]
             }
           }
         }
@@ -667,7 +1838,16 @@
     {
       "name": "Activity log (admin JWT)",
       "description": "Admin-only audit trail. Uses {{jwt}}.",
-      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{jwt}}",
+            "type": "string"
+          }
+        ]
+      },
       "item": [
         {
           "name": "List activity",
@@ -675,26 +1855,72 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/activity-log?page=1&limit=25",
-              "host": ["{{baseUrl}}"],
-              "path": ["activity-log"],
-              "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "25" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "activity-log"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "25"
+                }
+              ]
             }
           }
         },
         {
           "name": "Delete activity entry",
-          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/activity-log/100", "host": ["{{baseUrl}}"], "path": ["activity-log","100"] } }
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/activity-log/100",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "activity-log",
+                "100"
+              ]
+            }
+          }
         }
       ]
     },
     {
       "name": "Partner invoices (admin / sub-admin JWT)",
       "description": "Partner premium invoices and Paid-only receipts. PDF header: Assur'Assistance + GNA logos. Optional saleIds, discountPct, documentType (invoice|receipt), stamp (none|paid|settled). Accept-Language localizes labels/stamps. Agico → commission 0. Uses {{jwt}}.",
-      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{jwt}}",
+            "type": "string"
+          }
+        ]
+      },
       "item": [
         {
           "name": "List invoiceable partners",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/partner-invoices/partners", "host": ["{{baseUrl}}"], "path": ["partner-invoices","partners"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/partner-invoices/partners",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "partner-invoices",
+                "partners"
+              ]
+            }
+          }
         },
         {
           "name": "Period summary (premiums / collected / commissions)",
@@ -702,9 +1928,23 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/partner-invoices/summary?startDate=2026-06-01&endDate=2026-06-30",
-              "host": ["{{baseUrl}}"],
-              "path": ["partner-invoices","summary"],
-              "query": [{ "key": "startDate", "value": "2026-06-01" }, { "key": "endDate", "value": "2026-06-30" }]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "partner-invoices",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "2026-06-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-06-30"
+                }
+              ]
             }
           }
         },
@@ -714,13 +1954,32 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/partner-invoices/12?startDate=2026-06-01&endDate=2026-06-30&saleIds=100,101&discountPct=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["partner-invoices","12"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "partner-invoices",
+                "12"
+              ],
               "query": [
-                { "key": "startDate", "value": "2026-06-01" },
-                { "key": "endDate", "value": "2026-06-30" },
-                { "key": "saleIds", "value": "100,101", "description": "Comma-separated sale ids to include; omit for all" },
-                { "key": "discountPct", "value": "10", "description": "0–100; applied to premiums and commissions" }
+                {
+                  "key": "startDate",
+                  "value": "2026-06-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-06-30"
+                },
+                {
+                  "key": "saleIds",
+                  "value": "100,101",
+                  "description": "Comma-separated sale ids to include; omit for all"
+                },
+                {
+                  "key": "discountPct",
+                  "value": "10",
+                  "description": "0–100; applied to premiums and commissions"
+                }
               ]
             }
           }
@@ -729,18 +1988,49 @@
           "name": "Invoice PDF (logos + optional saleIds + discount)",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Accept-Language", "value": "fr" }],
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "fr"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=USD&saleIds=100,101&discountPct=10&documentType=invoice",
-              "host": ["{{baseUrl}}"],
-              "path": ["partner-invoices","12","pdf"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "partner-invoices",
+                "12",
+                "pdf"
+              ],
               "query": [
-                { "key": "startDate", "value": "2026-06-01" },
-                { "key": "endDate", "value": "2026-06-30" },
-                { "key": "currency", "value": "USD", "description": "XOF | USD | EUR — convert from each sale's currency (Agico often USD)" },
-                { "key": "saleIds", "value": "100,101" },
-                { "key": "discountPct", "value": "10" },
-                { "key": "documentType", "value": "invoice", "description": "invoice (default) | receipt" }
+                {
+                  "key": "startDate",
+                  "value": "2026-06-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-06-30"
+                },
+                {
+                  "key": "currency",
+                  "value": "USD",
+                  "description": "XOF | USD | EUR — convert from each sale's currency (Agico often USD)"
+                },
+                {
+                  "key": "saleIds",
+                  "value": "100,101"
+                },
+                {
+                  "key": "discountPct",
+                  "value": "10"
+                },
+                {
+                  "key": "documentType",
+                  "value": "invoice",
+                  "description": "invoice (default) | receipt"
+                }
               ]
             }
           }
@@ -749,18 +2039,50 @@
           "name": "Partner receipt PDF (Paid only + PAID stamp)",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Accept-Language", "value": "en" }],
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "en"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&documentType=receipt&stamp=paid&saleIds=100,105",
-              "host": ["{{baseUrl}}"],
-              "path": ["partner-invoices","12","pdf"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "partner-invoices",
+                "12",
+                "pdf"
+              ],
               "query": [
-                { "key": "startDate", "value": "2026-06-01" },
-                { "key": "endDate", "value": "2026-06-30" },
-                { "key": "currency", "value": "XOF" },
-                { "key": "documentType", "value": "receipt", "description": "receipt = Paid policies only (400 if none)" },
-                { "key": "stamp", "value": "paid", "description": "none | paid | settled — localized via Accept-Language" },
-                { "key": "saleIds", "value": "100,105", "description": "Must be Paid; unpaid lines are dropped" }
+                {
+                  "key": "startDate",
+                  "value": "2026-06-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-06-30"
+                },
+                {
+                  "key": "currency",
+                  "value": "XOF"
+                },
+                {
+                  "key": "documentType",
+                  "value": "receipt",
+                  "description": "receipt = Paid policies only (400 if none)"
+                },
+                {
+                  "key": "stamp",
+                  "value": "paid",
+                  "description": "none | paid | settled — localized via Accept-Language"
+                },
+                {
+                  "key": "saleIds",
+                  "value": "100,105",
+                  "description": "Must be Paid; unpaid lines are dropped"
+                }
               ]
             }
           }
@@ -769,17 +2091,44 @@
           "name": "Partner receipt PDF (SETTLED stamp, French)",
           "request": {
             "method": "GET",
-            "header": [{ "key": "Accept-Language", "value": "fr" }],
+            "header": [
+              {
+                "key": "Accept-Language",
+                "value": "fr"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/partner-invoices/12/pdf?startDate=2026-06-01&endDate=2026-06-30&currency=XOF&documentType=receipt&stamp=settled",
-              "host": ["{{baseUrl}}"],
-              "path": ["partner-invoices","12","pdf"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "partner-invoices",
+                "12",
+                "pdf"
+              ],
               "query": [
-                { "key": "startDate", "value": "2026-06-01" },
-                { "key": "endDate", "value": "2026-06-30" },
-                { "key": "currency", "value": "XOF" },
-                { "key": "documentType", "value": "receipt" },
-                { "key": "stamp", "value": "settled", "description": "SETTLED / PAYÉ stamp (FR when Accept-Language=fr)" }
+                {
+                  "key": "startDate",
+                  "value": "2026-06-01"
+                },
+                {
+                  "key": "endDate",
+                  "value": "2026-06-30"
+                },
+                {
+                  "key": "currency",
+                  "value": "XOF"
+                },
+                {
+                  "key": "documentType",
+                  "value": "receipt"
+                },
+                {
+                  "key": "stamp",
+                  "value": "settled",
+                  "description": "SETTLED / PAYÉ stamp (FR when Accept-Language=fr)"
+                }
               ]
             }
           }
@@ -789,31 +2138,98 @@
     {
       "name": "Contractual documents (JWT)",
       "description": "Terms & Conditions (full / brief). Any JWT lists and downloads. Admin JWT uploads/replaces (multipart title + description + file).",
-      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{jwt}}",
+            "type": "string"
+          }
+        ]
+      },
       "item": [
         {
           "name": "List documents",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/contractual-documents", "host": ["{{baseUrl}}"], "path": ["contractual-documents"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/contractual-documents",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "contractual-documents"
+              ]
+            }
+          }
         },
         {
           "name": "Download full version",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/contractual-documents/full/download", "host": ["{{baseUrl}}"], "path": ["contractual-documents","full","download"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/contractual-documents/full/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "contractual-documents",
+                "full",
+                "download"
+              ]
+            }
+          }
         },
         {
           "name": "Download brief version",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/contractual-documents/brief/download", "host": ["{{baseUrl}}"], "path": ["contractual-documents","brief","download"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/contractual-documents/brief/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "contractual-documents",
+                "brief",
+                "download"
+              ]
+            }
+          }
         },
         {
           "name": "Upload / replace full (admin)",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/contractual-documents/full", "host": ["{{baseUrl}}"], "path": ["contractual-documents","full"] },
+            "url": {
+              "raw": "{{baseUrl}}/contractual-documents/full",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "contractual-documents",
+                "full"
+              ]
+            },
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "title", "value": "Terms and Conditions – Full Version", "type": "text" },
-                { "key": "description", "value": "Complete contractual terms.", "type": "text" },
-                { "key": "file", "type": "file", "src": [] }
+                {
+                  "key": "title",
+                  "value": "Terms and Conditions – Full Version",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Complete contractual terms.",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
               ]
             }
           }
@@ -822,52 +2238,843 @@
           "name": "Upload / replace brief (admin)",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/contractual-documents/brief", "host": ["{{baseUrl}}"], "path": ["contractual-documents","brief"] },
+            "url": {
+              "raw": "{{baseUrl}}/contractual-documents/brief",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "contractual-documents",
+                "brief"
+              ]
+            },
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "title", "value": "Terms and Conditions – Brief Version", "type": "text" },
-                { "key": "description", "value": "Short summary of contractual terms.", "type": "text" },
-                { "key": "file", "type": "file", "src": [] }
+                {
+                  "key": "title",
+                  "value": "Terms and Conditions – Brief Version",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Short summary of contractual terms.",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
               ]
             }
           }
         },
         {
           "name": "Delete document (admin)",
-          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/contractual-documents/full", "host": ["{{baseUrl}}"], "path": ["contractual-documents","full"] } }
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/contractual-documents/full",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "contractual-documents",
+                "full"
+              ]
+            }
+          }
         }
       ]
     },
     {
       "name": "Admin — API keys",
       "description": "JWT-only (admin role). Uses {{jwt}} for auth.",
-      "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{jwt}}", "type": "string" }] },
+      "auth": {
+        "type": "bearer",
+        "bearer": [
+          {
+            "key": "token",
+            "value": "{{jwt}}",
+            "type": "string"
+          }
+        ]
+      },
       "item": [
         {
           "name": "List scopes",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/api-keys/scopes", "host": ["{{baseUrl}}"], "path": ["admin","api-keys","scopes"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/api-keys/scopes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "api-keys",
+                "scopes"
+              ]
+            }
+          }
         },
         {
           "name": "List keys",
-          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/admin/api-keys", "host": ["{{baseUrl}}"], "path": ["admin","api-keys"] } }
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/api-keys",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "api-keys"
+              ]
+            }
+          }
         },
         {
           "name": "Mint key",
           "request": {
             "method": "POST",
-            "url": { "raw": "{{baseUrl}}/admin/api-keys", "host": ["{{baseUrl}}"], "path": ["admin","api-keys"] },
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Acme Travel — production\",\n  \"owner_user_id\": 42,\n  \"scopes\": [\"catalogue:read\",\"cases:read\",\"cases:write\",\"sales:read\",\"sales:write\"],\n  \"ip_allowlist\": \"185.10.20.30, 185.10.20.0/24\",\n  \"rate_limit_per_min\": 240\n}" }
+            "url": {
+              "raw": "{{baseUrl}}/admin/api-keys",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "api-keys"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Travel — production\",\n  \"owner_user_id\": 42,\n  \"scopes\": [\"catalogue:read\",\"cases:read\",\"cases:write\",\"sales:read\",\"sales:write\"],\n  \"ip_allowlist\": \"185.10.20.30, 185.10.20.0/24\",\n  \"rate_limit_per_min\": 240\n}"
+            }
           }
         },
         {
           "name": "Rotate key",
-          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/admin/api-keys/9/rotate", "host": ["{{baseUrl}}"], "path": ["admin","api-keys","9","rotate"] } }
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/admin/api-keys/9/rotate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "api-keys",
+                "9",
+                "rotate"
+              ]
+            }
+          }
         },
         {
           "name": "Revoke key",
-          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/admin/api-keys/9", "host": ["{{baseUrl}}"], "path": ["admin","api-keys","9"] } }
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/admin/api-keys/9",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "api-keys",
+                "9"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quotes",
+      "description": "Pricing as an endpoint. /quotes/price stores nothing; /quotes persists the result as a case awaiting payment, which the existing confirm-sale flow turns into a policy.\n\nScopes: quotes:read for pricing and reads, quotes:write to store.",
+      "item": [
+        {
+          "name": "Price one plan",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/quotes/price",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotes",
+                "price"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_of_birth\": \"12/03/1990\",\n  \"start_date\": \"01/10/2026\",\n  \"end_date\": \"20/10/2026\",\n  \"destination_code\": \"CI\",\n  \"plan_id\": 1\n}"
+            },
+            "description": "Destination zone -> validity tier -> age band. Requires quotes:read."
+          }
+        },
+        {
+          "name": "Price every available plan",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/quotes/price",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotes",
+                "price"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_of_birth\": \"12/03/1990\",\n  \"start_date\": \"01/10/2026\",\n  \"end_date\": \"20/10/2026\",\n  \"destination\": \"Cote d'Ivoire\"\n}"
+            },
+            "description": "Omit plan_id to price everything the caller may sell, cheapest first. Plans that could not be priced come back in `rejected` with a reason."
+          }
+        },
+        {
+          "name": "Price a child (age multiplier x0.5)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/quotes/price",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotes",
+                "price"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_of_birth\": \"01/01/2015\",\n  \"start_date\": \"01/10/2026\",\n  \"end_date\": \"10/10/2026\",\n  \"destination_code\": \"CI\",\n  \"plan_id\": 1\n}"
+            },
+            "description": "Under 16 halves the premium. Over 85 returns 422 age_ineligible instead of a price."
+          }
+        },
+        {
+          "name": "Create a stored quote",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/quotes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotes"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Saif\",\n  \"last_name\": \"Ali\",\n  \"date_of_birth\": \"12/03/1990\",\n  \"gender\": \"male\",\n  \"nationality\": \"Pakistan\",\n  \"country_of_residence\": \"Pakistan\",\n  \"passport_or_id\": \"AB1234567\",\n  \"email\": \"info@devzz.tech\",\n  \"phone\": \"+225 07 18 92 31 94\",\n  \"destination_code\": \"CI\",\n  \"start_date\": \"01/10/2026\",\n  \"end_date\": \"20/10/2026\",\n  \"plan_id\": 1\n}"
+            },
+            "description": "Requires quotes:write. The premium is recalculated from the live catalogue at this moment, never taken from the request. Returns a QT- reference and a case in AwaitingPayment."
+          }
+        },
+        {
+          "name": "List quotes",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/quotes?page=1&limit=25&source=api",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotes"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "25"
+                },
+                {
+                  "key": "source",
+                  "value": "api"
+                }
+              ]
+            },
+            "description": "An API key sees only quotes owned by its own account."
+          }
+        },
+        {
+          "name": "Get a quote by reference",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/quotes/QT-BF664C18",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "quotes",
+                "QT-BF664C18"
+              ]
+            },
+            "description": "Returns the stored inputs plus a pricing block recomputed from today's catalogue, so a moved price is visible. Another account's reference returns 404, not a hint that it exists."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Destination zones",
+      "description": "Country to pricing-zone map. A country's zone selects a column in each plan's rate table.\n\nAll 195 countries ship in a single 'Worldwide' zone, so pricing is unchanged until a real map is supplied. Read with zones:read; only a superadmin JWT may reassign.",
+      "item": [
+        {
+          "name": "List zones",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/zones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zones"
+              ]
+            },
+            "description": "Zones in use, with country counts."
+          }
+        },
+        {
+          "name": "Full country map",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/zones/countries?zone=Worldwide",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zones",
+                "countries"
+              ],
+              "query": [
+                {
+                  "key": "zone",
+                  "value": "Worldwide"
+                }
+              ]
+            },
+            "description": "Every country with its zone, in English and French."
+          }
+        },
+        {
+          "name": "Resolve one country",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/zones/resolve?country=CI",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zones",
+                "resolve"
+              ],
+              "query": [
+                {
+                  "key": "country",
+                  "value": "CI"
+                }
+              ]
+            },
+            "description": "Accepts an ISO code or a name in either language, fuzzy-matched."
+          }
+        },
+        {
+          "name": "Reassign countries to a zone (admin JWT)",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/zones/assign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "zones",
+                "assign"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"country_codes\": [\n    \"FR\",\n    \"ES\",\n    \"IT\"\n  ],\n  \"zone\": \"Zone A\"\n}"
+            },
+            "description": "An update of one column: no country is created or removed, and unrecognised codes are returned in data.unknown.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "WhatsApp",
+      "description": "The conversational purchase channel.\n\nThe webhook is authenticated by Meta's X-Hub-Signature-256 over the RAW body, not by a bearer token, and is not usefully callable from Postman without a valid signature.\n\nTranscripts contain personal data, so reading them needs whatsapp:read rather than cases:read.",
+      "item": [
+        {
+          "name": "Webhook verification (Meta)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/webhook?hub.mode=subscribe&hub.verify_token={{waVerifyToken}}&hub.challenge=CHALLENGE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "webhook"
+              ],
+              "query": [
+                {
+                  "key": "hub.mode",
+                  "value": "subscribe"
+                },
+                {
+                  "key": "hub.verify_token",
+                  "value": "{{waVerifyToken}}"
+                },
+                {
+                  "key": "hub.challenge",
+                  "value": "CHALLENGE"
+                }
+              ]
+            },
+            "description": "Meta's one-time handshake. Echoes hub.challenge as plain text when the verify token matches.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Runtime status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "status"
+              ]
+            },
+            "description": "Non-secret status: enabled, ready, default language."
+          }
+        },
+        {
+          "name": "List conversations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/sessions?page=1&limit=25&status=active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "sessions"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "25"
+                },
+                {
+                  "key": "status",
+                  "value": "active"
+                }
+              ]
+            },
+            "description": "Filter by status, or search by number, profile name or quote reference."
+          }
+        },
+        {
+          "name": "Get one conversation",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/sessions/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "sessions",
+                "1"
+              ]
+            },
+            "description": "Includes the step the customer is on and the data collected so far."
+          }
+        },
+        {
+          "name": "Conversation transcript",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/sessions/1/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "sessions",
+                "1",
+                "messages"
+              ]
+            },
+            "description": "Inbound and outbound messages, oldest first. Subject to the retention policy."
+          }
+        },
+        {
+          "name": "Message-count stats",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/stats?days=30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "stats"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Customer messages per completed purchase, against the 6-8 target."
+          }
+        },
+        {
+          "name": "Send a message",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "messages"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"2250718923194\",\n  \"text\": \"Bonjour, votre attestation est prete.\"\n}"
+            },
+            "description": "Requires whatsapp:write."
+          }
+        },
+        {
+          "name": "Apply the retention policy (admin JWT)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/whatsapp/maintenance/prune",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "whatsapp",
+                "maintenance",
+                "prune"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "description": "Deletes transcripts older than the configured window. Never touches a session, case, traveller or sale.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin — WhatsApp settings",
+      "description": "Superadmin configuration. Admin JWT ONLY — an API key can never reach these endpoints, whatever scopes it holds.\n\nCredentials are stored AES-256-GCM encrypted; the master key lives only in SETTINGS_ENCRYPTION_KEY. Saved changes take effect without a restart.",
+      "item": [
+        {
+          "name": "Read settings",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/whatsapp-settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "whatsapp-settings"
+              ]
+            },
+            "description": "Secrets come back masked, never in clear. status.ready says whether the integration can send and receive right now.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save settings",
+          "request": {
+            "method": "PUT",
+            "url": {
+              "raw": "{{baseUrl}}/admin/whatsapp-settings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "whatsapp-settings"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"settings\": {\n    \"whatsapp.phone_number_id\": \"123456789012345\",\n    \"whatsapp.waba_id\": \"987654321098765\",\n    \"whatsapp.business_number\": \"+225 07 18 92 31 94\",\n    \"whatsapp.access_token\": \"EAAG...\",\n    \"whatsapp.app_secret\": \"...\",\n    \"whatsapp.default_language\": \"fr\",\n    \"whatsapp.session_timeout_hours\": 24,\n    \"whatsapp.attribution_user_id\": 42,\n    \"whatsapp.enabled\": true\n  }\n}"
+            },
+            "description": "Omit a secret, or send \"\", to leave the stored value untouched. Send null to clear it.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Test the Meta connection",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/admin/whatsapp-settings/test",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "whatsapp-settings",
+                "test"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "description": "Live Graph API check: the token is valid, it can access this phone number id, and the number is usable.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Generate a verify token",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/admin/whatsapp-settings/verify-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "whatsapp-settings",
+                "verify-token"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "description": "Returned once in clear so it can be pasted into Meta. Regenerating breaks the connection until Meta is updated too.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reveal the verify token",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/whatsapp-settings/verify-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "whatsapp-settings",
+                "verify-token"
+              ]
+            },
+            "description": "The one secret that can be read back, because the operator must copy it into Meta. Every reveal is written to the activity log.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Attribution candidates",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/admin/whatsapp-settings/attribution-candidates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "admin",
+                "whatsapp-settings",
+                "attribution-candidates"
+              ]
+            },
+            "description": "Accounts that can own WhatsApp-originated business. A WhatsApp customer has no agent, but commissions, partner invoices and the ledger are all keyed to one.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
         }
       ]
     }

@@ -513,6 +513,25 @@ components:
         status:
           type: string
           enum: [active, inactive]
+        whatsapp_enabled:
+          type: boolean
+          default: false
+          description: >
+            Whether this plan is offered in the WhatsApp purchase conversation.
+            Defaults to false, so enabling the module never silently exposes
+            existing plans to chat customers.
+        coverage_summary_fr:
+          type: string
+          nullable: true
+          description: >
+            Optional short French coverage blurb for the chat quote. When null,
+            the quote derives its coverage lines from this plan's
+            pricing_rules.guarantees instead, so the wording follows the plan
+            automatically. Set this only to override text that reads badly.
+        coverage_summary_en:
+          type: string
+          nullable: true
+          description: Optional English equivalent of coverage_summary_fr.
 
     CreatePlanRequest:
       type: object
@@ -530,6 +549,25 @@ components:
         currency: { type: string, default: XOF }
         theme_color: { type: string, example: "#1E4D8B" }
         extra_id_fields: { type: boolean }
+        whatsapp_enabled:
+          type: boolean
+          default: false
+          description: >
+            Whether this plan is offered in the WhatsApp purchase conversation.
+            Defaults to false, so enabling the module never silently exposes
+            existing plans to chat customers.
+        coverage_summary_fr:
+          type: string
+          nullable: true
+          description: >
+            Optional short French coverage blurb for the chat quote. When null,
+            the quote derives its coverage lines from this plan's
+            pricing_rules.guarantees instead, so the wording follows the plan
+            automatically. Set this only to override text that reads badly.
+        coverage_summary_en:
+          type: string
+          nullable: true
+          description: Optional English equivalent of coverage_summary_fr.
 
     Traveller:
       type: object

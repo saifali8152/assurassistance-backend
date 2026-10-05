@@ -260,7 +260,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"product_type\": \"Travel\",\n  \"name\": \"AGICO Worldwide 30 Days\",\n  \"coverage\": \"Medical: 60,000 EUR\",\n  \"flat_price\": 25000,\n  \"country_of_residence\": \"Burundi\",\n  \"route_type\": \"Outbound\",\n  \"currency\": \"XOF\",\n  \"theme_color\": \"#1E4D8B\",\n  \"extra_id_fields\": false\n}"
+              "raw": "{\n  \"product_type\": \"Travel\",\n  \"name\": \"AGICO Worldwide 30 Days\",\n  \"coverage\": \"Medical: 60,000 EUR\",\n  \"flat_price\": 25000,\n  \"country_of_residence\": \"Burundi\",\n  \"route_type\": \"Outbound\",\n  \"currency\": \"XOF\",\n  \"theme_color\": \"#1E4D8B\",\n  \"extra_id_fields\": false,\n  \"whatsapp_enabled\": true,\n  \"coverage_summary_fr\": null,\n  \"coverage_summary_en\": null\n}"
             },
             "auth": {
               "type": "bearer",
@@ -271,7 +271,8 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "description": "whatsapp_enabled offers this plan in the WhatsApp conversation (default false). Leave the two coverage summaries null and the chat quote derives its coverage lines from pricing_rules.guarantees automatically, in French and English — set them only to override wording. On PUT they use COALESCE, so omitting them keeps the stored value."
           }
         },
         {
@@ -296,7 +297,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"product_type\": \"Travel\",\n  \"name\": \"AGICO Worldwide 45 Days\",\n  \"flat_price\": 30000,\n  \"currency\": \"XOF\"\n}"
+              "raw": "{\n  \"product_type\": \"Travel\",\n  \"name\": \"AGICO Worldwide 45 Days\",\n  \"flat_price\": 30000,\n  \"currency\": \"XOF\",\n  \"whatsapp_enabled\": true,\n  \"coverage_summary_fr\": null,\n  \"coverage_summary_en\": null\n}"
             },
             "auth": {
               "type": "bearer",
@@ -307,7 +308,8 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "description": "whatsapp_enabled offers this plan in the WhatsApp conversation (default false). Leave the two coverage summaries null and the chat quote derives its coverage lines from pricing_rules.guarantees automatically, in French and English — set them only to override wording. On PUT they use COALESCE, so omitting them keeps the stored value."
           }
         },
         {
@@ -2929,7 +2931,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"settings\": {\n    \"whatsapp.phone_number_id\": \"123456789012345\",\n    \"whatsapp.waba_id\": \"987654321098765\",\n    \"whatsapp.business_number\": \"+225 07 18 92 31 94\",\n    \"whatsapp.access_token\": \"EAAG...\",\n    \"whatsapp.app_secret\": \"...\",\n    \"whatsapp.default_language\": \"fr\",\n    \"whatsapp.session_timeout_hours\": 24,\n    \"whatsapp.attribution_user_id\": 42,\n    \"whatsapp.enabled\": true\n  }\n}"
+              "raw": "{\n  \"settings\": {\n    \"whatsapp.phone_number_id\": \"123456789012345\",\n    \"whatsapp.waba_id\": \"987654321098765\",\n    \"whatsapp.business_number\": \"+225 07 18 92 31 94\",\n    \"whatsapp.access_token\": \"EAAG...\",\n    \"whatsapp.app_secret\": \"...\",\n    \"whatsapp.default_language\": \"fr\",\n    \"whatsapp.session_timeout_hours\": 24,\n    \"whatsapp.attribution_user_id\": 42,\n    \"whatsapp.enabled\": true,\n    \"whatsapp.template_language\": \"fr\",\n    \"whatsapp.template_payment_received\": \"payment_received\",\n    \"whatsapp.template_certificate_ready\": \"certificate_ready\",\n    \"whatsapp.template_quote_reminder\": \"quote_reminder\"\n  }\n}"
             },
             "description": "Omit a secret, or send \"\", to leave the stored value untouched. Send null to clear it.",
             "auth": {

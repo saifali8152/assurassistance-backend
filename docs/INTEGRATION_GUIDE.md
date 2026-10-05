@@ -52,6 +52,11 @@ with:
 4. Optional: the IPs your servers will call from (we'll lock the key to that
    allowlist), and a custom requests-per-minute ceiling.
 
+The administrator issues the key from the admin panel (**System > API
+Keys**) and sends it to you over a one-time secret link. The secret is
+displayed to them once and is never recoverable afterwards, so if it is
+lost they will rotate the key and send you a new one.
+
 You'll receive a key that looks like:
 
 ```

@@ -88,11 +88,36 @@ Errors: `400` (missing fields), `401` (bad credentials / revoked account).
       "theme_color": "#1E4D8B",
       "extra_id_fields": false,
       "partner_insurer_logo": "/uploads/plan-logos/agico.png",
+      "whatsapp_enabled": true,
+      "coverage_summary_fr": null,
+      "coverage_summary_en": null,
       "status": "active"
     }
   ]
 }
 ```
+
+### Milestone 2 plan fields
+
+Three fields were added for the WhatsApp channel. All three are optional on
+`POST /catalogue` and `PUT /catalogue/:id` (admin JWT only — there is no API-key
+scope for writing plans).
+
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `whatsapp_enabled` | boolean | `false` | Whether this plan is offered in the WhatsApp purchase conversation. Defaults to off, so enabling the module never silently exposes existing plans. |
+| `coverage_summary_fr` | string \| null | `null` | Optional short French blurb for the chat quote. |
+| `coverage_summary_en` | string \| null | `null` | Optional English equivalent. |
+
+**You normally leave the two summaries empty.** When they are `null`, the quote
+message derives its coverage lines from the plan's own
+`pricing_rules.guarantees` — category, coverage type and amount — using the same
+French and English labels the web app shows. That keeps one source of truth: edit
+a guarantee and the chat wording follows automatically. Set a summary only to
+override text that reads badly, and it then wins over the derived version.
+
+On update these two fields use `COALESCE`, so a `PUT` that omits them keeps what
+is stored. A form that does not render them cannot wipe them.
 
 ---
 
@@ -721,6 +746,12 @@ If the agency has never been reassigned, the API may auto-record an open period 
 | POST   | `/admin/api-keys/:id/rotate` | Issue a new secret, revoke the old one. |
 | DELETE | `/admin/api-keys/:id` | Revoke (no new requests accepted). |
 
+These endpoints are also driven by a screen: an administrator can issue,
+inspect, rotate and revoke keys in the admin panel under **System > API
+Keys** (`/admin/api-keys`), with a grouped scope picker, the last 100
+requests per key, and a warning banner for keys within 14 days of expiry.
+The endpoints below remain available for scripted use.
+
 ### POST /admin/api-keys
 
 **Request**
@@ -1162,7 +1193,25 @@ read or rewrite the platform's Meta credentials.
 
 Credentials are stored AES-256-GCM encrypted in `app_settings`; the master key
 lives only in `SETTINGS_ENCRYPTION_KEY`. Saved changes take effect without a
-restart. Secrets are returned as `"masked": "••••••••wxyz"` with
+restart.
+
+**Message templates.** Meta only allows free-form messages within 24 hours of the
+customer's last message. Anything the business starts after that — a payment
+confirmation, a certificate notice, a reminder on an unpaid quote — must use a
+template approved in WhatsApp Manager. The approved names are settings rather
+than constants, because Meta approval names change and a rename must not need a
+deploy:
+
+| Key | Purpose |
+|---|---|
+| `whatsapp.template_language` | Locale the templates were approved under (`fr`, `en`, `fr_FR`, …) |
+| `whatsapp.template_payment_received` | Sent when a payment is confirmed |
+| `whatsapp.template_certificate_ready` | Sent when the certificate has been issued |
+| `whatsapp.template_quote_reminder` | Follow-up on a quote that was never paid |
+
+An empty value simply means that notification is not configured yet and is not
+sent. The whole Milestone 2 purchase conversation is replies inside the 24-hour
+window, so none of these are required for it to work. Secrets are returned as `"masked": "••••••••wxyz"` with
 `"value": null`; sending `""` or omitting a secret field keeps the stored value,
 so saving the phone number ID can never blank the access token.
 

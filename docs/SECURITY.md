@@ -202,6 +202,9 @@ tables.
 
 ## 9. Key lifecycle
 
+All four operations below are available to an administrator in the admin
+panel under **System > API Keys**; that screen calls exactly these endpoints.
+
 * **Issuance** — admin POSTs to `/api/admin/api-keys`. Secret returned exactly
   once; only the prefix + hash persisted.
 * **Rotation** — admin POSTs to `/api/admin/api-keys/:id/rotate`. Old key is

@@ -31,7 +31,7 @@ router.get("/sessions", authenticateAny, requireScope("whatsapp:read"), getSessi
 router.get("/sessions/:id", authenticateAny, requireScope("whatsapp:read"), getSession);
 router.get("/sessions/:id/messages", authenticateAny, requireScope("whatsapp:read"), getSessionMessages);
 
-// Message-count instrumentation against the 6–8 target.
+// Message-count instrumentation against the message budget (8–11).
 router.get("/stats", authenticateAny, requireScope("whatsapp:read"), getStats);
 
 router.post("/messages", authenticateAny, requireScope("whatsapp:write"), sendMessage);

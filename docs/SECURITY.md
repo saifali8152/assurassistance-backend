@@ -229,14 +229,45 @@ panel under **System > API Keys**; that screen calls exactly these endpoints.
 
 ---
 
+## 9b. What Milestone 3 changed
+
+* **Passport numbers are encrypted at rest.** `travellers.passport_or_id_enc`
+  holds AES-256-GCM ciphertext; `passport_or_id_hash` is a keyed blind index so
+  exact lookup still works. Partial text search over passport numbers
+  deliberately does not survive. Existing rows are migrated by
+  `scripts/encryptPassports.js`, which runs in two passes — encrypt, verify,
+  then clear the plaintext.
+* **Logs no longer carry personal data.** Every `console.*` call in the codebase
+  is routed through the structured logger, which redacts by field name and masks
+  phone numbers and email addresses appearing in message text. A phone number
+  used to be written to the log on every inbound webhook.
+* **Redaction was weaker than it looked.** The pino paths were written only as
+  `*.access_token`, which matches a nested field but **not a top-level one**, so
+  a token logged at the top level was never redacted. Every name is now listed
+  bare and wildcarded.
+* **Failures reach a human.** `captureException` emails `ALERT_EMAIL`, throttled
+  per distinct problem so one provider outage cannot produce a thousand emails.
+* **Health is observable.** `GET /api/health` runs a real query and answers 503
+  when it cannot serve.
+
+---
+
 ## 10. PII & data residency
 
 * Travellers' passport / ID numbers and contact details are stored at rest in
   MySQL on the hosting provider. They are returned in responses only to
   authenticated callers with visibility into the relevant case.
-* PDF documents (invoices, certificates) are generated on demand — they are
-  **not** persisted to disk and contain only the data already returned by the
-  JSON endpoints.
+* Invoice PDFs are generated on demand and not persisted.
+* **Certificate PDFs are persisted**, under `storage/certificates/`, so that an
+  issued document cannot change after the customer has been given it. That
+  directory is deliberately outside `uploads/`: `uploads/` is web-served and
+  certificate numbers are sequential, so a stored certificate there would be
+  downloadable by enumeration — and a certificate carries the traveller's passport
+  number. `storage/` is not served, is not symlinked into the web root, and must be
+  included in backups. The only public route to a certificate remains
+  `GET /sales/certificate/public/:token/pdf`, where the 48-character token is the
+  credential.
+* Both document types contain only data already returned by the JSON endpoints.
 * Uploaded partner logos are served at `/uploads/plan-logos/*` and are
   intentionally public (they appear on customer-facing certificates).
 

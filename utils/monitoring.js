@@ -10,6 +10,7 @@
 // broken conversation is invisible unless the failure is reported somewhere.
 //
 import { logger } from "./logger.js";
+import { notifyOps } from "./alerts.js";
 
 let Sentry = null;
 let enabled = false;
@@ -55,6 +56,11 @@ export function captureException(err, context = {}) {
     }
   }
   logger.error({ err: err?.message, stack: err?.stack, ...context }, "exception");
+
+  // And tell a human. Capturing an exception into a log file nobody tails is
+  // how a broken payment integration stays broken for a day.
+  const key = `${context?.scope || "unscoped"}:${err?.message || "unknown"}`.slice(0, 200);
+  notifyOps(key, `${context?.scope || "Error"}: ${err?.message || "unknown error"}`, context).catch(() => {});
 }
 
 export function captureMessage(message, context = {}) {

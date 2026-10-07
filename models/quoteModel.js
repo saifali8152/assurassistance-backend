@@ -16,6 +16,7 @@
 // always recalculated from the live catalogue at the moment of persistence.
 //
 import getPool from "../utils/db.js";
+import { passportColumns, hydrateTravellers } from "../utils/travellerPrivacy.js";
 import { computeQuote, generateQuoteReference } from "../utils/quoteEngine.js";
 import { getCountryByCode } from "./referenceModel.js";
 
@@ -102,8 +103,9 @@ export async function createQuote({ traveller, travel, planId, createdBy, source
     const [travellerResult] = await conn.execute(
       `INSERT INTO travellers
          (first_name, last_name, date_of_birth, country_of_residence, gender, nationality,
-          passport_or_id, phone, email, address, whatsapp_number, source, preferred_language)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+          passport_or_id, passport_or_id_enc, passport_or_id_hash, phone, email, address,
+          whatsapp_number, source, preferred_language)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
       [
         traveller.first_name || null,
         traveller.last_name || null,
@@ -111,7 +113,10 @@ export async function createQuote({ traveller, travel, planId, createdBy, source
         traveller.country_of_residence || null,
         normaliseGender(traveller.gender),
         traveller.nationality || null,
-        traveller.passport_or_id || null,
+        ...(() => {
+          const cols = passportColumns(traveller.passport_or_id);
+          return [cols.passport_or_id, cols.passport_or_id_enc, cols.passport_or_id_hash];
+        })(),
         traveller.phone || null,
         traveller.email || null,
         traveller.whatsapp_number || null,
@@ -174,7 +179,7 @@ export async function getQuoteByReference(reference) {
     `SELECT c.id AS case_id, c.quote_reference, c.status, c.source, c.destination,
             c.start_date, c.end_date, c.duration_days, c.created_at, c.created_by,
             t.id AS traveller_id, t.first_name, t.last_name, t.date_of_birth, t.gender,
-            t.nationality, t.country_of_residence, t.passport_or_id, t.email, t.phone,
+            t.nationality, t.country_of_residence, t.passport_or_id, t.passport_or_id_enc, t.email, t.phone,
             t.whatsapp_number, t.preferred_language,
             cat.id AS plan_id, cat.name AS plan_name, cat.product_type, cat.currency,
             cat.pricing_rules, cat.flat_price, cat.fixed_duration_premiums,

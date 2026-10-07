@@ -403,11 +403,31 @@ Notes:
 | GET | `/sales/certificate/:id` | JWT or KEY | `sales:read` | `application/pdf` (certificate). |
 | GET | `/sales/certificate/:id/page` | JWT or KEY | `sales:read` | JSON payload used to render the certificate. |
 | GET | `/sales/certificate/public/:token` | PUBLIC | — | Same JSON, served via the QR token. |
+| GET | `/sales/certificate/public/:token/pdf` | PUBLIC | — | `application/pdf`, served via the QR token. `?lang=fr\|en` chooses the language. |
 | GET | `/sales/group/:groupId/invoices-zip` | JWT or KEY | `sales:read` | `application/zip` (all invoices in the group). |
 | GET | `/sales/group/:groupId/certificates-zip` | JWT or KEY | `sales:read` | `application/zip` (all certificates in the group). |
 
-The PDFs are generated on demand. Headers include `Content-Disposition:
-attachment; filename="…"`. Stream the body or persist to disk on your side.
+Headers include `Content-Disposition: attachment; filename="…"`. Stream the body
+or persist to disk on your side.
+
+**Invoices are generated on demand. Certificates are generated once and then
+served from a stored file.** The first request for a certificate renders it and
+writes it to `storage/certificates/<certificate number>-<fr|en>.pdf`; every later
+request returns those exact bytes. That directory is **not** web-served — the only
+public route to a certificate is the token-gated one below. This is deliberate: the figures on a
+certificate are frozen at issuance, and the document should be frozen with them,
+so a later catalogue or layout change cannot alter the copy a travelling customer
+already holds. The two languages are separate documents and are stored
+separately.
+
+Certificates issued before the frozen-snapshot change are not stored and are
+still rendered on each request.
+
+The public PDF route is **unauthenticated by design**: the 48-character token is
+the credential. It exists because WhatsApp delivers a document by fetching a link
+from Meta's servers, not from the customer's phone, so the link cannot carry a
+session or a bearer token. Treat the token as a secret — anyone holding it can
+read that one certificate.
 
 Certificate JSON (`/page` and `/public/:token`) and the downloaded PDF include a
 `contact` block printed on every certificate:
@@ -734,6 +754,32 @@ If the agency has never been reassigned, the API may auto-record an open period 
 
 ---
 
+## 7b. Idempotency
+
+`POST /api/sales`, `PATCH /api/sales/:id/payment` and `POST /api/cases/:id/confirm-sale`
+accept an **`Idempotency-Key`** header. It is optional — omitting it keeps the
+previous behaviour — and you should send one on every call that creates or
+changes money.
+
+```http
+POST /api/sales
+Idempotency-Key: 9f1c0b6e-6f3a-4a2b-9a0e-6b5f2a1c7d44
+```
+
+| Situation | Response |
+|---|---|
+| First call with that key | Processed normally; the response is recorded. |
+| Same key, same body, after it finished | The **original** response, with `Idempotent-Replay: true`. |
+| Same key, same body, still running | `409 idempotency_in_progress` plus `Retry-After`. Retry. |
+| Same key, **different** body | `422 idempotency_key_reuse`. This is a client bug — generate a new key per logical operation. |
+
+Independently of the header, **a case can hold only one live policy**, enforced
+by a unique index. A repeated `POST /api/sales` for a case that already has one
+returns that policy with `"duplicate": true` rather than issuing a second. A
+timed-out request is therefore always safe to retry.
+
+---
+
 ## 8. API Keys — `/api/admin/api-keys` (admin JWT only)
 
 | Method | Path | Description |
@@ -935,12 +981,39 @@ description=Complete contractual terms for Assur'Assistance travel insurance.
 
 ## 13. Health & docs
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/` | "Assur Assistance Backend is running" (plaintext). |
-| GET | `/api/docs` | Swagger UI. |
-| GET | `/api/openapi.json` | OpenAPI spec (JSON). |
-| GET | `/api/openapi.yaml` | OpenAPI spec (YAML). |
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/api/health` | PUBLIC | Readiness. **200** when the service can serve, **503** when it cannot. |
+| GET | `/api/health/live` | PUBLIC | Liveness only — touches nothing. |
+| GET | `/` | PUBLIC | "Assur Assistance Backend is running" (plaintext). Does NOT check the database. |
+| GET | `/api/docs` | PUBLIC | Swagger UI. |
+| GET | `/api/openapi.json` | PUBLIC | OpenAPI spec (JSON). |
+| GET | `/api/openapi.yaml` | PUBLIC | OpenAPI spec (YAML). |
+
+Point an uptime monitor at `/api/health`, not at `/`. The root route answers 200
+without touching MySQL, so it reports green through a database outage.
+
+`/api/health` runs a real query and returns:
+
+```json
+{
+  "status": "ok",
+  "uptimeSeconds": 84210,
+  "checks": {
+    "database": { "ok": true, "ms": 2 },
+    "whatsapp": { "enabled": true, "ready": true },
+    "payments": { "enabled": true, "ready": true, "providers": 2 }
+  },
+  "time": "2026-10-06T09:14:22.104Z"
+}
+```
+
+Module readiness is reported but does **not** affect the status code: WhatsApp
+being switched off is a setup state, not an outage, and a monitor that pages
+someone for it trains people to ignore it.
+
+Both health routes are mounted ahead of the rate limiter, so a monitor polling
+on a fixed schedule can never be the thing that gets throttled.
 
 ---
 
@@ -1136,9 +1209,34 @@ signature-authenticated; everything else uses the normal auth stack.
 | GET | `/whatsapp/sessions` | JWT, KEY | `whatsapp:read` | Conversations (`?status=`, `?search=`, paginated). |
 | GET | `/whatsapp/sessions/:id` | JWT, KEY | `whatsapp:read` | One conversation with its collected data. |
 | GET | `/whatsapp/sessions/:id/messages` | JWT, KEY | `whatsapp:read` | Full transcript. |
-| GET | `/whatsapp/stats` | JWT, KEY | `whatsapp:read` | Customer-message counts vs the 6–8 target. |
+| GET | `/whatsapp/stats` | JWT, KEY | `whatsapp:read` | Customer-message counts vs the message budget. |
 | POST | `/whatsapp/messages` | JWT, KEY | `whatsapp:write` | Send an outbound text. |
 | POST | `/whatsapp/maintenance/prune` | ADMIN | — | Apply the transcript retention policy. |
+
+### Commands a customer can type at any point
+
+Recognised before step parsing, so they work in the middle of a question. Case
+and accents are ignored, and a command must be the whole message — "my name is
+Restart Jones" is a name.
+
+| Customer writes | Effect |
+|---|---|
+| `RECOMMENCER` / `RESTART` | Start the quote again from the beginning. |
+| `RETOUR` / `BACK` | Go back one question. |
+| `AIDE` / `HELP` / `MENU` | List these commands and repeat the current question. |
+| `CONSEILLER` / `AGENT` | Ask for a person. The conversation stays open. |
+| `ANNULER` / `CANCEL` / `STOP` | End the conversation. |
+| `ENGLISH` / `FRANCAIS` | Switch language and repeat the current question. |
+| `ATTESTATION` / `CERTIFICATE` | Send the certificate for this number's most recent policy again. |
+
+The certificate request is the one command read loosely: a short sentence
+containing "attestation", "certificat" or "certificate" and no digits counts
+("je veux mon attestation svp"), because that is how customers ask. It resolves
+the policy by an **exact** match on the WhatsApp number, sends the same document
+a confirmed payment would send, and is limited to two sends per five minutes per
+number — each document is a billable message. With no policy on that number, or
+no certificate yet, the customer is told so and pointed at an adviser rather than
+left waiting.
 
 ### The webhook
 
@@ -1166,13 +1264,30 @@ personal data that a partner with case access has no automatic right to read.
   "data": {
     "windowDays": 30,
     "completedSessions": 42,
-    "averageCustomerMessages": 7.4,
-    "minCustomerMessages": 6,
+    "averageCustomerMessages": 9.1,
+    "minCustomerMessages": 8,
     "maxCustomerMessages": 11,
-    "target": { "min": 6, "max": 8 }
+    "target": { "min": 8, "max": 11 }
   }
 }
 ```
+
+`target` is the **measured** budget of the flow as built, not the milestone's
+original 6–8 ambition. It breaks down as:
+
+| Messages | Spent on |
+|---|---|
+| 1 | the customer's opening message, answered with the menu |
+| 1 | starting from the menu |
+| 5 | the answers — identity (four fields in one message), gender, nationality, destination with both dates, email |
+| 1 | confirming the quote |
+| +1 | choosing a plan, when more than one matches |
+| +1 | choosing a payment operator, when more than one is available |
+| +1 | the number to charge |
+
+So 8 for a single plan paid later, 9 with a plan choice, 11 when the customer
+also picks an operator and pays in the chat. Asking the grouped fields
+separately would cost thirteen messages before any of the rest.
 
 ---
 
@@ -1285,3 +1400,62 @@ curl -X PATCH $AAS_BASE/sales/7912/payment \
 curl "$AAS_BASE/ledger?startDate=2026-01-01&endDate=2026-06-30&page=1&limit=50" \
   -H "Authorization: Bearer $AAS_KEY"
 ```
+
+---
+
+## 18. Payments — `/api/payments`
+
+Mobile money, as used by the WhatsApp purchase flow. There is no public API for
+*starting* a payment: a payment belongs to a conversation, and a partner
+integrating over the API issues policies directly through `/api/sales`.
+
+### POST /payments/webhook/{provider}
+
+The callback endpoint each provider is configured to call. `{provider}` is one
+of `orange`, `mtn`, `wave`, `moov`.
+
+**Not for integrators.** It is documented because its behaviour explains the
+guarantees below.
+
+| Behaviour | Why |
+|---|---|
+| Mounted before the body parser, the sanitiser and the rate limiter | The signature is computed over the exact bytes received. Once a body is parsed and re-serialised, no signature can verify. |
+| Always answers **200**, except **403** on a bad signature | A provider that gets a 500 retries, and a retry storm during an outage is worse than the outage. 403 is the one case the sender should know about. |
+| The raw body is archived before anything reads it | In a dispute the provider's exact payload is the evidence — including one we failed to parse. |
+| A repeated callback is recorded and ignored | Deduplicated on `(provider, provider_tx_id)` by a unique index, so one payment cannot become two policies. |
+| A contradictory late callback is refused | `completed` is terminal. A provider sending `failed` after `completed` cannot revoke a policy a customer is already travelling on. |
+
+### Payment states
+
+```
+pending → initiated → awaiting_confirmation → completed
+                   ↘                       ↘ failed | expired | cancelled
+```
+
+`pending → completed` is legal: a callback can arrive before our own initiation
+request has returned, and refusing it would strand a payment the customer has
+already made.
+
+**A policy is issued only on a real transition to `completed`** — never on
+initiation, and never on a repeat of an outcome already acted on.
+
+### Failure codes
+
+Every provider's codes are mapped onto this list, so customer-facing wording is
+written once per reason rather than once per provider:
+
+`insufficient_funds`, `wrong_pin`, `customer_cancelled`, `customer_timeout`,
+`invalid_number`, `limit_exceeded`, `duplicate_transaction`,
+`provider_unavailable`, `provider_rejected`, `configuration_error`, `unknown`.
+
+### Scheduled jobs
+
+| Script | Suggested cron | What it does |
+|---|---|---|
+| `scripts/pollPayments.js` | `*/2 * * * *` | Asks the provider about payments still waiting, and settles any with an answer. Runs **before** the sweeper so a lost callback does not expire a payment the customer made. |
+| `scripts/sweepPayments.js` | `* * * * *` | Expires payments past their window and tells the customer. |
+| `scripts/dailySummary.js` | `10 6 * * *` | Emails the client yesterday's figures and anything needing a human. |
+| `scripts/pruneMessages.js` | `15 3 * * 0` | Enforces conversation retention. |
+
+Each is a standalone script run by cron, never an in-process timer: the app runs
+under PM2 and an interval would fire once per worker.

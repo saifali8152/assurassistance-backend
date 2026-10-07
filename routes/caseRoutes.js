@@ -1,6 +1,7 @@
 //src/routes/caseRoute.js
 import express from "express";
 import { authenticateAny, requireScope } from "../middlewares/apiKeyMiddleware.js";
+import { idempotency } from "../middlewares/idempotencyMiddleware.js";
 import authenticate from "../middlewares/authMiddleware.js";
 import { adminOnly } from "../middlewares/roleMiddleware.js";
 import {
@@ -28,7 +29,7 @@ router.get("/all", authenticateAny, requireScope("cases:read"), getAllCases);
 router.get("/my-cases", authenticateAny, requireScope("cases:read"), getMyCasesWithPagination);
 router.get("/pending-sales", authenticateAny, requireScope("cases:read"), getPendingSales);
 router.patch("/:id/status", authenticateAny, requireScope("cases:write"), changeCaseStatus);
-router.post("/:caseId/confirm-sale", authenticateAny, requireScope("sales:write"), confirmSale);
+router.post("/:caseId/confirm-sale", authenticateAny, requireScope("sales:write"), idempotency("cases:confirm-sale"), confirmSale);
 router.post("/:caseId/cancel", authenticateAny, requireScope("cases:write"), cancelCase);
 // Hard delete — superadmin (admin role) only; JWT required (not API keys).
 router.delete("/:caseId", authenticate, adminOnly, deleteCase);

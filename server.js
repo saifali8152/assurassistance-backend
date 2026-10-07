@@ -28,12 +28,15 @@ import invoiceLedgerRoutes from './routes/invoiceLedgerRoute.js';
 import reconciliationRoute from './routes/reconciliationRoute.js';
 import activityLogRoutes from './routes/activityLogRoute.js';
 import apiKeyRoutes from './routes/apiKeyRoute.js';
+import paymentAdminRoutes from './routes/paymentAdminRoutes.js';
 import partnerInvoiceRoutes from './routes/partnerInvoiceRoute.js';
 import contractualDocumentRoutes from './routes/contractualDocumentRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
-import { logger, requestIdMiddleware } from './utils/logger.js';
+import { logger, requestIdMiddleware, installConsoleBridge } from './utils/logger.js';
 import { initMonitoring, captureException } from './utils/monitoring.js';
 import whatsappWebhookRoutes from './routes/whatsappWebhookRoutes.js';
+import paymentWebhookRoutes from './routes/paymentWebhookRoutes.js';
+import healthRoutes from './routes/healthRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
 import quoteRoutes from './routes/quoteRoutes.js';
 import zoneRoutes from './routes/zoneRoutes.js';
@@ -126,6 +129,12 @@ app.set('trust proxy', 1);
 
 // Every request carries an id, echoed back as X-Request-Id, so a customer's
 // report ("it broke at 14:03") can be traced through the logs in one grep.
+// Every bare console.* in the codebase now goes through the structured logger,
+// which means it is timestamped, levelled and — the reason this exists — run
+// through the same redaction. Before it, a customer's phone number was written
+// to the PM2 log on every inbound webhook.
+installConsoleBridge();
+
 app.use(requestIdMiddleware);
 
 // ---------------------------------------------------------------------------
@@ -142,6 +151,16 @@ app.use(requestIdMiddleware);
 // The route applies express.raw() itself; see routes/whatsappWebhookRoutes.js.
 // ---------------------------------------------------------------------------
 app.use('/api/whatsapp/webhook', whatsappWebhookRoutes);
+
+// Payment provider callbacks — mounted here for exactly the same three reasons
+// as the WhatsApp webhook above: raw bytes for the HMAC, no body rewriting, and
+// no IP-keyed limiter in front of a sender whose traffic all comes from a few
+// of its own addresses. See routes/paymentWebhookRoutes.js.
+app.use('/api/payments/webhook', paymentWebhookRoutes);
+
+// Health, mounted before the rate limiter: an uptime monitor polls on a fixed
+// schedule and must never be the thing that gets throttled.
+app.use('/api/health', healthRoutes);
 
 
 // Security headers. CSP is intentionally relaxed for the Swagger UI sub-tree,
@@ -241,6 +260,7 @@ try {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin/api-keys', apiKeyRoutes);
+app.use('/api/admin/payments', paymentAdminRoutes);
 app.use('/api/admin/whatsapp-settings', settingsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);

@@ -45,6 +45,8 @@ import {
 /** Internal keys kept on collectedData; never shown to the customer. */
 const RETURN_TO = "__returnTo";
 const PLAN_OPTIONS = "__planOptions";
+/** Priced payment options for the current step; never shown to the customer. */
+const PAYMENT_OPTIONS = "__paymentOptions";
 const PENDING_CANDIDATES = "__pendingCandidates";
 
 /* ------------------------------------------------------------ reply helpers */
@@ -271,6 +273,89 @@ const PARSERS = {
     return { ok: false, code: "generic", message: t("error.generic") };
   },
 
+  /* ---- payment (Milestone 3) -------------------------------------------- */
+
+  paymentProvider: ({ message, session, t }) => {
+    const id = message.selectionId || "";
+    const options = session.collectedData?.[PAYMENT_OPTIONS] || [];
+    if (id.startsWith("pay:")) {
+      const code = id.slice("pay:".length);
+      const chosen = options.find((o) => o.code === code);
+      if (chosen) return { ok: true, stores: { payment_provider: chosen.code, payment_provider_label: chosen.label } };
+    }
+    // Typing "orange" is one message; tapping is also one. Accept both.
+    if (message.text) {
+      const typed = String(message.text).trim().toLowerCase();
+      const chosen = options.find(
+        (o) => o.code === typed || String(o.label).toLowerCase() === typed
+      );
+      if (chosen) return { ok: true, stores: { payment_provider: chosen.code, payment_provider_label: chosen.label } };
+    }
+    return { ok: false, code: "generic", message: t("error.generic") };
+  },
+
+  /**
+   * The number to charge, which may differ from the WhatsApp number — a
+   * customer often chats on one SIM and pays from another.
+   */
+  paymentPhone: ({ message, session, t }) => {
+    const data = session.collectedData || {};
+    const raw = String(message.text || "").trim();
+    if (!raw) return { ok: false, code: "generic", message: t("error.generic") };
+
+    // "1" means "the number I am writing from", which saves typing 13 digits.
+    const useThis = raw === t("payment.useThisNumber") || raw === "1";
+    const candidate = useThis ? String(session.waNumber || "") : raw;
+
+    const digits = candidate.replace(/[^\d]/g, "");
+    if (digits.length < 8 || digits.length > 15) {
+      return { ok: false, code: "payment_phone", message: t("payment.invalidPhone"), countsAsRetry: true };
+    }
+
+    // Per-provider prefix rules, when the operator has configured them. The
+    // national part is what carries the prefix, so compare after the country
+    // code where we know it.
+    const options = data[PAYMENT_OPTIONS] || [];
+    const provider = options.find((o) => o.code === data.payment_provider);
+    const prefixes = provider?.msisdnPrefixes || [];
+    if (prefixes.length) {
+      // Country codes are 1 to 4 digits and we do not know which this is, so
+      // look for the operator prefix just after any plausible country code
+      // rather than guessing the national number's length. Taking a fixed
+      // number of trailing digits drops the national leading zero — "2250711…"
+      // became "711…" and a valid Orange number failed its own prefix check.
+      const matches = prefixes.some((pre) => {
+        const want = String(pre).replace(/\D/g, "");
+        if (!want) return false;
+        for (let skip = 0; skip <= 4; skip += 1) {
+          if (digits.slice(skip).startsWith(want)) return true;
+        }
+        return false;
+      });
+      if (!matches) {
+        return {
+          ok: false,
+          code: "payment_phone_prefix",
+          message: t("payment.wrongPrefix", {
+            provider: provider?.label || data.payment_provider,
+            prefixes: prefixes.join(", "),
+          }),
+          countsAsRetry: true,
+        };
+      }
+    }
+
+    return { ok: true, stores: { payment_msisdn: digits } };
+  },
+
+  paymentRetryChoice: ({ message, t }) => {
+    const id = message.selectionId || "";
+    if (id === "pay:retry") return { ok: true, stores: {}, action: "pay_retry" };
+    if (id === "pay:switch") return { ok: true, stores: {}, action: "pay_switch" };
+    if (id === "pay:cancel") return { ok: true, stores: {}, action: "pay_cancel" };
+    return { ok: false, code: "generic", message: t("error.generic") };
+  },
+
   editChoice: ({ message, t }) => {
     const id = message.selectionId || "";
     if (id.startsWith("edit:")) {
@@ -395,10 +480,22 @@ export async function renderStep(stepKey, session, ctx) {
       };
 
     case "text":
-      return { replies: [textReply(t(step.promptKey), step.key)], patch: { currentStep: step.key } };
+      // Prompts may carry placeholders — the payment step asks for "your
+      // {{provider}} number". Passing the collected data is harmless for the
+      // prompts that have none.
+      return {
+        replies: [
+          textReply(
+            t(step.promptKey, { ...data, provider: data.payment_provider_label || "" }),
+            step.key
+          ),
+        ],
+        patch: { currentStep: step.key },
+      };
 
     case "dynamic_list":
       if (step.source === "plans") return renderPlanStep(session, ctx, step, t);
+      if (step.source === "providers") return renderProviderStep(session, ctx, step, t);
       // Country-style steps ask in free text first; the list is the fallback,
       // because typing "France" is one message and browsing is three.
       return { replies: [textReply(t(step.promptKey), step.key)], patch: { currentStep: step.key } };
@@ -410,6 +507,14 @@ export async function renderStep(stepKey, session, ctx) {
     case "quote_review":
       return renderReview(session, ctx, step, t);
 
+    case "payment_wait":
+      // Parked. The prompt is a reassurance, not a question: nothing the
+      // customer types advances this step.
+      return {
+        replies: [textReply(t(step.promptKey), step.key)],
+        patch: { currentStep: step.key },
+      };
+
     case "terminal":
       return {
         replies: [textReply(t(step.promptKey, { reference: data.quote_reference || "" }), step.key)],
@@ -419,6 +524,79 @@ export async function renderStep(stepKey, session, ctx) {
     default:
       return { replies: [textReply(t("system.error"))], patch: {} };
   }
+}
+
+/**
+ * The payment operators available to THIS customer.
+ *
+ * The list comes from ctx.payment, resolved by the controller from the admin
+ * settings and the customer's country, so the engine stays free of provider
+ * knowledge. A provider with no country configured is offered nowhere rather
+ * than everywhere — an unconfigured operator silently accepting every customer
+ * is how a payment reaches the wrong market.
+ */
+async function renderProviderStep(session, ctx, step, t) {
+  const data = session.collectedData || {};
+  const options = ctx.payment?.options || [];
+
+  if (options.length === 0) {
+    // Nothing to offer. Fall back to the Milestone 2 behaviour rather than
+    // leaving the customer at a dead end.
+    return {
+      replies: [textReply(t("payment.noProviders"), step.key)],
+      patch: { currentStep: "done", status: "completed" },
+      events: [{ type: "payment_no_providers", data: { country: data.residence_code || data.nationality_code } }],
+    };
+  }
+
+  const patch = {
+    currentStep: step.key,
+    collectedData: { ...data, [PAYMENT_OPTIONS]: options },
+  };
+
+  // One operator means there is nothing to choose: skip a customer message and
+  // go straight to asking which number to charge.
+  if (options.length === 1) {
+    const only = options[0];
+    const merged = {
+      ...patch.collectedData,
+      payment_provider: only.code,
+      payment_provider_label: only.label,
+    };
+    const nextSession = { ...session, collectedData: merged, currentStep: "payment_phone" };
+    const phone = await renderStep("payment_phone", nextSession, ctx);
+    return {
+      replies: [
+        textReply(
+          t("payment.askPhone", { provider: only.label }),
+          "payment_phone"
+        ),
+      ],
+      patch: {
+        ...phone.patch,
+        collectedData: merged,
+        stepHistory: [...(session.stepHistory || []), step.key],
+      },
+    };
+  }
+
+  const rows = options.slice(0, 10).map((o) => ({
+    id: `pay:${o.code}`,
+    title: o.label,
+    description: t("payment.rowDescription"),
+  }));
+
+  return {
+    replies: [
+      listReply(
+        t(step.promptKey),
+        [{ title: t("payment.sectionTitle"), rows }],
+        t(step.listButtonKey || "payment.chooseButton"),
+        step.key
+      ),
+    ],
+    patch,
+  };
 }
 
 async function renderPlanStep(session, ctx, step, t) {
@@ -686,6 +864,20 @@ export async function processMessage({ message, session, ctx }) {
     };
   }
 
+  /* --- 3b. Parked on a payment ------------------------------------------- */
+  // A customer waiting for a mobile money prompt often writes "has it worked
+  // yet?". That is not an answer to a question we asked, and the step has no
+  // parser, so without this it fell through to the generic error — the worst
+  // possible reply to someone who has just been asked for money.
+  if (step.type === "payment_wait") {
+    return {
+      replies: [textReply(t("payment.waiting"), step.key)],
+      patch: {},
+      events: [...events, { type: "payment_wait_nudge" }],
+      countsAsCustomerMessage: true,
+    };
+  }
+
   const parser = PARSERS[step.parser];
   if (!parser) {
     return { replies: [textReply(t("system.error"))], patch: {}, events, countsAsCustomerMessage: true };
@@ -749,6 +941,29 @@ export async function processMessage({ message, session, ctx }) {
       countsAsCustomerMessage: true,
     };
   }
+  if (parsed.action === "pay_cancel") {
+    return {
+      replies: [textReply(t("payment.cancelled", { reference: data.quote_reference || "" }), "payment_retry")],
+      patch: { status: "cancelled", collectedData: data, stepHistory: history, retryCount: 0 },
+      events: [...events, { type: "payment_cancelled_by_customer" }],
+      countsAsCustomerMessage: true,
+    };
+  }
+  if (parsed.action === "pay_switch") {
+    // Keep everything already collected: switching operator must not cost the
+    // customer a single field.
+    const rendered = await renderStep("payment_provider", { ...sessionAfter, currentStep: "payment_provider" }, ctx);
+    return {
+      replies: rendered.replies,
+      patch: { ...rendered.patch, collectedData: rendered.patch?.collectedData || data, stepHistory: history, retryCount: 0 },
+      events,
+      countsAsCustomerMessage: true,
+    };
+  }
+  if (parsed.action === "pay_retry") {
+    return startPaymentAndRender({ session: sessionAfter, ctx, t, data, history, events });
+  }
+
   if (parsed.action === "edit") {
     const rendered = await renderStep("review_edit", sessionAfter, ctx);
     return {
@@ -804,6 +1019,12 @@ export async function processMessage({ message, session, ctx }) {
       events,
       countsAsCustomerMessage: true,
     };
+  }
+
+  // Entering the waiting step is not a render — it is a side effect: the
+  // provider has to be called and the prompt pushed to the customer's handset.
+  if (nextKey === "payment_wait") {
+    return startPaymentAndRender({ session: sessionAfter, ctx, t, data, history, events });
   }
 
   const nextSession = { ...sessionAfter, currentStep: nextKey };
@@ -899,6 +1120,10 @@ async function handleCommand({ command, session, ctx, flow, events }) {
     };
   }
 
+  if (command === COMMANDS.CERTIFICATE) {
+    return handleCertificateRequest({ session, ctx, events, t });
+  }
+
   const language = languageForCommand(command);
   if (language) {
     const switched = { ...session, language };
@@ -912,6 +1137,99 @@ async function handleCommand({ command, session, ctx, flow, events }) {
   }
 
   return { replies: [textReply(t("error.generic"))], patch: {}, events, countsAsCustomerMessage: true };
+}
+
+/**
+ * "Send me my attestation again."
+ *
+ * The engine cannot send a document — it has no side effects, by design — so it
+ * answers in words and raises `certificate_requested`. The controller is what
+ * acts on it, through the same delivery path a confirmed payment uses, so the
+ * 24-hour window and the template fallback are handled once rather than twice.
+ *
+ * Two things it refuses to do:
+ *   * guess. Without an issued policy for this number there is nothing to send,
+ *     and the honest answer is better than an apology for a failed send.
+ *   * repeat without limit. Every document is a billable message, so after
+ *     CERTIFICATE_RESEND_LIMIT sends in the recent window the customer is told
+ *     it has already gone out rather than being sent a fourth copy.
+ */
+export const CERTIFICATE_RESEND_LIMIT = 2;
+export const CERTIFICATE_RESEND_WINDOW_MINUTES = 5;
+
+async function handleCertificateRequest({ session, ctx, events, t }) {
+  const lookup = ctx.deps?.findIssuedPolicy;
+  let found = null;
+  if (typeof lookup === "function") {
+    try {
+      found = await lookup({ session });
+    } catch {
+      // A lookup failure is not the customer's problem to solve; it reads as
+      // "nothing found", which at least tells them to call someone.
+      found = null;
+    }
+  }
+
+  // Re-prompt only when we are NOT about to send the document: a prompt printed
+  // just above an arriving attestation reads as if the conversation ignored the
+  // request.
+  const withCurrentStep = async (replies) => {
+    if (session.currentStep) {
+      const again = await renderStep(session.currentStep, session, ctx);
+      replies.push(...again.replies);
+    }
+    return replies;
+  };
+
+  if (!found?.sale_id) {
+    return {
+      replies: await withCurrentStep([textReply(t("certificate.none"))]),
+      patch: {},
+      events: [...events, { type: "certificate_requested", data: { found: false } }],
+      countsAsCustomerMessage: true,
+    };
+  }
+
+  if (!found.certificate_id) {
+    // A sale with no certificate row: unpaid, or an issuance that stopped part
+    // way. Either way a human has to look, so say so instead of pretending.
+    return {
+      replies: await withCurrentStep([
+        textReply(t("certificate.notReady", { policy: found.policy_number || "" })),
+      ]),
+      patch: {},
+      events: [
+        ...events,
+        { type: "certificate_requested", data: { found: true, saleId: found.sale_id, ready: false } },
+      ],
+      countsAsCustomerMessage: true,
+    };
+  }
+
+  if (Number(found.recent_sends || 0) >= CERTIFICATE_RESEND_LIMIT) {
+    return {
+      replies: [textReply(t("certificate.alreadySent"))],
+      patch: {},
+      events: [
+        ...events,
+        { type: "certificate_requested", data: { saleId: found.sale_id, throttled: true } },
+      ],
+      countsAsCustomerMessage: true,
+    };
+  }
+
+  return {
+    replies: [textReply(t("certificate.sending", { policy: found.policy_number || "" }))],
+    patch: {},
+    events: [
+      ...events,
+      {
+        type: "certificate_requested",
+        data: { deliver: true, saleId: found.sale_id, policyNumber: found.policy_number || null },
+      },
+    ],
+    countsAsCustomerMessage: true,
+  };
 }
 
 /**
@@ -949,6 +1267,38 @@ async function confirmQuote({ session, ctx, t, events }) {
   }
 
   const withRef = { ...data, quote_reference: persisted.quoteReference };
+
+  // Milestone 3: if payment is switched on and at least one operator serves this
+  // customer, the conversation continues into payment instead of ending with
+  // "an adviser will call you". With payment off, or no operator configured for
+  // the country, the Milestone 2 ending is unchanged.
+  if (ctx.payment?.enabled && (ctx.payment.options || []).length > 0) {
+    const paying = {
+      ...session,
+      collectedData: withRef,
+      currentStep: "payment_provider",
+      caseId: persisted.caseId,
+    };
+    const rendered = await renderStep("payment_provider", paying, ctx);
+    return {
+      replies: rendered.replies,
+      patch: {
+        ...rendered.patch,
+        collectedData: rendered.patch?.collectedData || withRef,
+        quoteReference: persisted.quoteReference,
+        caseId: persisted.caseId,
+        travellerId: persisted.travellerId,
+        stepHistory: [...(session.stepHistory || []), "review"],
+      },
+      events: [
+        ...events,
+        { type: "quote_confirmed", data: { quoteReference: persisted.quoteReference, caseId: persisted.caseId } },
+        ...(rendered.events || []),
+      ],
+      countsAsCustomerMessage: true,
+    };
+  }
+
   return {
     replies: [textReply(t("quote.confirmed", { reference: persisted.quoteReference }), "done")],
     patch: {
@@ -967,4 +1317,104 @@ async function confirmQuote({ session, ctx, t, events }) {
   };
 }
 
-export const __testables = { PARSERS, splitTwoDates, countryCodeFromWaNumber, parseBrowseSelection };
+/* ---------------------------------------------------------------- payment */
+
+/**
+ * Ask the provider for a payment and tell the customer what to expect.
+ *
+ * Shared by the first attempt and by "try again", because they are the same
+ * action: everything the customer already gave us is reused, so a retry costs
+ * one tap rather than a re-run of the whole conversation.
+ *
+ * The provider call lives behind ctx.deps.startPayment — the engine neither
+ * knows nor cares which operator it is talking to, and stays testable with a
+ * stub.
+ */
+async function startPaymentAndRender({ session, ctx, t, data, history, events }) {
+  const start = ctx.deps?.startPayment
+    ? await ctx.deps.startPayment({ session, collectedData: data })
+    : { ok: false, failureCode: "configuration_error" };
+
+  if (start?.ok) {
+    const body = start.customerHint
+      ? t("payment.promptHint", {
+          amount: start.amountText || "",
+          msisdn: data.payment_msisdn || "",
+          hint: start.customerHint,
+        })
+      : t("payment.prompt", {
+          amount: start.amountText || "",
+          msisdn: data.payment_msisdn || "",
+        });
+
+    return {
+      replies: [textReply(body, "payment_wait")],
+      patch: {
+        currentStep: "payment_wait",
+        collectedData: data,
+        stepHistory: history,
+        retryCount: 0,
+        paymentTransactionId: start.transactionId || null,
+      },
+      events: [...events, { type: "payment_started", data: { provider: data.payment_provider, reference: start.reference } }],
+      countsAsCustomerMessage: true,
+    };
+  }
+
+  // Could not even start. Say why in the customer's own terms, then offer the
+  // same three ways out as any other failure.
+  const reasonKey = `payment.failed.${start?.failureCode || "unknown"}`;
+  const retry = await renderStep("payment_retry", { ...session, currentStep: "payment_retry" }, ctx);
+  return {
+    replies: [textReply(t(reasonKey), "payment_retry"), ...retry.replies],
+    patch: { ...retry.patch, collectedData: data, stepHistory: history, retryCount: 0 },
+    events: [...events, { type: "payment_start_failed", data: { code: start?.failureCode || "unknown" } }],
+    countsAsCustomerMessage: true,
+  };
+}
+
+/**
+ * Continue a parked conversation when the PAYMENT moves, not the customer.
+ *
+ * This is the entry point the engine did not have: `processMessage` requires an
+ * inbound message, and a provider callback arriving four minutes later has none.
+ * Same contract as processMessage — replies and a patch, no sending, no
+ * database — so the caller flushes it exactly the same way.
+ *
+ * @param {object} opts
+ * @param {object} opts.session   the parked session
+ * @param {object} opts.outcome   {status, failureCode?, policyNumber?}
+ * @param {object} opts.ctx
+ */
+export async function resumeAfterPayment({ session, outcome, ctx }) {
+  const t = translator(session.language);
+  const data = session.collectedData || {};
+  const status = outcome?.status;
+
+  if (status === "completed") {
+    const body = outcome.policyNumber
+      ? t("payment.success", { policy: outcome.policyNumber })
+      : t("payment.successNoPolicy");
+    return {
+      replies: [textReply(body, "payment_wait")],
+      patch: { currentStep: "done", status: "completed" },
+      events: [{ type: "payment_completed", data: { policyNumber: outcome.policyNumber || null } }],
+    };
+  }
+
+  // Everything else is a dead end for THIS attempt, not for the sale: the quote
+  // is still valid and the customer can try again or switch operator.
+  const reasonKey =
+    status === "expired"
+      ? "payment.expired"
+      : `payment.failed.${outcome?.failureCode || "unknown"}`;
+
+  const retry = await renderStep("payment_retry", { ...session, currentStep: "payment_retry" }, ctx);
+  return {
+    replies: [textReply(t(reasonKey), "payment_retry"), ...retry.replies],
+    patch: { ...retry.patch },
+    events: [{ type: "payment_failed", data: { status, code: outcome?.failureCode || null } }],
+  };
+}
+
+export const __testables = { PARSERS, splitTwoDates, countryCodeFromWaNumber, parseBrowseSelection, startPaymentAndRender, handleCertificateRequest };

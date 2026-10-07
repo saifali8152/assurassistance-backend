@@ -1,6 +1,7 @@
 //src/models/caseModel.js
 
 import getPool from "../utils/db.js";
+import { passportColumns, hydrateTraveller, hydrateTravellers } from "../utils/travellerPrivacy.js";
 import { normalizeDateOfBirthForDb } from "../utils/parseFlexibleDate.js";
 import { coerceGenderForDb } from "../utils/normalizeGender.js";
 
@@ -20,8 +21,8 @@ export const createTraveller = async (data) => {
   const addressValue = (address && address.trim() !== '') ? address.trim() : null;
   
   const [result] = await pool.execute(
-    `INSERT INTO travellers (first_name, last_name, date_of_birth, country_of_residence, gender, nationality, passport_or_id, phone, email, address)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO travellers (first_name, last_name, date_of_birth, country_of_residence, gender, nationality, passport_or_id, passport_or_id_enc, passport_or_id_hash, phone, email, address)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       first_name?.trim() || null,
       last_name?.trim() || null,
@@ -29,7 +30,12 @@ export const createTraveller = async (data) => {
       countryOfResidence,
       genderValue,
       nationalityValue,
-      passportOrId,
+      // Encrypted at rest when a master key is configured; plaintext otherwise,
+      // because losing the number is worse than storing it as before.
+      ...(() => {
+        const cols = passportColumns(passportOrId);
+        return [cols.passport_or_id, cols.passport_or_id_enc, cols.passport_or_id_hash];
+      })(),
       phoneValue,
       emailValue,
       addressValue
@@ -148,14 +154,16 @@ export const deleteCaseById = async (caseId) => {
 export const getCaseDetailsById = async (caseId) => {
   const pool = getPool();
   const [rows] = await pool.query(
-    `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, CONCAT(t.first_name, ' ', t.last_name) as full_name, t.phone, t.email, t.passport_or_id, t.address, cat.id AS plan_id, cat.name AS plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules, cat.currency, cat.partner_insurer AS plan_partner_insurer, cat.partner_insurer_logo AS plan_partner_insurer_logo, cat.theme_color AS plan_theme_color, cat.extra_id_fields AS plan_extra_id_fields, cat.fixed_duration_premiums AS plan_fixed_duration_premiums, c.duration_days
+    `SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality, CONCAT(t.first_name, ' ', t.last_name) as full_name, t.phone, t.email, t.passport_or_id, t.passport_or_id_enc, t.address, cat.id AS plan_id, cat.name AS plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules, cat.currency, cat.partner_insurer AS plan_partner_insurer, cat.partner_insurer_logo AS plan_partner_insurer_logo, cat.theme_color AS plan_theme_color, cat.extra_id_fields AS plan_extra_id_fields, cat.fixed_duration_premiums AS plan_fixed_duration_premiums, c.duration_days
      FROM cases c
      JOIN travellers t ON c.traveller_id = t.id
      LEFT JOIN catalogue cat ON c.selected_plan_id = cat.id
      WHERE c.id = ? LIMIT 1`,
     [caseId]
   );
-  return rows[0];
+  // The certificate and the sale both read passport_or_id off this row, so the
+  // encryption has to be invisible to them.
+  return hydrateTraveller(rows[0]);
 };
 
 const CASE_LIST_FROM = `
@@ -168,7 +176,7 @@ const CASE_LIST_FROM = `
 
 const CASE_LIST_SELECT = `
   SELECT c.*, t.first_name, t.last_name, t.date_of_birth, t.country_of_residence, t.gender, t.nationality,
-         t.phone, t.email, t.address, t.passport_or_id,
+         t.phone, t.email, t.address, t.passport_or_id, t.passport_or_id_enc,
          CONCAT(t.first_name, ' ', t.last_name) AS full_name,
          cat.name AS plan_name, cat.product_type, cat.coverage, cat.flat_price, cat.pricing_rules,
          cat.currency, cat.country_of_residence AS plan_country_of_residence, cat.route_type,

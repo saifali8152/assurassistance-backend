@@ -167,6 +167,32 @@ components:
         enum: [Paid, Unpaid, Partial]
 
   schemas:
+    HealthReport:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        uptimeSeconds: { type: integer }
+        time: { type: string, format: date-time }
+        checks:
+          type: object
+          properties:
+            database:
+              type: object
+              properties:
+                ok: { type: boolean }
+                ms: { type: integer }
+                error: { type: string, nullable: true }
+            whatsapp:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                ready: { type: boolean }
+            payments:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                ready: { type: boolean }
+                providers: { type: integer, description: How many are fully configured }
     ValidationError:
       type: object
       description: >
@@ -929,6 +955,70 @@ components:
                 Copy it immediately — it cannot be retrieved later.
 
 paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Readiness — 200 when the service can serve, 503 when it cannot
+      description: >
+        Runs a real database query. Point an uptime monitor here rather than at
+        `/`, which answers 200 without touching MySQL and would report green
+        through an outage. Module readiness is reported but does not affect the
+        status code.
+      security: []
+      responses:
+        '200':
+          description: Serving
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthReport' }
+        '503':
+          description: Cannot serve — the database check failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthReport' }
+  /health/live:
+    get:
+      tags: [Health]
+      summary: Liveness only — touches nothing
+      security: []
+      responses:
+        '200':
+          description: The process is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  uptimeSeconds: { type: integer, example: 84210 }
+  /payments/webhook/{provider}:
+    post:
+      tags: [Payments]
+      summary: Provider callback (not for integrators)
+      description: >
+        Called by the mobile money provider. Mounted ahead of the body parser and
+        the rate limiter because the signature covers the exact bytes received.
+        Always answers 200 except on a bad signature, archives the raw body
+        before processing, and deduplicates on the provider transaction id so a
+        redelivered callback cannot issue a second policy.
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { type: string, enum: [orange, mtn, wave, moov] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: The provider's own payload }
+      responses:
+        '200':
+          description: Accepted. Processing happens after the response.
+        '403':
+          description: The signature did not verify
+        '404':
+          description: Unknown provider
   /auth/login:
     post:
       tags: [Authentication]
@@ -1643,6 +1733,44 @@ paths:
                     $ref: '#/components/schemas/CertificateContact'
         "404":
           description: Token not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /sales/certificate/public/{token}/pdf:
+    get:
+      tags: [Documents]
+      summary: Public certificate PDF (no auth, token-gated).
+      description: |
+        The same certificate as a PDF. Unauthenticated by design: the token is
+        the credential. WhatsApp delivers a document by fetching the link from
+        Meta's servers rather than from the customer's phone, so the link cannot
+        carry a session or a bearer token. Treat the token as a secret.
+
+        The first request renders and stores the file; later requests return the
+        same bytes, so an issued certificate cannot change under the customer.
+        The two languages are stored separately.
+      security: []
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+        - name: lang
+          in: query
+          required: false
+          description: Language of the document. Defaults to English.
+          schema: { type: string, enum: [fr, en] }
+      responses:
+        "200":
+          description: The certificate PDF.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "404":
+          description: Token not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        "410":
+          description: The policy has been cancelled.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

@@ -152,6 +152,7 @@ export async function updateSession(id, patch = {}) {
     travellerId: "traveller_id",
     caseId: "case_id",
     quoteReference: "quote_reference",
+    paymentTransactionId: "payment_transaction_id",
   };
 
   const sets = [];
@@ -175,6 +176,52 @@ export async function updateSession(id, patch = {}) {
   const pool = getPool();
   await pool.execute(`UPDATE whatsapp_sessions SET ${sets.join(", ")} WHERE id = ?`, [...params, id]);
   return getSessionById(id);
+}
+
+/**
+ * When the customer last wrote to us.
+ *
+ * Meta only allows free-form messages within 24 hours of that moment; after it
+ * passes, anything the business starts must be an approved template. Read from
+ * the message archive rather than `last_activity_at`, which our own outbound
+ * writes also push forward and would therefore keep the window open forever.
+ */
+export async function getLastInboundAt(sessionId) {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT MAX(created_at) AS last_inbound
+       FROM whatsapp_messages
+      WHERE session_id = ? AND direction = 'inbound'`,
+    [sessionId]
+  );
+  return rows[0]?.last_inbound || null;
+}
+
+/**
+ * How many messages of one kind we have already sent to a number recently.
+ *
+ * Exists so that asking for the certificate again cannot be turned into a way to
+ * make us send the same document over and over — each one costs a billable Meta
+ * message. Counted by NUMBER rather than by session, because the customer may be
+ * on a new conversation by the time they ask.
+ *
+ * Failed sends do not count: if the document did not arrive, asking again is the
+ * right thing to do.
+ */
+export async function countRecentOutboundByStep(waNumber, stepKey, minutes = 5) {
+  const pool = getPool();
+  const window = Math.max(1, Math.min(1440, Number(minutes) || 5));
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS n
+       FROM whatsapp_messages
+      WHERE wa_number = ?
+        AND direction = 'outbound'
+        AND step_key = ?
+        AND (status IS NULL OR status <> 'failed')
+        AND created_at > (NOW() - INTERVAL ? MINUTE)`,
+    [String(waNumber || ""), String(stepKey || ""), window]
+  );
+  return Number(rows[0]?.n || 0);
 }
 
 export async function incrementCustomerMessageCount(id) {
@@ -380,7 +427,7 @@ export async function pruneOldMessages(retentionDays) {
   return result.affectedRows;
 }
 
-/** Message-count instrumentation against the 6–8 message target. */
+/** Message-count instrumentation against the message budget (8–11; see getStats). */
 export async function getMessageCountStats({ days = 30 } = {}) {
   const pool = getPool();
   const [rows] = await pool.query(

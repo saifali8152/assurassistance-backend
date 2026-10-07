@@ -10,6 +10,7 @@
 //
 import getPool from "../utils/db.js";
 import { encryptSecret, decryptSecret } from "../utils/appCrypto.js";
+import { validateFormat } from "../utils/documentNumbers.js";
 
 /**
  * group     — which UI section the field belongs to.
@@ -105,7 +106,146 @@ export const SETTING_REGISTRY = {
     group: "attribution", type: "number", secret: false,
     description: "Account that owns WhatsApp-originated cases and sales",
   },
+
+  // ---- Document numbering ---------------------------------------------------
+  // The insurer's prefix and any regulatory sequence rule are the client's to
+  // decide, so these are settings rather than constants. `validator` rejects a
+  // format with no sequence token, which would otherwise collide on every row.
+  "policy.number_format": {
+    group: "numbering", type: "string", secret: false, default: "AA-{YYYY}-{SEQ:6}",
+    validator: validateFormat,
+    description: "Policy number format. Tokens: {YYYY} {YY} {MM} {SEQ:n}",
+  },
+  "policy.invoice_format": {
+    group: "numbering", type: "string", secret: false, default: "INV-{YYYY}-{SEQ:6}",
+    validator: validateFormat,
+    description: "Invoice number format, same tokens",
+  },
+  "policy.certificate_format": {
+    group: "numbering", type: "string", secret: false, default: "CERT-{YYYY}-{SEQ:6}",
+    validator: validateFormat,
+    description: "Certificate number format, same tokens",
+  },
+
+  // ---- Company identity -----------------------------------------------------
+  // Printed on certificates and invoices. These were hardcoded in the PDF
+  // modules, so changing the insurer's address meant a deploy.
+  "company.legal_name": {
+    group: "company", type: "string", secret: false,
+    description: "Legal name exactly as registered",
+  },
+  "company.address": {
+    group: "company", type: "string", secret: false,
+    description: "Registered address, one line",
+  },
+  "company.phone": {
+    group: "company", type: "string", secret: false,
+    description: "Contact number printed on documents",
+  },
+  "company.email": {
+    group: "company", type: "string", secret: false,
+    description: "Contact email printed on documents",
+  },
+  "company.website": {
+    group: "company", type: "string", secret: false,
+    description: "Website printed on documents",
+  },
+
+  // ---- Certificate wording --------------------------------------------------
+  // Supplied by the insurer, in both languages, and legally theirs to word.
+  "certificate.footer_fr": {
+    group: "certificate", type: "string", secret: false,
+    description: "Footer line on the French certificate",
+  },
+  "certificate.footer_en": {
+    group: "certificate", type: "string", secret: false,
+    description: "Footer line on the English certificate",
+  },
+  "certificate.terms_fr": {
+    group: "certificate", type: "string", secret: false,
+    description: "Policy terms paragraph, French",
+  },
+  "certificate.terms_en": {
+    group: "certificate", type: "string", secret: false,
+    description: "Policy terms paragraph, English",
+  },
+  "certificate.signature_name": {
+    group: "certificate", type: "string", secret: false,
+    description: "Name printed in the signature block",
+  },
+  "certificate.signature_title": {
+    group: "certificate", type: "string", secret: false,
+    description: "Title printed under the signature",
+  },
+
+  // ---- Payments, shared -----------------------------------------------------
+  "payment.enabled": {
+    group: "payment_status", type: "boolean", secret: false, default: false,
+    description: "Master switch for in-conversation payment",
+  },
+  "payment.currency": {
+    group: "payment_status", type: "string", secret: false, default: "XOF",
+    allowed: ["XOF", "XAF", "USD", "EUR"],
+    description: "Currency charged at the provider",
+  },
+  "payment.timeout_minutes": {
+    group: "payment_status", type: "number", secret: false, default: 15, min: 2, max: 120,
+    description: "How long a pending payment waits before it is marked expired",
+  },
+  "payment.countries": {
+    group: "payment_status", type: "string", secret: false,
+    description: "ISO country codes the payment step is offered in, comma separated",
+  },
+  "payment.settlement_note": {
+    group: "payment_status", type: "string", secret: false,
+    description: "Free note on where funds settle, for the operator's own reference",
+  },
 };
+
+
+/**
+ * The mobile money providers the payment module can talk to.
+ *
+ * Each one needs the same shape of configuration, so the registry entries are
+ * generated rather than copied four times: a field added here appears for every
+ * provider, and none of them can silently fall behind.
+ *
+ * Everything here is supplied by the client from the admin screen. None of it
+ * belongs in .env — the credentials are the insurer's, and they change without
+ * a deploy.
+ */
+export const PAYMENT_PROVIDERS = [
+  { code: "orange", label: "Orange Money" },
+  { code: "mtn", label: "MTN MoMo" },
+  { code: "wave", label: "Wave" },
+  { code: "moov", label: "Moov Money" },
+];
+
+const PROVIDER_FIELDS = [
+  { suffix: "enabled", type: "boolean", secret: false, def: false, desc: "Offer this provider to customers" },
+  { suffix: "label", type: "string", secret: false, desc: "Name shown to the customer in the chat" },
+  { suffix: "countries", type: "string", secret: false, desc: "ISO country codes this provider covers, comma separated" },
+  { suffix: "msisdn_prefixes", type: "string", secret: false, desc: "Valid number prefixes, comma separated, e.g. 07,08" },
+  { suffix: "base_url", type: "string", secret: false, desc: "API base URL for the chosen environment" },
+  { suffix: "merchant_id", type: "string", secret: false, desc: "Merchant or collection account identifier" },
+  { suffix: "api_user", type: "string", secret: false, desc: "API user / client id issued by the provider" },
+  { suffix: "api_key", type: "string", secret: true, desc: "API key / client secret" },
+  { suffix: "subscription_key", type: "string", secret: true, desc: "Subscription key, where the provider issues one" },
+  { suffix: "callback_secret", type: "string", secret: true, desc: "Shared secret used to verify callback signatures" },
+  { suffix: "settlement_account", type: "string", secret: false, desc: "Account funds settle into, for reconciliation" },
+];
+
+for (const provider of PAYMENT_PROVIDERS) {
+  for (const f of PROVIDER_FIELDS) {
+    SETTING_REGISTRY[`payment.${provider.code}.${f.suffix}`] = {
+      group: `provider_${provider.code}`,
+      type: f.type,
+      secret: f.secret,
+      ...(f.def !== undefined ? { default: f.def } : {}),
+      description: `${provider.label} — ${f.desc}`,
+    };
+  }
+}
 
 export const SETTING_KEYS = Object.keys(SETTING_REGISTRY);
 
@@ -183,6 +323,10 @@ export function validateSettingValue(key, value) {
     return { ok: false, message: `${key} must be one of: ${def.allowed.join(", ")}` };
   }
   if (s.length > 4000) return { ok: false, message: `${key} is too long` };
+  if (typeof def.validator === "function") {
+    const r = def.validator(s);
+    if (!r.ok) return { ok: false, message: `${key}: ${r.message}` };
+  }
   return { ok: true, value: s };
 }
 

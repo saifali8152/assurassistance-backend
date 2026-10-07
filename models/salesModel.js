@@ -2,8 +2,11 @@
 import getPool from "../utils/db.js";
 
 // Create Sale
-export const createSale = async (data) => {
-  const pool = getPool();
+// `conn` lets the caller run this inside a transaction with the invoice and
+// certificate inserts; it defaults to the pool so existing callers are
+// unaffected.
+export const createSale = async (data, conn = null) => {
+  const pool = conn || getPool();
   const { 
     case_id, 
     policy_number, 
@@ -214,4 +217,47 @@ export const getMonthlyReconciliation = async (month) => {
     [month]
   );
   return rows;
+};
+
+/**
+ * The most recent live policy belonging to a WhatsApp number.
+ *
+ * Used when a customer asks for their certificate again in the chat. The number
+ * is the only credential the conversation has, so the match on it must be EXACT
+ * — digits compared to digits, after stripping a leading + and separators. A
+ * loose match (the last nine digits, say) would eventually hand one customer
+ * another customer's certificate, which carries their passport number.
+ *
+ * `caseId` is the conversation's own case when it has one; a policy for that
+ * case wins over an older one, because it is the thing the customer just paid
+ * for.
+ */
+export const getLatestPolicyForWhatsAppNumber = async (waNumber, { caseId = null } = {}) => {
+  const digits = String(waNumber || "").replace(/\D/g, "");
+  if (!digits) return null;
+
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT s.id          AS sale_id,
+            s.case_id     AS case_id,
+            s.policy_number,
+            s.payment_status,
+            s.created_at,
+            ce.id         AS certificate_id,
+            ce.certificate_number,
+            ce.public_token
+       FROM sales s
+       JOIN cases c      ON c.id = s.case_id
+       JOIN travellers t ON t.id = c.traveller_id
+       LEFT JOIN certificates ce ON ce.sale_id = s.id
+      WHERE s.deleted_at IS NULL
+        AND (
+              REPLACE(REPLACE(REPLACE(COALESCE(t.whatsapp_number, ''), '+', ''), ' ', ''), '-', '') = ?
+           OR REPLACE(REPLACE(REPLACE(COALESCE(t.phone, ''), '+', ''), ' ', ''), '-', '') = ?
+            )
+      ORDER BY (s.case_id = ?) DESC, s.id DESC
+      LIMIT 1`,
+    [digits, digits, caseId || 0]
+  );
+  return rows[0] || null;
 };

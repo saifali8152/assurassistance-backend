@@ -620,6 +620,12 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text",
+                "description": "Send one per logical operation. A retry with the same key returns the original response instead of issuing a second policy."
               }
             ],
             "body": {
@@ -694,6 +700,12 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text",
+                "description": "Send one per logical operation. A retry with the same key returns the original response instead of issuing a second policy."
               }
             ],
             "body": {
@@ -752,6 +764,12 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text",
+                "description": "Send one per logical operation. A retry with the same key returns the original response instead of issuing a second policy."
               }
             ],
             "body": {
@@ -780,6 +798,12 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "type": "text",
+                "description": "Send one per logical operation. A retry with the same key returns the original response instead of issuing a second policy."
               }
             ],
             "body": {
@@ -943,6 +967,36 @@
                 "certificate",
                 "public",
                 "PUBLIC_TOKEN"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Public certificate PDF (no auth)",
+          "request": {
+            "method": "GET",
+            "description": "The certificate as a PDF, gated only by its token — this is the link WhatsApp fetches. ?lang=fr|en picks the language. The first request renders and stores the file; later ones return the same bytes.",
+            "url": {
+              "raw": "{{baseUrl}}/sales/certificate/public/PUBLIC_TOKEN/pdf?lang=fr",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sales",
+                "certificate",
+                "public",
+                "PUBLIC_TOKEN",
+                "pdf"
+              ],
+              "query": [
+                {
+                  "key": "lang",
+                  "value": "fr",
+                  "description": "fr or en"
+                }
               ]
             },
             "auth": {
@@ -2808,7 +2862,7 @@
                 }
               ]
             },
-            "description": "Customer messages per completed purchase, against the 6-8 target."
+            "description": "Customer messages per completed purchase, against the measured budget of 8-11 (see API.md section 16)."
           }
         },
         {
@@ -3077,6 +3131,48 @@
               ]
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Readiness (point your uptime monitor here)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "200 when the service can serve, 503 when it cannot. Runs a real database query — unlike GET /, which answers 200 with a dead database behind it."
+          },
+          "response": []
+        },
+        {
+          "name": "Liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health",
+                "live"
+              ]
+            },
+            "description": "Is the process up. Touches nothing, so a slow database cannot trigger a restart."
+          },
+          "response": []
         }
       ]
     }

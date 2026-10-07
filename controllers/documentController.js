@@ -4,6 +4,14 @@ import {
   getCertificateByPublicToken,
   ensureCertificatePublicToken
 } from "../models/certificateModel.js";
+import {
+  isStorable as certificateIsStorable,
+  readStoredCertificate,
+  statStoredCertificate,
+  storeCertificatePdf,
+  normaliseLocale,
+} from "../utils/certificateStore.js";
+import { systemRequest } from "../utils/systemRequest.js";
 import { generateInvoicePDF } from "../utils/pdfGenerator.js";
 import { generateCertificatePdfFromPagePayload } from "../utils/certificatePagePdf.js";
 import { getCaseDetailsById } from "../models/caseModel.js";
@@ -221,7 +229,7 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
       : "#E4590F";
   const extraIdFields = !!Number(caseDetails.plan_extra_id_fields);
 
-  return {
+  const payload = {
     certificateNumber: cert.certificate_number,
     policyNumber: sale.policy_number,
     invoiceNumber: invoice?.invoice_number || null,
@@ -283,6 +291,49 @@ async function buildCertificatePagePayload(req, { cert, sale, caseDetails, invoi
         "ASSUR'ASSISTANCE SARL — Abidjan, Côte d'Ivoire — This certificate is issued electronically and is valid without signature."
     }
   };
+
+  // A policy that has been issued is a fixed document. The payload above is
+  // built from LIVE data on purpose — that is right for a draft, and it was the
+  // existing behaviour — but once a certificate carries a snapshot, the
+  // snapshot wins. Otherwise an insurer correcting a premium or rewording a
+  // benefit silently changes the certificate a travelling customer already
+  // holds, and the two copies disagree with no record of which was issued.
+  return applyIssuedSnapshot(payload, cert.issued_snapshot);
+}
+
+/** Overlay the frozen figures, where one was recorded. */
+function applyIssuedSnapshot(payload, rawSnapshot) {
+  if (!rawSnapshot) return payload;
+  let snap = rawSnapshot;
+  if (typeof snap === "string") {
+    try { snap = JSON.parse(snap); } catch { return payload; }
+  }
+  if (!snap || typeof snap !== "object" || !snap.pricing) return payload;
+
+  return {
+    ...payload,
+    issuedFromSnapshot: true,
+    traveller: {
+      ...payload.traveller,
+      ...(snap.traveller?.passport_or_id ? { passportOrId: snap.traveller.passport_or_id } : {}),
+      ...(snap.traveller?.nationality ? { nationality: snap.traveller.nationality } : {}),
+      ...(snap.traveller?.country_of_residence ? { countryOfResidence: snap.traveller.country_of_residence } : {}),
+    },
+    coverage: {
+      ...payload.coverage,
+      ...(snap.plan?.name ? { planName: snap.plan.name } : {}),
+      ...(snap.pricing?.currency ? { currency: snap.pricing.currency } : {}),
+      ...(snap.trip?.validity_days != null ? { validityDays: snap.trip.validity_days } : {}),
+      ...(snap.trip?.destination ? { destinations: snap.trip.destination } : {}),
+    },
+    pricing: {
+      ...payload.pricing,
+      premiumAmount: Number(snap.pricing.premium) || payload.pricing.premiumAmount,
+      tax: Number(snap.pricing.tax) || 0,
+      total: Number(snap.pricing.total) || payload.pricing.total,
+      ageBand: snap.pricing.age_band ?? payload.pricing.ageBand,
+    },
+  };
 }
 
 /**
@@ -318,6 +369,47 @@ export const getCertificatePageData = async (req, res) => {
 /**
  * Same JSON as /certificate/:id/page — no auth; lookup by certificates.public_token (QR).
  */
+/**
+ * The certificate as a PDF, by its public token.
+ *
+ * Unauthenticated BY DESIGN, exactly like the JSON endpoint the QR code already
+ * points at: the 48-hex token is the credential. It exists because WhatsApp
+ * delivers a document by https link that META's servers fetch, not the
+ * customer's phone — so the link cannot require a session cookie or a bearer
+ * token.
+ *
+ * `?lang=fr` chooses the language, because the conversation knows which one the
+ * customer is reading in and Accept-Language from Meta's fetcher does not.
+ */
+export const downloadCertificatePublic = async (req, res) => {
+  try {
+    const cert = await getCertificateByPublicToken(req.params.token);
+    if (!cert) return res.status(404).json({ message: "Certificate not found" });
+
+    const sale = await getSaleById(cert.sale_id);
+    if (!sale) return res.status(404).json({ message: "Sale not found" });
+    if (sale.deleted_at) return res.status(410).json({ message: "This policy has been cancelled" });
+
+    const caseDetails = await getCaseDetailsById(sale.case_id);
+    if (!caseDetails) return res.status(404).json({ message: "Case not found" });
+
+    const locale = String(req.query.lang || "").toLowerCase().startsWith("fr") ? "fr" : "en";
+    const rendered = await certificatePdfBufferForSaleId(sale.id, req, { locale });
+    if (!rendered) return res.status(404).json({ message: "Certificate not found" });
+    const pdfBuffer = rendered.pdfBuffer;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Length", pdfBuffer.length);
+    res.setHeader("Content-Disposition", `inline; filename="${cert.certificate_number}.pdf"`);
+    // The token is the credential, so this must not be cached by a shared proxy.
+    res.setHeader("Cache-Control", "private, max-age=300");
+    return res.send(pdfBuffer);
+  } catch (err) {
+    console.error("Error rendering the public certificate PDF:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 export const getCertificatePageDataPublic = async (req, res) => {
   try {
     const token = req.params.token;
@@ -417,10 +509,39 @@ export const downloadInvoice = async (req, res) => {
   }
 };
 
-/** PDF buffer for a sale id — same layout as printable certificate page */
-async function certificatePdfBufferForSaleId(saleId, req) {
+/**
+ * The certificate PDF for a sale — the one place it is produced.
+ *
+ * Serves the stored file when there is one, renders and stores it when there is
+ * not, and renders without storing for a legacy certificate that carries no
+ * frozen snapshot (see utils/certificateStore.js for why that distinction
+ * exists).
+ *
+ * @param {number|string} saleId
+ * @param {object} [req]   an Express request, or nothing for a background caller
+ * @param {object} [opts]
+ * @param {"fr"|"en"|null} [opts.locale]
+ * @param {boolean} [opts.useStore]  false re-renders even when a file exists
+ */
+export async function certificatePdfBufferForSaleId(saleId, req = null, { locale = null, useStore = true } = {}) {
   const cert = await getCertificateBySaleId(saleId);
   if (!cert) return null;
+
+  const loc = normaliseLocale(locale || (req ? invoiceLocaleFromReq(req) : "en"));
+
+  if (useStore && certificateIsStorable(cert)) {
+    const hit = readStoredCertificate(cert.certificate_number, loc);
+    if (hit) {
+      return {
+        pdfBuffer: hit.buffer,
+        certificate_number: cert.certificate_number,
+        bytes: hit.bytes,
+        relativePath: hit.relativePath,
+        fromStore: true,
+        locale: loc,
+      };
+    }
+  }
 
   const saleDetails = await getSaleById(cert.sale_id);
   if (!saleDetails) return null;
@@ -429,14 +550,54 @@ async function certificatePdfBufferForSaleId(saleId, req) {
   if (!caseDetails) return null;
 
   const invoice = await getInvoiceBySaleId(saleId);
-  const payload = await buildCertificatePagePayload(req, {
+  const payload = await buildCertificatePagePayload(req || systemRequest({ locale: loc }), {
     cert,
     sale: saleDetails,
     caseDetails,
     invoice
   });
-  const pdfBuffer = await generateCertificatePdfFromPagePayload(payload, true);
-  return { pdfBuffer, certificate_number: cert.certificate_number };
+  const pdfBuffer = await generateCertificatePdfFromPagePayload(payload, true, { locale: loc });
+
+  let relativePath = null;
+  if (certificateIsStorable(cert)) {
+    // Best effort by design: the caller already holds the bytes, so a full disk
+    // must not turn a certificate download into a 500.
+    const stored = await storeCertificatePdf({
+      certificateId: cert.id,
+      certificateNumber: cert.certificate_number,
+      locale: loc,
+      buffer: pdfBuffer,
+    });
+    if (stored?.ok) relativePath = stored.relativePath;
+    else if (stored) console.error("Could not store the certificate PDF:", stored.error);
+  }
+
+  return {
+    pdfBuffer,
+    certificate_number: cert.certificate_number,
+    bytes: pdfBuffer.length,
+    relativePath,
+    fromStore: false,
+    locale: loc,
+  };
+}
+
+/**
+ * How big the delivered document is, without reading it when we can avoid it.
+ *
+ * Used by the WhatsApp delivery to decide between a document and a link. Returns
+ * null when the size cannot be established cheaply, and the caller treats that
+ * as "send it and let Meta answer", which is the behaviour it had before.
+ */
+export async function certificateDocumentSize(saleId, { locale = null } = {}) {
+  const cert = await getCertificateBySaleId(saleId);
+  if (!cert) return null;
+  const loc = normaliseLocale(locale);
+  const stat = statStoredCertificate(cert.certificate_number, loc);
+  if (stat) return { bytes: stat.bytes, fromStore: true };
+  const rendered = await certificatePdfBufferForSaleId(saleId, null, { locale: loc });
+  if (!rendered) return null;
+  return { bytes: rendered.bytes, fromStore: Boolean(rendered.fromStore) };
 }
 
 /** Invoice PDF buffer for a sale id (group ZIP) */

@@ -1,12 +1,135 @@
 /**
- * Certificate PDF matching the browser certificate print layout (English labels).
+ * Certificate PDF matching the browser certificate print layout.
  * Compact single-page A4 for ZIP downloads and /sales/certificate/:id.
+ *
+ * BILINGUAL. The labels were hardcoded in English while the browser version was
+ * fully translated, so a French customer's emailed certificate and the one they
+ * printed from the portal did not match. Labels now come from CERT_I18N and the
+ * locale is chosen by the caller, the same way the invoice PDF already did it.
+ *
+ * CHARACTER SAFETY. pdfkit's base-14 fonts encode WinAnsi (cp1252) and no font
+ * is embedded. Today's French text happens to fit, but traveller names and
+ * per-plan benefit labels are interpolated raw, so the first name containing a
+ * character outside cp1252 — a Turkish ı, a Polish ł, anything Cyrillic — would
+ * throw or mangle mid-render. `safeText` folds those to their closest Latin-1
+ * equivalent so a certificate is always produced.
  */
 import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
 
 const ORANGE = "#E4590F";
+
+/** Labels, in the two languages the platform sells in. */
+const CERT_I18N = {
+  en: {
+    docTitle: "Insurance certificate",
+    certifies:
+      "This is to certify that the insured has a valid travel insurance policy, providing coverage as detailed in the terms and conditions :",
+    insured: "Insured",
+    givenNames: "Given Names",
+    surname: "Surname",
+    dateOfBirth: "Date of Birth",
+    gender: "Gender",
+    nationality: "Nationality",
+    residence: "Country of residence",
+    period: "Period of stay",
+    days: "N° Days",
+    destinations: "Destination(s)",
+    validity: "Validity (N° Days)",
+    email: "Email",
+    phone: "Phone Number",
+    plan: "Plan",
+    currency: "Currency",
+    premium: "Premium",
+    age: "Age",
+    benefitsIntro: "This coverage entitles the holder to the following main benefits :",
+    noBenefits: "No benefit rows configured for this plan.",
+    colTravel: "Travel",
+    colBenefits: "Benefits",
+    colLevels: "Levels",
+    contact: "Kindly contact immediately Assur'Assistance if you need any assistance on:",
+    whatsapp: "WhatsApp",
+    website: "Our website",
+    certificateNo: "Certificate No",
+    policyNo: "Policy No",
+    invoiceNo: "Invoice No",
+    worldwide: "Worldwide",
+    footer:
+      "This certificate is issued electronically and is valid without signature.",
+  },
+  fr: {
+    docTitle: "Attestation d'assurance",
+    certifies:
+      "Nous certifions que l'assuré est titulaire d'une police d'assurance voyage en cours de validité, offrant les garanties détaillées dans les conditions générales :",
+    insured: "Assuré",
+    givenNames: "Prénoms",
+    surname: "Nom",
+    dateOfBirth: "Date de naissance",
+    gender: "Sexe",
+    nationality: "Nationalité",
+    residence: "Pays de résidence",
+    period: "Période de séjour",
+    days: "N° de jours",
+    destinations: "Destination(s)",
+    validity: "Validité (N° de jours)",
+    email: "E-mail",
+    phone: "Téléphone",
+    plan: "Formule",
+    currency: "Devise",
+    premium: "Prime",
+    age: "Âge",
+    benefitsIntro: "Cette couverture donne droit aux principales garanties suivantes :",
+    noBenefits: "Aucune garantie configurée pour cette formule.",
+    colTravel: "Voyage",
+    colBenefits: "Garanties",
+    colLevels: "Montants",
+    contact: "Contactez immédiatement Assur'Assistance si vous avez besoin d'assistance :",
+    whatsapp: "WhatsApp",
+    website: "Notre site",
+    certificateNo: "N° d'attestation",
+    policyNo: "N° de police",
+    invoiceNo: "N° de facture",
+    worldwide: "Monde entier",
+    footer:
+      "Cette attestation est émise par voie électronique et est valable sans signature.",
+  },
+};
+
+const labelsFor = (locale) => (String(locale).toLowerCase().startsWith("fr") ? CERT_I18N.fr : CERT_I18N.en);
+
+/**
+ * Fold anything pdfkit's WinAnsi encoding cannot represent.
+ *
+ * Without this a single character outside cp1252 in a traveller's name — which
+ * we interpolate straight from the database — breaks the whole render. A folded
+ * name is imperfect; a certificate that fails to generate is worse.
+ */
+const CP1252_FOLD = {
+  "œ": "oe", "Œ": "OE", "ı": "i", "İ": "I", "ł": "l", "Ł": "L",
+  "đ": "d", "Đ": "D", "ħ": "h", "ŋ": "n", "ŧ": "t", "ſ": "s",
+  "–": "-", "—": "-", "‒": "-", "―": "-", "‘": "'", "’": "'",
+  "“": '"', "”": '"', "„": '"', "…": "...", "′": "'", "″": '"',
+  "≥": ">=", "≤": "<=", "≠": "!=", "→": "->", "←": "<-",
+};
+
+export function safeText(value) {
+  if (value === null || value === undefined) return "";
+  // Compose first, so "e" + combining acute becomes "é" — which cp1252 HAS and
+  // we must not strip. Only what is still outside Latin-1 gets folded.
+  let out = String(value).normalize("NFC");
+  out = out.replace(/[^\u0000-\u00ff]/g, (ch) => {
+    if (CP1252_FOLD[ch]) return CP1252_FOLD[ch];
+    // A combining mark still here is one NFC could not attach to its letter —
+    // "t" + combining acute has no precomposed form. Drop the mark and keep the
+    // letter; replacing it with "?" would put a question mark mid-word.
+    if (/[\u0300-\u036f]/.test(ch)) return "";
+    const folded = ch.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return /^[\u0000-\u00ff]*$/.test(folded) && folded ? folded : "?";
+  });
+  return out;
+}
+
 const GRAY_LINE = "#CCCCCC";
 
 /** Accepts "#RRGGBB" or "#RRGGBBAA"; falls back to brand orange so old plans look the same. */
@@ -64,12 +187,16 @@ function tryImagePath(...candidates) {
  * @param {boolean} returnBuffer
  * @returns {Promise<Buffer|string>}
  */
-export function generateCertificatePdfFromPagePayload(payload, returnBuffer = true) {
+export function generateCertificatePdfFromPagePayload(payload, returnBuffer = true, options = {}) {
+  // The locale is the caller's to choose: the browser page takes it from
+  // ?lang=, the download endpoint from Accept-Language, and the WhatsApp
+  // delivery from the conversation's own language.
+  const L = labelsFor(options.locale || payload?.locale || "en");
   const doc = new PDFDocument({
     size: "A4",
     margin: 20,
     bufferPages: true,
-    info: { Title: "Insurance certificate", Author: "Assur'Assistance" }
+    info: { Title: L.docTitle, Author: "Assur'Assistance" }
   });
 
   return new Promise((resolve, reject) => {
@@ -80,13 +207,17 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
     } else {
-      const dir = path.join(process.cwd(), "uploads", "certificates");
+      // NOT under uploads/, which is publicly served: a certificate number is
+      // sequential and the document carries a passport number. utils/certificateStore.js
+      // is the real writer; this branch exists for callers that want a file and
+      // nothing more.
+      const dir = path.join(process.cwd(), "storage", "certificates");
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       const fileName = `${payload.certificateNumber}.pdf`;
       const filePath = path.join(dir, fileName);
       stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
-      stream.on("finish", () => resolve(`/uploads/certificates/${fileName}`));
+      stream.on("finish", () => resolve(`storage/certificates/${fileName}`));
       stream.on("error", reject);
     }
 
@@ -147,7 +278,7 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
 
     doc.fillColor("#000").font("Helvetica").fontSize(7.5);
     doc.text(
-      "This is to certify that the insured has a valid travel insurance policy, providing coverage as detailed in the terms and conditions :",
+      L.certifies,
       left,
       y,
       { width: w, lineGap: 1 }
@@ -199,36 +330,36 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
         .stroke();
     }
 
-    section("Insured");
+    section(L.insured);
     const tr = payload.traveller || {};
     const idLabel = extraIdFields
       ? "N° Passport / N° Laissez-passer / N° GPGL"
       : "N° Passport";
-    row2("Given Names", (tr.givenNames || "").toUpperCase(), "Surname", (tr.surname || "").toUpperCase());
-    row2("Date of Birth", tr.dateOfBirth, idLabel, tr.passportOrId);
-    row2("Gender", tr.gender, "Nationality", tr.nationality);
-    rowFull("Country of residence", tr.countryOfResidence);
+    row2(L.givenNames, safeText(tr.givenNames).toUpperCase(), L.surname, safeText(tr.surname).toUpperCase());
+    row2(L.dateOfBirth, safeText(tr.dateOfBirth), idLabel, safeText(tr.passportOrId));
+    row2(L.gender, safeText(tr.gender), L.nationality, safeText(tr.nationality));
+    rowFull(L.residence, safeText(tr.countryOfResidence));
 
-    const scope = (payload.coverage && payload.coverage.worldwideLabel) || "Worldwide";
+    const scope = safeText((payload.coverage && payload.coverage.worldwideLabel) || L.worldwide);
     section(`Coverage Details – ${scope}`);
     const cov = payload.coverage || {};
     const period = `From ${cov.periodFrom || "—"} to ${cov.periodTo || "—"}`;
-    row2("Period of stay", period, "N° Days", String(cov.stayDays ?? "—"));
+    row2(L.period, period, L.days, String(cov.stayDays ?? "—"));
     row2(
-      "Destination(s)",
+      L.destinations,
       (cov.destinations || "—").toString().toUpperCase(),
-      "Validity (N° Days)",
+      L.validity,
       String(cov.validityDays ?? "—")
     );
-    row2("Email", cov.email, "Phone Number", cov.phone);
-    row2("Plan", cov.planName, "Currency", currencyLabel(cov.currency));
+    row2(L.email, safeText(cov.email), L.phone, safeText(cov.phone));
+    row2(L.plan, safeText(cov.planName), L.currency, currencyLabel(cov.currency));
 
     const pr = payload.pricing || {};
     if (pr.showPremium) {
       const amount = Number(pr.planPremium) || 0;
       const cur = currencyLabel(cov.currency);
       rowFull(
-        "Premium",
+        L.premium,
         `${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${cur}`
       );
     }
@@ -240,7 +371,7 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
       pr.ageBand !== "standard" &&
       pr.ageBand !== "unknown"
     ) {
-      section("Age");
+      section(L.age);
       const mult = pr.ageMultiplier ?? 1;
       rowFull(`Age adjustment (×${mult})`, pr.ageBand?.trim() || "—");
     }
@@ -252,7 +383,7 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
     }
 
     doc.font("Helvetica").fontSize(7.5).text(
-      "This coverage entitles the holder to the following main benefits :",
+      L.benefitsIntro,
       left,
       y,
       { width: w }
@@ -266,14 +397,14 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
     const tableRowMin = 12;
 
     if (!groups.length) {
-      doc.fontSize(6.5).fillColor("#666").text("No benefit rows configured for this plan.", left, y);
+      doc.fontSize(6.5).fillColor("#666").text(L.noBenefits, left, y);
       y = doc.y + 6;
     } else {
       doc.rect(left, y, w, tableRowMin).fill("#f5f5f5").strokeColor(GRAY_LINE).stroke();
       doc.fillColor("#000").font("Helvetica-Bold").fontSize(6);
-      doc.text("Travel", left + 2, y + 3, { width: catW - 4 });
-      doc.text("Benefits", left + catW + 2, y + 3, { width: benW - 4 });
-      doc.text("Levels", left + catW + benW, y + 3, { width: levW - 4, align: "right" });
+      doc.text(L.colTravel, left + 2, y + 3, { width: catW - 4 });
+      doc.text(L.colBenefits, left + catW + 2, y + 3, { width: benW - 4 });
+      doc.text(L.colLevels, left + catW + benW, y + 3, { width: levW - 4, align: "right" });
       y += tableRowMin;
 
       for (const g of groups) {
@@ -324,7 +455,7 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
     y += 4;
     const contact = payload.contact || {};
     doc.font("Helvetica").fontSize(6.5).fillColor("#000");
-    doc.text("Kindly contact immediately Assur'Assistance if you need any assistance on:", left, y, { width: w });
+    doc.text(L.contact, left, y, { width: w });
     y = doc.y + 2;
     const eh = contact.emergencyHelpline || "—";
     const gl = contact.generalLine || "—";
@@ -342,21 +473,21 @@ export function generateCertificatePdfFromPagePayload(payload, returnBuffer = tr
       { width: w }
     );
     y = doc.y + 1;
-    doc.text(`- WhatsApp: ${wa}`, left, y, { width: w });
+    doc.text(`- ${L.whatsapp}: ${safeText(wa)}`, left, y, { width: w });
     y = doc.y + 1;
-    doc.text(`- Our website: ${web}`, left, y, { width: w });
+    doc.text(`- ${L.website}: ${safeText(web)}`, left, y, { width: w });
     y = doc.y + 6;
 
     doc.moveTo(left, y).lineTo(right, y).strokeColor(GRAY_LINE).lineWidth(0.5).stroke();
     y += 5;
 
     doc.font("Helvetica-Bold").fontSize(7);
-    doc.text(`Certificate No: ${payload.certificateNumber}`, left, y);
+    doc.text(`${L.certificateNo}: ${payload.certificateNumber}`, left, y);
     y += 9;
-    doc.text(`Policy No: ${payload.policyNumber}`, left, y);
+    doc.text(`${L.policyNo}: ${payload.policyNumber}`, left, y);
     y += 9;
     if (payload.invoiceNumber) {
-      doc.text(`Invoice No: ${payload.invoiceNumber}`, left, y);
+      doc.text(`${L.invoiceNo}: ${payload.invoiceNumber}`, left, y);
       y += 9;
     }
 

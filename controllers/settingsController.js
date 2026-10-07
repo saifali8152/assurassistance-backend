@@ -39,10 +39,21 @@ import {
   maskSecret,
   generateVerifyToken,
 } from "../utils/appCrypto.js";
+import { getPaymentConfig } from "../utils/payments/config.js";
 import { logActivity } from "../models/activityModel.js";
 import getPool from "../utils/db.js";
 
 const WHATSAPP_KEYS = SETTING_KEYS.filter((k) => k.startsWith("whatsapp."));
+
+// Everything the client fills in that is not WhatsApp: document numbering,
+// company identity, certificate wording and the four payment providers. Kept as
+// one endpoint because they are one screen's worth of "things the insurer owns",
+// and because a second copy of the save logic is a second place for the
+// encryption refusal below to be forgotten.
+const PLATFORM_PREFIXES = ["policy.", "company.", "certificate.", "payment."];
+const PLATFORM_KEYS = SETTING_KEYS.filter((k) =>
+  PLATFORM_PREFIXES.some((prefix) => k.startsWith(prefix))
+);
 
 const ok = (res, data, extra = {}) => res.json({ success: true, data, ...extra });
 const fail = (res, status, code, message, extra = {}) =>
@@ -310,5 +321,141 @@ export const listAttributionCandidates = async (req, res) => {
   } catch (err) {
     console.error("listAttributionCandidates failed:", err);
     return fail(res, 500, "candidates_failed", "Could not load the account list");
+  }
+};
+
+/* ------------------------------------------------- platform settings (M3) */
+
+/**
+ * Numbering, company identity, certificate wording and payment providers.
+ *
+ * Returns the same per-field metadata as the WhatsApp endpoint, so the screen
+ * renders from the registry rather than hardcoding a second copy of it, plus a
+ * per-provider readiness block: an operator needs to know not just "not ready"
+ * but which field is still blank.
+ */
+export const getPlatformSettings = async (req, res) => {
+  try {
+    const resolved = await loadSettings({ force: true });
+    const rows = await getSettingRows(PLATFORM_KEYS);
+    const meta = new Map(rows.map((r) => [r.setting_key, r]));
+
+    const settings = PLATFORM_KEYS.map((key) => {
+      const row = meta.get(key);
+      return {
+        ...presentSetting(key, resolved[key]),
+        updated_at: row?.updated_at || null,
+        updated_by_user_id: row?.updated_by_user_id || null,
+      };
+    });
+
+    const payment = await getPaymentConfig();
+
+    return ok(res, {
+      settings,
+      payment: {
+        enabled: payment.enabled,
+        ready: payment.ready,
+        currency: payment.currency,
+        timeoutMinutes: payment.timeoutMinutes,
+        countries: payment.countries,
+        providers: payment.providers.map((p) => ({
+          code: p.code,
+          label: p.label,
+          enabled: p.enabled,
+          ready: p.ready,
+          missing: p.missing,
+          countries: p.countries,
+        })),
+      },
+      encryptionAvailable: encryptionAvailable(),
+      decryptionErrors: getDecryptionErrors().map((e) => e.key),
+    });
+  } catch (err) {
+    console.error("getPlatformSettings failed:", err);
+    return fail(res, 500, "settings_read_failed", "Could not load the platform settings");
+  }
+};
+
+/**
+ * Save any subset of the platform settings.
+ *
+ * Same two protections as the WhatsApp writer: a secret sent empty means "keep
+ * what is stored" so saving a phone prefix cannot blank an API key, and a write
+ * is refused outright when no master key is configured rather than storing a
+ * credential in plaintext.
+ */
+export const updatePlatformSettings = async (req, res) => {
+  try {
+    const incoming = req.body?.settings ?? req.body;
+    if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) {
+      return fail(res, 400, "validation_error", "Expected an object of setting keys and values");
+    }
+
+    const entries = [];
+    const errors = [];
+    const skipped = [];
+
+    for (const [key, rawValue] of Object.entries(incoming)) {
+      if (!isKnownSettingKey(key) || !PLATFORM_KEYS.includes(key)) {
+        errors.push({ key, message: "Unknown setting key" });
+        continue;
+      }
+      const def = SETTING_REGISTRY[key];
+
+      if (def.secret && (rawValue === undefined || rawValue === "")) {
+        skipped.push(key);
+        continue;
+      }
+
+      const result = validateSettingValue(key, rawValue);
+      if (!result.ok) {
+        errors.push({ key, message: result.message });
+        continue;
+      }
+      entries.push({ key, value: result.value });
+    }
+
+    if (errors.length) {
+      return fail(res, 400, "validation_error", "Some settings could not be saved", { fields: errors });
+    }
+
+    const writingSecret = entries.some(({ key, value }) => SETTING_REGISTRY[key].secret && value !== null);
+    if (writingSecret && !encryptionAvailable()) {
+      return fail(
+        res,
+        503,
+        "encryption_unavailable",
+        "SETTINGS_ENCRYPTION_KEY is not configured on the server, so credentials cannot be stored securely. Generate one with: openssl rand -hex 32"
+      );
+    }
+
+    if (!entries.length) {
+      return ok(res, { changed: [], skipped }, { message: "Nothing to update" });
+    }
+
+    const changed = await saveSettings(entries, req.user?.id);
+    invalidateSettings();
+
+    // Keys only, never values — the audit trail must not become a credential log.
+    await logActivity(req.user.id, `Updated platform settings: ${changed.join(", ")}`).catch(() => {});
+
+    const payment = await getPaymentConfig();
+    return ok(
+      res,
+      {
+        changed,
+        skipped,
+        payment: {
+          enabled: payment.enabled,
+          ready: payment.ready,
+          providers: payment.providers.map((p) => ({ code: p.code, ready: p.ready, missing: p.missing })),
+        },
+      },
+      { message: "Settings saved" }
+    );
+  } catch (err) {
+    console.error("updatePlatformSettings failed:", err);
+    return fail(res, 500, "settings_write_failed", "Could not save the platform settings");
   }
 };

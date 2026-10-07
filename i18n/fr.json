@@ -135,6 +135,42 @@
     "ineligible": "Compte tenu de l'âge de l'assuré, ce devis nécessite une dérogation spécifique. Un conseiller va vous contacter.",
     "noPrice": "Je n'arrive pas à calculer une prime pour cette combinaison. Un conseiller va vous contacter."
   },
+  "payment": {
+    "choose": "Comment souhaitez-vous payer ?",
+    "chooseButton": "Choisir",
+    "sectionTitle": "Opérateurs disponibles",
+    "rowDescription": "Paiement mobile",
+    "askPhone": "Sur quel numéro {{provider}} voulez-vous payer ?\n\nEnvoyez le numéro avec l'indicatif, par exemple 2250700000000.\nRépondez *1* pour utiliser ce numéro WhatsApp.",
+    "useThisNumber": "1",
+    "invalidPhone": "Ce numéro ne semble pas valide. Envoyez-le avec l'indicatif du pays, par exemple 2250700000000.",
+    "wrongPrefix": "Ce numéro ne correspond pas à {{provider}}. Les numéros {{provider}} commencent par {{prefixes}}.",
+    "prompt": "📲 Une demande de paiement de *{{amount}}* a été envoyée au {{msisdn}}.\n\nConfirmez-la sur votre téléphone. Nous vous écrivons dès qu'elle est validée.",
+    "promptHint": "📲 Une demande de paiement de *{{amount}}* a été envoyée au {{msisdn}}.\n\n{{hint}}\n\nNous vous écrivons dès qu'elle est validée.",
+    "waiting": "Nous attendons toujours la confirmation sur votre téléphone. Cela prend généralement moins d'une minute.",
+    "success": "✅ Paiement reçu.\n\nVotre police *{{policy}}* est émise. Votre attestation vous parvient dans un instant.",
+    "successNoPolicy": "✅ Paiement reçu. Nous finalisons votre police et vous l'envoyons dans un instant.",
+    "noProviders": "Aucun moyen de paiement mobile n'est disponible pour votre pays pour le moment. Un conseiller vous contactera pour finaliser le paiement.",
+    "startFailed": "Nous n'avons pas pu lancer le paiement. Réessayez dans un instant ou choisissez un autre opérateur.",
+    "retryPrompt": "Que souhaitez-vous faire ?",
+    "retry": "Réessayer",
+    "switchProvider": "Autre opérateur",
+    "cancel": "Annuler",
+    "cancelled": "Paiement annulé. Votre devis *{{reference}}* reste valable : écrivez-nous quand vous voulez le reprendre.",
+    "failed": {
+      "insufficient_funds": "❌ Solde insuffisant sur ce compte.",
+      "wrong_pin": "❌ Code PIN incorrect.",
+      "customer_cancelled": "❌ Vous avez annulé la demande sur votre téléphone.",
+      "customer_timeout": "⌛ La demande a expiré sans confirmation.",
+      "invalid_number": "❌ Ce numéro n'est pas enregistré chez cet opérateur.",
+      "limit_exceeded": "❌ Le montant dépasse la limite autorisée sur ce compte.",
+      "duplicate_transaction": "❌ Une demande identique est déjà en cours.",
+      "provider_unavailable": "❌ L'opérateur ne répond pas pour le moment.",
+      "provider_rejected": "❌ L'opérateur a refusé la demande.",
+      "configuration_error": "❌ Ce moyen de paiement n'est pas disponible pour le moment.",
+      "unknown": "❌ Le paiement n'a pas abouti."
+    },
+    "expired": "⌛ La demande de paiement a expiré sans confirmation."
+  },
   "error": {
     "required": "Cette information est nécessaire pour continuer. Pouvez-vous la renvoyer ?",
     "name_too_short": "Ce nom semble trop court. Pouvez-vous le renvoyer en entier ?",
@@ -164,6 +200,12 @@
     "generic": "Je n'ai pas compris. Pouvez-vous reformuler ?",
     "tooManyRetries": "Je n'arrive pas à enregistrer cette information. Reprenons plus simplement."
   },
+  "certificate": {
+    "sending": "Je vous renvoie l'attestation de votre police *{{policy}}*. Elle arrive dans un instant. 📄",
+    "none": "Je ne trouve aucune police d'assurance liée à ce numéro. Si vous avez souscrit depuis un autre numéro, écrivez *CONSEILLER* et une personne vous aidera.",
+    "notReady": "Votre police *{{policy}}* n'a pas encore d'attestation disponible. Écrivez *CONSEILLER* : une personne s'en occupe tout de suite.",
+    "alreadySent": "Votre attestation vient de vous être envoyée — regardez juste au-dessus dans cette conversation. Si elle n'est pas arrivée, écrivez *CONSEILLER*."
+  },
   "session": {
     "expired": "Notre échange précédent a expiré. Écrivez *BONJOUR* pour commencer un nouveau devis.",
     "expiredResume": "Notre échange précédent a expiré, mais j'ai conservé vos informations. Souhaitez-vous reprendre ?",
@@ -172,7 +214,7 @@
     "cancelled": "Conversation annulée."
   },
   "help": {
-    "text": "Voici ce que vous pouvez écrire à tout moment :\n\n*RECOMMENCER* — repartir de zéro\n*RETOUR* — revenir à la question précédente\n*AIDE* — afficher ce message\n*CONSEILLER* — être mis en relation avec une personne\n*ENGLISH* — continue in English"
+    "text": "Voici ce que vous pouvez écrire à tout moment :\n\n*RECOMMENCER* — repartir de zéro\n*RETOUR* — revenir à la question précédente\n*AIDE* — afficher ce message\n*ATTESTATION* — recevoir à nouveau votre attestation\n*CONSEILLER* — être mis en relation avec une personne\n*ENGLISH* — continue in English"
   },
   "agent": {
     "requested": "C'est noté. Un conseiller va prendre le relais dès que possible.",

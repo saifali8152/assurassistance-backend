@@ -180,8 +180,8 @@ export function validateGender(input) {
 /**
  * Parse "last name, first name, date of birth" from a single message.
  *
- * Grouping three questions into one is how the flow reaches the 6–8 message
- * target, but it only pays off if parsing is reliable. Accepted separators are
+ * Grouping three questions into one is how the flow keeps the message count
+ * down, but it only pays off if parsing is reliable. Accepted separators are
  * commas, semicolons, pipes and newlines. Space-only input is accepted
  * ONLY in the unambiguous three-token case, because "Jean Marie Dupont
  * 12/03/1990" cannot be split correctly by guessing.
@@ -288,9 +288,8 @@ export function validateDateLoose(input) {
 /**
  * Parse "last name, first name, date of birth, passport number".
  *
- * WHY FOUR FIELDS IN ONE MESSAGE: the milestone targets a complete purchase in
- * 6–8 customer messages. Asking these four separately costs four messages on its
- * own. They group safely because the date and the passport number are both
+ * WHY FOUR FIELDS IN ONE MESSAGE: the whole purchase is meant to fit in single
+ * figures. Asking these four separately costs four messages on its own. They group safely because the date and the passport number are both
  * self-identifying — a date parses as a date, and a passport number is the
  * alphanumeric token — so a wrong assignment is detectable rather than silent.
  *

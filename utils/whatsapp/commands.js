@@ -25,6 +25,7 @@ export const COMMANDS = {
   LANGUAGE_FR: "language_fr",
   LANGUAGE_EN: "language_en",
   CANCEL: "cancel",
+  CERTIFICATE: "certificate",
 };
 
 const TABLE = [
@@ -35,6 +36,39 @@ const TABLE = [
   { command: COMMANDS.LANGUAGE_EN, words: ["english", "anglais", "en anglais", "in english"] },
   { command: COMMANDS.LANGUAGE_FR, words: ["francais", "french", "en francais", "in french"] },
   { command: COMMANDS.CANCEL, words: ["cancel", "annuler", "stop", "arreter"] },
+  // Asking for the certificate again. A customer who has paid and lost the
+  // document should not have to find a human for it, and the words they
+  // actually use are "attestation" and "certificate" — not a command verb.
+  //
+  // Deliberately NOT here: "document", "police", "contrat" on their own. They
+  // are too close to things a customer might legitimately type as an answer,
+  // and misreading an answer as a command is worse than missing a command.
+  {
+    command: COMMANDS.CERTIFICATE,
+    words: [
+      "attestation",
+      "mon attestation",
+      "ma attestation",
+      "mes attestations",
+      "attestation assurance",
+      "mon attestation assurance",
+      "renvoyer attestation",
+      "renvoyer mon attestation",
+      "envoyer mon attestation",
+      "recevoir mon attestation",
+      "ma police assurance",
+      "certificat",
+      "mon certificat",
+      "certificate",
+      "my certificate",
+      "send my certificate",
+      "resend",
+      "resend certificate",
+      "resend my certificate",
+      "my policy document",
+      "insurance certificate",
+    ],
+  },
 ];
 
 const GREETINGS = [
@@ -58,12 +92,34 @@ export function normalizeCommandText(input) {
 export function detectCommand(input) {
   const s = normalizeCommandText(input);
   if (!s) return null;
+  // One intent gets a looser reading: a customer asking for their certificate
+  // back writes a short sentence, not a keyword ("je veux mon attestation svp").
+  // Only this one, and only a short sentence with no digits in it, because for
+  // every other command the whole-message rule below is what stops a legitimate
+  // answer being eaten.
+  if (isCertificateRequest(s)) return COMMANDS.CERTIFICATE;
   // Guard against a long sentence that merely contains a command word.
   if (s.split(" ").length > 4) return null;
   for (const entry of TABLE) {
     if (entry.words.includes(s)) return entry.command;
   }
   return null;
+}
+
+const CERTIFICATE_WORDS = ["attestation", "attestations", "certificat", "certificate"];
+
+/**
+ * @param {string} normalised already through normalizeCommandText
+ */
+export function isCertificateRequest(normalised) {
+  const s = normalizeCommandText(normalised);
+  if (!s) return false;
+  const words = s.split(" ");
+  // Short enough to be a request rather than a sentence that happens to mention
+  // the word, and with no digits — a reply carrying a number is an answer.
+  if (words.length > 5) return false;
+  if (/\d/.test(s)) return false;
+  return words.some((w) => CERTIFICATE_WORDS.includes(w));
 }
 
 export function isGreeting(input) {

@@ -135,6 +135,42 @@
     "ineligible": "Given the age of the insured, this quote requires a specific exemption. An agent will contact you.",
     "noPrice": "I cannot calculate a premium for this combination. An agent will contact you."
   },
+  "payment": {
+    "choose": "How would you like to pay?",
+    "chooseButton": "Choose",
+    "sectionTitle": "Available operators",
+    "rowDescription": "Mobile money",
+    "askPhone": "Which {{provider}} number would you like to pay from?\n\nSend the number with its country code, for example 2250700000000.\nReply *1* to use this WhatsApp number.",
+    "useThisNumber": "1",
+    "invalidPhone": "That number does not look valid. Send it with the country code, for example 2250700000000.",
+    "wrongPrefix": "That number is not a {{provider}} number. {{provider}} numbers start with {{prefixes}}.",
+    "prompt": "📲 A payment request for *{{amount}}* has been sent to {{msisdn}}.\n\nConfirm it on your handset. We will message you as soon as it goes through.",
+    "promptHint": "📲 A payment request for *{{amount}}* has been sent to {{msisdn}}.\n\n{{hint}}\n\nWe will message you as soon as it goes through.",
+    "waiting": "We are still waiting for the confirmation on your handset. It usually takes under a minute.",
+    "success": "✅ Payment received.\n\nYour policy *{{policy}}* has been issued. Your certificate is on its way.",
+    "successNoPolicy": "✅ Payment received. We are finalising your policy and will send it in a moment.",
+    "noProviders": "No mobile money option is available for your country at the moment. An adviser will contact you to complete the payment.",
+    "startFailed": "We could not start the payment. Try again in a moment, or choose another operator.",
+    "retryPrompt": "What would you like to do?",
+    "retry": "Try again",
+    "switchProvider": "Other operator",
+    "cancel": "Cancel",
+    "cancelled": "Payment cancelled. Your quote *{{reference}}* is still valid — write to us whenever you want to pick it up again.",
+    "failed": {
+      "insufficient_funds": "❌ Not enough balance on that account.",
+      "wrong_pin": "❌ Incorrect PIN.",
+      "customer_cancelled": "❌ You cancelled the request on your handset.",
+      "customer_timeout": "⌛ The request expired without a confirmation.",
+      "invalid_number": "❌ That number is not registered with this operator.",
+      "limit_exceeded": "❌ The amount is above the limit allowed on that account.",
+      "duplicate_transaction": "❌ An identical request is already in progress.",
+      "provider_unavailable": "❌ The operator is not responding right now.",
+      "provider_rejected": "❌ The operator declined the request.",
+      "configuration_error": "❌ This payment method is unavailable at the moment.",
+      "unknown": "❌ The payment did not go through."
+    },
+    "expired": "⌛ The payment request expired without a confirmation."
+  },
   "error": {
     "required": "I need this detail to continue. Could you send it again?",
     "name_too_short": "That name looks too short. Could you send it in full?",
@@ -164,6 +200,12 @@
     "generic": "I did not understand. Could you rephrase?",
     "tooManyRetries": "I am having trouble recording this detail. Let's try a simpler way."
   },
+  "certificate": {
+    "sending": "Sending the certificate for policy *{{policy}}* again. It will arrive in a moment. 📄",
+    "none": "I cannot find any policy linked to this number. If you bought from a different number, write *AGENT* and a person will help you.",
+    "notReady": "Policy *{{policy}}* does not have a certificate available yet. Write *AGENT* and someone will sort it out right away.",
+    "alreadySent": "Your certificate was just sent — look a little further up in this conversation. If it did not arrive, write *AGENT*."
+  },
   "session": {
     "expired": "Our previous conversation has expired. Write *HELLO* to start a new quote.",
     "expiredResume": "Our previous conversation expired, but I kept your details. Would you like to resume?",
@@ -172,7 +214,7 @@
     "cancelled": "Conversation cancelled."
   },
   "help": {
-    "text": "Here is what you can write at any time:\n\n*RESTART* — start again from the beginning\n*BACK* — go back to the previous question\n*HELP* — show this message\n*AGENT* — be put in touch with a person\n*FRANCAIS* — continuer en français"
+    "text": "Here is what you can write at any time:\n\n*RESTART* — start again from the beginning\n*BACK* — go back to the previous question\n*HELP* — show this message\n*CERTIFICATE* — get your certificate again\n*AGENT* — be put in touch with a person\n*FRANCAIS* — continuer en français"
   },
   "agent": {
     "requested": "Noted. An agent will take over as soon as possible.",

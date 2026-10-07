@@ -12,7 +12,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { processMessage, renderStep } from "../utils/whatsapp/engine.js";
+import { processMessage, renderStep, resumeAfterPayment } from "../utils/whatsapp/engine.js";
 import { FLOW } from "../utils/whatsapp/flow.default.js";
 
 /* ------------------------------------------------------------------ fixtures */
@@ -50,12 +50,15 @@ const PLAN_B = {
   flat_price: null, fixed_duration_premiums: 0,
 };
 
-function makeCtx({ plans = [PLAN_A, PLAN_B], persist = null, config = {} } = {}) {
+function makeCtx({ plans = [PLAN_A, PLAN_B], persist = null, config = {}, payment = null, startPayment = null } = {}) {
   const persisted = [];
   return {
     ctx: {
       flow: FLOW,
       now: new Date("2026-09-28T00:00:00Z"),
+      // Milestone 3: absent means payment is switched off, which is the
+      // Milestone 2 behaviour every existing test below relies on.
+      payment,
       config: { defaultLanguage: "fr", maxFieldRetries: 3, escalationNumber: null, ...config },
       deps: {
         getCountries: async () => COUNTRIES,
@@ -66,6 +69,9 @@ function makeCtx({ plans = [PLAN_A, PLAN_B], persist = null, config = {} } = {})
           persisted.push(collectedData);
           return { ok: true, quoteReference: "QT-ABCD1234", caseId: 501, travellerId: 301 };
         }),
+        startPayment:
+          startPayment ||
+          (async () => ({ ok: true, transactionId: 77, reference: "PAY-2026-000001", amountText: "20 FCFA" })),
       },
     },
     persisted,
@@ -176,13 +182,20 @@ test("all collected data is correct and complete at confirmation", async () => {
   assert.equal(d.validity_days, 10);
 });
 
-test("the purchase fits the 6-8 customer message target", async () => {
+// The milestone asked for 6–8 customer messages. These pin what the flow
+// ACTUALLY costs, because the number reported by GET /whatsapp/stats is only
+// worth anything if it is the measured one. If a change here moves a count, the
+// claim in the API docs and in whatsappController.MESSAGE_BUDGET moves with it.
+test("a purchase with a plan choice costs nine customer messages", async () => {
   const c = newConversation();
   await runHappyPath(c);
   await c.tap("plan:11");
   await c.tap("quote:confirm");
-  assert.ok(c.customerMessages <= 9, `used ${c.customerMessages} messages`);
-  assert.equal(c.customerMessages, 9, "greeting + menu tap + 5 answers + plan + confirm");
+  assert.equal(
+    c.customerMessages,
+    9,
+    "opening message + menu tap + 5 answers + plan + confirm"
+  );
 });
 
 test("a single available plan is auto-selected, saving a message", async () => {
@@ -191,6 +204,8 @@ test("a single available plan is auto-selected, saving a message", async () => {
   assert.equal(c.step, "review", "went straight to the quote");
   assert.equal(c.data.plan_id, 11);
   assert.equal(c.customerMessages, 7);
+  await c.tap("quote:confirm");
+  assert.equal(c.customerMessages, 8, "the cheapest a complete purchase can be");
 });
 
 test("a customer who skips the menu and just says what they want is served", async () => {
@@ -811,4 +826,297 @@ test("a plan with no guarantees and no summary simply omits the coverage block",
   const body = c.transcript[c.transcript.length - 1].out.join("\n");
   assert.ok(!/Garanties principales/.test(body));
   assert.match(body, /Prime à payer/, "the rest of the quote is unaffected");
+});
+
+/* ======================================================================== */
+/* Milestone 3 — paying inside the conversation                              */
+/* ======================================================================== */
+
+const TWO_PROVIDERS = {
+  enabled: true,
+  options: [
+    { code: "orange", label: "Orange Money", msisdnPrefixes: ["07", "08"] },
+    { code: "wave", label: "Wave", msisdnPrefixes: [] },
+  ],
+};
+const ONE_PROVIDER = {
+  enabled: true,
+  options: [{ code: "wave", label: "Wave", msisdnPrefixes: [] }],
+};
+
+/** Run the standard happy path, pick a plan, then confirm the quote. */
+async function toPayment(options) {
+  const c = newConversation(options);
+  await runHappyPath(c);
+  // runHappyPath stops at the plan list when more than one plan prices.
+  if (c.step === "plan") await c.tap("plan:11");
+  const confirmed = await c.tap("quote:confirm");
+  return { c, confirmed };
+}
+
+test("paying in the chat costs two more messages, or one with a single operator", async () => {
+  const two = await toPayment({ payment: TWO_PROVIDERS });
+  assert.equal(two.c.customerMessages, 9, "nine to get to the operator question");
+  await two.c.tap("pay:wave");
+  await two.c.send("1");
+  assert.equal(two.c.step, "payment_wait");
+  assert.equal(two.c.customerMessages, 11, "the most a complete purchase can cost");
+
+  const one = await toPayment({ plans: [PLAN_A], payment: ONE_PROVIDER });
+  assert.equal(one.c.step, "payment_phone", "a single operator is chosen for the customer");
+  await one.c.send("1");
+  assert.equal(one.c.step, "payment_wait");
+  assert.equal(one.c.customerMessages, 9, "one plan, one operator: nine messages, paid");
+});
+
+test("with payment off, confirming still ends the Milestone 2 way", async () => {
+  const { c, confirmed } = await toPayment({});
+  assert.equal(c.step, "done");
+  assert.equal(c.session.status, "completed");
+  assert.match(allBodies(confirmed), /QT-ABCD1234/);
+});
+
+test("with payment on, confirming offers the operators instead of ending", async () => {
+  const { c, confirmed } = await toPayment({ payment: TWO_PROVIDERS });
+  assert.equal(c.step, "payment_provider");
+  assert.notEqual(c.session.status, "completed");
+  const reply = confirmed.replies.at(-1);
+  assert.equal(reply.kind, "list");
+  assert.deepEqual(
+    reply.sections[0].rows.map((r) => r.id),
+    ["pay:orange", "pay:wave"]
+  );
+});
+
+test("a single operator is auto-selected, saving the customer a message", async () => {
+  const { c, confirmed } = await toPayment({ payment: ONE_PROVIDER });
+  assert.equal(c.step, "payment_phone");
+  assert.equal(c.data.payment_provider, "wave");
+  assert.match(allBodies(confirmed), /Wave/);
+});
+
+test("choosing an operator asks which number to charge", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  const r = await c.tap("pay:orange");
+  assert.equal(c.step, "payment_phone");
+  assert.equal(c.data.payment_provider, "orange");
+  assert.match(lastBody(r), /Orange Money/);
+});
+
+test("the operator can be typed instead of tapped", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.send("wave");
+  assert.equal(c.data.payment_provider, "wave");
+});
+
+test("replying 1 pays from the WhatsApp number", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:wave");
+  await c.send("1");
+  assert.equal(c.data.payment_msisdn, "2250718923194");
+  assert.equal(c.step, "payment_wait");
+});
+
+test("a different number can be used to pay", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:wave");
+  await c.send("225 07 99 88 77 66");
+  assert.equal(c.data.payment_msisdn, "22507998877 66".replace(/\D/g, ""));
+  assert.equal(c.step, "payment_wait");
+});
+
+test("a number that is not the operator's is refused with its prefixes", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:orange");
+  const r = await c.send("225019988776"); // 01 is not an Orange prefix
+  assert.match(lastBody(r), /Orange Money/);
+  assert.match(lastBody(r), /07/);
+  assert.equal(c.step, "payment_phone", "the customer stays on the question");
+  assert.equal(c.data.payment_msisdn, undefined);
+});
+
+test("an implausible number is refused before it reaches the provider", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:wave");
+  const r = await c.send("123");
+  assert.match(lastBody(r), /2250700000000/);
+  assert.equal(c.step, "payment_phone");
+});
+
+test("starting a payment parks the conversation and records the transaction", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:wave");
+  const r = await c.send("1");
+  assert.equal(c.step, "payment_wait");
+  assert.equal(c.session.paymentTransactionId, 77);
+  assert.match(lastBody(r), /20 FCFA/);
+  assert.match(lastBody(r), /2250718923194/);
+});
+
+test("a provider hint is shown when the operator gives one", async () => {
+  const { c } = await toPayment({
+    payment: TWO_PROVIDERS,
+    startPayment: async () => ({
+      ok: true, transactionId: 9, amountText: "20 FCFA", customerHint: "Dial *144# to confirm",
+    }),
+  });
+  await c.tap("pay:wave");
+  const r = await c.send("1");
+  assert.match(lastBody(r), /Dial \*144# to confirm/);
+});
+
+test("a provider that refuses to start explains why and offers a way out", async () => {
+  const { c } = await toPayment({
+    payment: TWO_PROVIDERS,
+    startPayment: async () => ({ ok: false, failureCode: "provider_unavailable" }),
+  });
+  await c.tap("pay:wave");
+  const r = await c.send("1");
+  assert.equal(c.step, "payment_retry");
+  const bodies = allBodies(r);
+  assert.match(bodies, /opérateur ne répond pas/i);
+  assert.deepEqual(r.replies.at(-1).buttons.map((b) => b.id), ["pay:retry", "pay:switch", "pay:cancel"]);
+});
+
+test("switching operator keeps every answer the customer already gave", async () => {
+  const { c } = await toPayment({
+    payment: TWO_PROVIDERS,
+    startPayment: async () => ({ ok: false, failureCode: "provider_unavailable" }),
+  });
+  await c.tap("pay:orange");
+  await c.send("225 07 11 22 33 44");
+  const before = { ...c.data };
+  await c.tap("pay:switch");
+  assert.equal(c.step, "payment_provider");
+  assert.equal(c.data.last_name, before.last_name);
+  assert.equal(c.data.destination, before.destination);
+  assert.equal(c.data.plan_id, before.plan_id);
+});
+
+test("retrying re-uses the same operator and number", async () => {
+  let attempts = 0;
+  const { c } = await toPayment({
+    payment: TWO_PROVIDERS,
+    startPayment: async ({ collectedData }) => {
+      attempts += 1;
+      assert.equal(collectedData.payment_provider, "wave");
+      assert.equal(collectedData.payment_msisdn, "2250718923194");
+      return attempts === 1
+        ? { ok: false, failureCode: "provider_unavailable" }
+        : { ok: true, transactionId: 78, amountText: "20 FCFA" };
+    },
+  });
+  await c.tap("pay:wave");
+  await c.send("1");
+  assert.equal(c.step, "payment_retry");
+  await c.tap("pay:retry");
+  assert.equal(attempts, 2);
+  assert.equal(c.step, "payment_wait");
+  assert.equal(c.session.paymentTransactionId, 78);
+});
+
+test("cancelling at the payment stage keeps the quote reference", async () => {
+  const { c } = await toPayment({
+    payment: TWO_PROVIDERS,
+    startPayment: async () => ({ ok: false, failureCode: "unknown" }),
+  });
+  await c.tap("pay:wave");
+  await c.send("1");
+  const r = await c.tap("pay:cancel");
+  assert.equal(c.session.status, "cancelled");
+  assert.match(lastBody(r), /QT-ABCD1234/);
+});
+
+test("with payment on but no operator for the country, the adviser path is used", async () => {
+  const { c, confirmed } = await toPayment({ payment: { enabled: true, options: [] } });
+  assert.equal(c.step, "done");
+  assert.equal(c.session.status, "completed");
+  assert.match(allBodies(confirmed), /conseiller/i);
+});
+
+/* ---------------------------------------------------- waking the conversation */
+
+test("a completed payment finishes the conversation with the policy number", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:wave");
+  await c.send("1");
+
+  const resumed = await resumeAfterPayment({
+    session: c.session,
+    outcome: { status: "completed", policyNumber: "AA-2026-000042" },
+    ctx: c.ctx,
+  });
+  assert.match(resumed.replies[0].body, /AA-2026-000042/);
+  assert.equal(resumed.patch.status, "completed");
+  assert.equal(resumed.patch.currentStep, "done");
+});
+
+test("a completed payment with no policy number still confirms receipt", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:wave");
+  await c.send("1");
+  const resumed = await resumeAfterPayment({
+    session: c.session,
+    outcome: { status: "completed" },
+    ctx: c.ctx,
+  });
+  assert.match(resumed.replies[0].body, /Paiement reçu/i);
+});
+
+test("a failed payment names the reason and offers retry, switch or cancel", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:wave");
+  await c.send("1");
+
+  const resumed = await resumeAfterPayment({
+    session: c.session,
+    outcome: { status: "failed", failureCode: "insufficient_funds" },
+    ctx: c.ctx,
+  });
+  assert.match(resumed.replies[0].body, /Solde insuffisant/i);
+  assert.deepEqual(resumed.replies.at(-1).buttons.map((b) => b.id), ["pay:retry", "pay:switch", "pay:cancel"]);
+  assert.equal(resumed.patch.currentStep, "payment_retry");
+});
+
+test("an expired payment says so rather than blaming the customer", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:wave");
+  await c.send("1");
+  const resumed = await resumeAfterPayment({
+    session: c.session,
+    outcome: { status: "expired" },
+    ctx: c.ctx,
+  });
+  assert.match(resumed.replies[0].body, /expiré/i);
+});
+
+test("every failure code has wording in both languages", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:wave");
+  await c.send("1");
+
+  for (const lang of ["fr", "en"]) {
+    for (const code of [
+      "insufficient_funds", "wrong_pin", "customer_cancelled", "customer_timeout",
+      "invalid_number", "limit_exceeded", "duplicate_transaction",
+      "provider_unavailable", "provider_rejected", "configuration_error", "unknown",
+    ]) {
+      const resumed = await resumeAfterPayment({
+        session: { ...c.session, language: lang },
+        outcome: { status: "failed", failureCode: code },
+        ctx: c.ctx,
+      });
+      const body = resumed.replies[0].body;
+      assert.ok(body && !body.includes("payment.failed."), `${lang}/${code} has no wording: ${body}`);
+    }
+  }
+});
+
+test("a message sent while waiting does not advance the payment", async () => {
+  const { c } = await toPayment({ payment: TWO_PROVIDERS });
+  await c.tap("pay:wave");
+  await c.send("1");
+  const r = await c.send("has it worked yet?");
+  assert.equal(c.step, "payment_wait", "the customer cannot talk their way past a pending payment");
+  assert.match(lastBody(r), /attendons/i);
 });

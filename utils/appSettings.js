@@ -103,6 +103,13 @@ export async function getWhatsAppConfig() {
     maxFieldRetries: Number(s["whatsapp.max_field_retries"]) || 3,
     escalationNumber: s["whatsapp.escalation_number"] || null,
     attributionUserId: s["whatsapp.attribution_user_id"] || null,
+    // Template names were registered in Milestone 2 but never exposed here, so
+    // nothing could send one. Milestone 3 needs them: once the 24-hour window
+    // closes, a payment confirmation can only go out as an approved template.
+    templateLanguage: s["whatsapp.template_language"] || "fr",
+    templatePaymentReceived: s["whatsapp.template_payment_received"] || null,
+    templateCertificateReady: s["whatsapp.template_certificate_ready"] || null,
+    templateQuoteReminder: s["whatsapp.template_quote_reminder"] || null,
   };
 
   cfg.missing = [
@@ -116,6 +123,22 @@ export async function getWhatsAppConfig() {
   cfg.ready = cfg.enabled && cfg.missing.length === 0;
 
   return cfg;
+}
+
+/**
+ * Document number formats, with the registry defaults applied.
+ *
+ * Read on every sale, so it rides the same 30-second cache as everything else:
+ * an operator changing the prefix sees it take effect within half a minute
+ * without a restart.
+ */
+export async function getNumberFormats() {
+  const s = await loadSettings();
+  return {
+    policy: s["policy.number_format"] || "AA-{YYYY}-{SEQ:6}",
+    invoice: s["policy.invoice_format"] || "INV-{YYYY}-{SEQ:6}",
+    certificate: s["policy.certificate_format"] || "CERT-{YYYY}-{SEQ:6}",
+  };
 }
 
 /** Absolute webhook URL to paste into the Meta dashboard. */

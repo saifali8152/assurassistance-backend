@@ -8,9 +8,9 @@
 // (or to a row in `whatsapp_flows`) instead of a rewrite. The engine walks this
 // definition and knows nothing about insurance.
 //
-// MESSAGE BUDGET — the milestone targets a complete purchase in 6–8 customer
-// messages. Asking these fields one at a time costs thirteen, so three things are
-// grouped or removed:
+// MESSAGE BUDGET — the milestone asked for 6–8 customer messages per purchase.
+// Asking these fields one at a time costs thirteen before anything else, so three
+// things are grouped or removed:
 //   * `identity` collects last name, first name, date of birth AND passport in
 //     one message (self-identifying tokens, so mis-assignment is detectable).
 //   * `destination_dates` collects destination plus both travel dates together.
@@ -19,8 +19,13 @@
 //   * the review screen IS the quote: it shows the premium with Confirm /
 //     Change / Cancel, so confirming costs one tap, not two.
 //
-// Happy path: menu tap, identity, gender, nationality, destination+dates, email,
-// plan tap, confirm = 8 customer messages — and 7 when only one plan matches.
+// Happy path, counting the message that OPENS the conversation (it costs the
+// customer a message and is answered with the menu): greeting, menu tap,
+// identity, gender, nationality, destination+dates, email, plan tap, confirm =
+// 9 — and 8 when only one plan matches. Paying in the chat adds the operator
+// choice and the number to charge, so the real budget is 8 to 11, which is what
+// GET /whatsapp/stats reports. Above the target, and stated rather than rounded
+// down.
 //
 // Each step:
 //   key           unique id, stored on the session
@@ -244,6 +249,57 @@ export const FLOW = {
       listButtonKey: "review.editButton",
       parser: "editChoice",
       next: "review",
+    },
+
+    // ---- payment (Milestone 3) ---------------------------------------------
+    // Reached from `review` only when payment is switched on AND at least one
+    // provider is configured for the customer's country. Otherwise `review`
+    // still goes straight to `done` and an adviser calls, exactly as before —
+    // so an unconfigured platform behaves the way it did in Milestone 2.
+
+    payment_provider: {
+      key: "payment_provider",
+      type: "dynamic_list",
+      source: "providers",
+      promptKey: "payment.choose",
+      listButtonKey: "payment.chooseButton",
+      parser: "paymentProvider",
+      stores: ["payment_provider"],
+      next: "payment_phone",
+    },
+
+    payment_phone: {
+      key: "payment_phone",
+      type: "text",
+      promptKey: "payment.askPhone",
+      parser: "paymentPhone",
+      stores: ["payment_msisdn"],
+      next: "payment_wait",
+    },
+
+    // Where the conversation parks. Nothing the customer sends advances it —
+    // only the provider's callback, or the sweeper giving up, does. A message
+    // arriving here is answered with "still waiting" rather than treated as an
+    // answer to a question we did not ask.
+    payment_wait: {
+      key: "payment_wait",
+      type: "payment_wait",
+      promptKey: "payment.waiting",
+    },
+
+    // Offered after a failure, so a customer can retry or switch operator
+    // without re-entering a single field.
+    payment_retry: {
+      key: "payment_retry",
+      type: "buttons",
+      promptKey: "payment.retryPrompt",
+      options: [
+        { id: "pay:retry", labelKey: "payment.retry" },
+        { id: "pay:switch", labelKey: "payment.switchProvider" },
+        { id: "pay:cancel", labelKey: "payment.cancel" },
+      ],
+      parser: "paymentRetryChoice",
+      next: "payment_wait",
     },
 
     done: {

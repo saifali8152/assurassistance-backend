@@ -5,8 +5,8 @@ export function generatePublicToken() {
   return randomBytes(24).toString("hex");
 }
 
-export const createCertificate = async ({ sale_id, certificate_number, coverage_summary, public_token }) => {
-  const pool = getPool();
+export const createCertificate = async ({ sale_id, certificate_number, coverage_summary, public_token }, conn = null) => {
+  const pool = conn || getPool();
   const [result] = await pool.execute(
     `INSERT INTO certificates (sale_id, certificate_number, public_token, coverage_summary)
      VALUES (?, ?, ?, ?)`,

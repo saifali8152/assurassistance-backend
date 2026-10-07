@@ -25,6 +25,7 @@ import {
 } from "../utils/policyEditRules.js";
 import { computePremiumForCaseDetails } from "../utils/recomputeSalePremium.js";
 import { commissionForSale } from "../utils/commissionRules.js";
+import { issuePolicy } from "../models/policyIssuance.js";
 
 const MAX_GROUP_MEMBERS = 500;
 
@@ -337,41 +338,65 @@ export const getMyCasesWithPagination = async (req, res) => {
 };
 
 // Confirm sale for a case (admin only)
+/**
+ * Confirm a case into a sale.
+ *
+ * The second of the two duplicate-policy paths. It had the same defects as
+ * POST /api/sales and one of its own: BOTH the policy number and the
+ * certificate number were Date.now()-derived, and in a different shape from the
+ * other endpoint, so certificate numbers in the database came in two formats
+ * depending on which route issued them.
+ *
+ * Now: one transaction, the case row locked, an existing live sale returned
+ * instead of a second one, and numbers from the shared allocator so both
+ * endpoints mint the same shape.
+ */
+/**
+ * Confirm a case into a sale.
+ *
+ * The second of the two historic duplicate-policy paths. Both now go through
+ * models/policyIssuance.js, so they mint the same shape of number, run in one
+ * transaction, and return the existing sale rather than issuing a second.
+ */
 export const confirmSale = async (req, res) => {
   try {
     const { caseId } = req.params;
     const { premium_amount, tax = 0, total } = req.body;
-    
+
     if (!premium_amount || !total) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Generate policy and certificate numbers
-    const policyNumber = `POL-${Date.now()}`;
-    const certificateNumber = `CERT-${Date.now()}`;
-
-    // Create sale
-    const saleId = await createSale({
-      case_id: caseId,
-      policy_number: policyNumber,
-      certificate_number: certificateNumber,
-      premium_amount: Number(premium_amount),
-      tax: Number(tax),
-      total: Number(total)
-    });
-
-    // Log activity
-    try {
-      await logActivity(req.user.id, `Confirmed Sale for Case ${caseId} - Sale ID: ${saleId}`);
-    } catch (logErr) {
-      console.error("Activity log failed:", logErr.message);
+    const caseRow = await getCaseDetailsById(caseId);
+    if (!caseRow) {
+      return res.status(404).json({ message: "Case not found" });
     }
 
-    res.json({ 
-      message: "Sale confirmed successfully", 
-      saleId,
-      policyNumber,
-      certificateNumber
+    const issued = await issuePolicy({
+      caseId: Number(caseId),
+      caseRow,
+      pricing: {
+        premium: Number(premium_amount),
+        tax: Number(tax),
+        total: Number(total),
+        currency: caseRow.currency || "XOF",
+      },
+    });
+
+    if (issued.created) {
+      try {
+        await logActivity(req.user.id, `Confirmed Sale for Case ${caseId} - Sale ID: ${issued.saleId}`);
+      } catch (logErr) {
+        console.error("Activity log failed:", logErr.message);
+      }
+    }
+
+    res.json({
+      message: issued.created ? "Sale confirmed successfully" : "Sale already confirmed for this case",
+      duplicate: !issued.created,
+      saleId: issued.saleId,
+      policyNumber: issued.policyNumber,
+      certificateNumber: issued.certificateNumber
     });
   } catch (err) {
     console.error(err);

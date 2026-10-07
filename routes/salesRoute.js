@@ -11,18 +11,20 @@ import {
 } from "../controllers/salesController.js";
 import { adminOnly } from "../middlewares/roleMiddleware.js";
 import authenticate from "../middlewares/authMiddleware.js";
+import { idempotency } from "../middlewares/idempotencyMiddleware.js";
 import {
   downloadInvoice,
   downloadCertificate,
   downloadGroupCertificatesZip,
   downloadGroupInvoicesZip,
   getCertificatePageData,
-  getCertificatePageDataPublic
+  getCertificatePageDataPublic,
+  downloadCertificatePublic
 } from "../controllers/documentController.js";
 
 const router = express.Router();
 
-router.post("/", authenticateAny, requireScope("sales:write"), createSaleController);
+router.post("/", authenticateAny, requireScope("sales:write"), idempotency("sales:create"), createSaleController);
 router.get("/", authenticateAny, requireScope("sales:read"), getAllSalesController);
 
 // download links (must come before /:id route)
@@ -31,6 +33,11 @@ router.get("/group/:groupId/invoices-zip", authenticateAny, requireScope("sales:
 router.get("/invoice/:id", authenticateAny, requireScope("sales:read"), downloadInvoice);
 /** Public certificate JSON (QR link) — intentionally no auth (public token). */
 router.get("/certificate/public/:token", getCertificatePageDataPublic);
+/**
+ * Public certificate PDF — same token, same reasoning. WhatsApp delivers a
+ * document by a link that META fetches, so it cannot carry our auth header.
+ */
+router.get("/certificate/public/:token/pdf", downloadCertificatePublic);
 router.get("/certificate/:id/page", authenticateAny, requireScope("sales:read"), getCertificatePageData);
 router.get("/certificate/:id", authenticateAny, requireScope("sales:read"), downloadCertificate);
 
@@ -41,6 +48,6 @@ router.get(
   listPolicyDeletionReasonsController
 );
 router.get("/:id", authenticateAny, requireScope("sales:read"), getSaleByIdController);
-router.patch("/:id/payment", authenticateAny, requireScope("sales:payment"), updatePaymentStatusController);
+router.patch("/:id/payment", authenticateAny, requireScope("sales:payment"), idempotency("sales:payment"), updatePaymentStatusController);
 router.post("/:id/soft-delete", authenticate, adminOnly, softDeleteSaleController);
 export default router;

@@ -1,24 +1,56 @@
-import { v4 as uuidv4 } from "uuid";
 import { createSale, getAllSales, getSaleById, updatePaymentStatus } from "../models/salesModel.js";
-import { createInvoice } from "../models/invoiceModel.js";
-import { createCertificate, generatePublicToken } from "../models/certificateModel.js";
 import { getCaseDetailsById } from "../models/caseModel.js";
 import { logActivity } from "../models/activityModel.js";  // <-- Add this
 import getPool from "../utils/db.js";
 import { getAgeFromDateString, getAgePremiumMultiplier, AGE_EXEMPTION_MESSAGE } from "../utils/travelPricing.js";
+import { issuePolicy } from "../models/policyIssuance.js";
 
+/** The only values sales.payment_status may hold. Mirrors the column ENUM. */
+export const PAYMENT_STATUSES = ["Unpaid", "Paid", "Partial"];
+
+/**
+ * Create the sale, its invoice and its certificate — exactly once per case.
+ *
+ * This used to be three separate pool writes with numbers minted from
+ * Date.now() and no check for an existing sale, so a partner retrying a
+ * timed-out POST issued a second policy with its own certificate and invoice,
+ * and two requests in the same millisecond collided on the UNIQUE policy number
+ * and surfaced as an opaque 500 with the sale possibly already written.
+ *
+ * Three things changed:
+ *   1. One transaction on one connection, so a failure half way leaves nothing.
+ *   2. SELECT ... FOR UPDATE on the case, so two confirmations of the same case
+ *      queue instead of racing; the UNIQUE index added by m3_03 is the backstop
+ *      for the case where they arrive on different app servers.
+ *   3. Numbers come from an allocated sequence (utils/documentNumbers.js).
+ *
+ * A retry returns the ORIGINAL sale rather than an error. That is what a client
+ * whose request timed out actually needs, and it makes the endpoint safe to
+ * call again from a payment callback.
+ */
+/**
+ * Create the sale, its invoice and its certificate — exactly once per case.
+ *
+ * The transaction, the row lock, the numbering and the snapshot all live in
+ * models/policyIssuance.js, which the payment callback and the case-confirm
+ * endpoint also call. Three copies of this logic would drift; one cannot.
+ *
+ * A retry returns the ORIGINAL sale rather than an error. That is what a client
+ * whose request timed out actually needs, and it is what makes the endpoint
+ * safe to call again from a payment callback.
+ */
 export const createSaleController = async (req, res) => {
   try {
-    const { 
-      case_id, 
-      premium_amount, 
-      tax = 0, 
+    const {
+      case_id,
+      premium_amount,
+      tax = 0,
       total,
       currency = 'XOF',
       plan_price = 0,
       guarantees_details = null
     } = req.body;
-    const created_by = req.user.id; // <-- We'll log the user creating the sale
+    const created_by = req.user.id;
 
     if (!case_id || !premium_amount || !total) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -31,95 +63,42 @@ export const createSaleController = async (req, res) => {
     if (["Travel", "Travel Inbound", "Road travel"].includes(caseRow.product_type)) {
       const age = getAgeFromDateString(caseRow.date_of_birth);
       if (!getAgePremiumMultiplier(age).eligible) {
-        return res.status(400).json({
-          message: AGE_EXEMPTION_MESSAGE
-        });
+        return res.status(400).json({ message: AGE_EXEMPTION_MESSAGE });
       }
     }
 
-    // Coverage limits are stored in guarantees_details only — never billed as a sum.
-    const guaranteesTotalStored = 0;
-    // 1. Generate numbers
-    const policyNumber = `POL-${Date.now()}`;
-    const certificateNumber = `CERT-${uuidv4().slice(0, 8).toUpperCase()}`;
-    const invoiceNumber = `INV-${Date.now()}`;
-
-    // 2. Save Sale
-    const saleId = await createSale({
-      case_id,
-      policy_number: policyNumber,
-      certificate_number: certificateNumber,
-      premium_amount,
-      tax: tax || 0,
-      total,
-      currency: currency || 'XOF',
-      plan_price: plan_price || 0,
-      guarantees_total: guaranteesTotalStored,
-      guarantees_details: (guarantees_details !== null && guarantees_details !== undefined) ? guarantees_details : null
-    });
-
-    // 3. Case + traveller + plan details (reuse loaded case)
-    const caseDetails = caseRow;
-    const traveller = {
-      full_name: caseDetails.full_name,
-      phone: caseDetails.phone,
-      email: caseDetails.email,
-      passport_or_id: caseDetails.passport_or_id,
-      address: caseDetails.address
-    };
-    const plan = {
-      id: caseDetails.plan_id,
-      name: caseDetails.plan_name,
-      product_type: caseDetails.product_type,
-      coverage: caseDetails.coverage,
-      flat_price: caseDetails.flat_price
-    };
-
-    const planP = Number(plan_price) || 0;
-    const taxN = Number(tax) || 0;
-    const invoiceSubtotal = planP > 0 ? planP : Number(premium_amount);
-    const invoiceTotal = planP > 0 ? planP + taxN : Number(total);
-
-    const invoiceId = await createInvoice({
-      sale_id: saleId,
-      invoice_number: invoiceNumber,
-      subtotal: invoiceSubtotal,
-      tax: taxN,
-      total: invoiceTotal,
-      payment_status: 'Unpaid'
-    });
-
-    // 5. Create certificate record
-    const certId = await createCertificate({
-      sale_id: saleId,
-      certificate_number: certificateNumber,
-      public_token: generatePublicToken(),
-      coverage_summary: plan.coverage || ''
-    });
-
-    // Note: PDFs are now generated on-demand, not saved to storage
-
-    // 8. Log Activity (non-blocking)
-    try {
-      await logActivity(created_by, `Created Sale - ID:${saleId}, Invoice:${invoiceNumber}, Certificate:${certificateNumber}`);
-    } catch (logErr) {
-      console.error("Activity log failed:", logErr.message);
-    }
-
-    // 6. Respond to frontend
-    res.status(201).json({
-      message: "Sale created successfully",
-      saleId,
-      policyNumber,
-      certificateNumber,
-      invoice: { 
-        id: invoiceId, 
-        invoiceNumber
+    const issued = await issuePolicy({
+      caseId: case_id,
+      caseRow,
+      pricing: {
+        premium: premium_amount,
+        tax: tax || 0,
+        total,
+        currency: currency || 'XOF',
+        planPrice: plan_price || 0,
+        guaranteesDetails: guarantees_details ?? null,
       },
-      certificate: { 
-        id: certId, 
-        certificateNumber
+    });
+
+    if (issued.created) {
+      try {
+        await logActivity(
+          created_by,
+          `Created Sale - ID:${issued.saleId}, Invoice:${issued.invoiceNumber}, Certificate:${issued.certificateNumber}`
+        );
+      } catch (logErr) {
+        console.error("Activity log failed:", logErr.message);
       }
+    }
+
+    res.status(201).json({
+      message: issued.created ? "Sale created successfully" : "Sale already exists for this case",
+      duplicate: !issued.created,
+      saleId: issued.saleId,
+      policyNumber: issued.policyNumber,
+      certificateNumber: issued.certificateNumber,
+      invoice: { id: issued.invoiceId, invoiceNumber: issued.invoiceNumber },
+      certificate: { id: issued.certificateId, certificateNumber: issued.certificateNumber }
     });
   } catch (err) {
     console.error("Error creating sale:", err);
@@ -165,6 +144,15 @@ export const updatePaymentStatusController = async (req, res) => {
   // Only admin can update payment status
   if (userRole !== "admin") {
     return res.status(403).json({ error: "Only administrators can update payment status" });
+  }
+
+  // The submitted value used to go straight into the UPDATE, so whatever a
+  // caller sent landed in the column and MySQL's mode was the only guard.
+  if (!PAYMENT_STATUSES.includes(payment_status)) {
+    return res.status(400).json({
+      error: `payment_status must be one of: ${PAYMENT_STATUSES.join(", ")}`,
+      code: "invalid_payment_status",
+    });
   }
 
   try {

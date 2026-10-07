@@ -50,7 +50,7 @@ jobs:
           # Legacy migrations were applied by hand historically and some overlap
           # with the dump; --force lets the already-present ones fail harmlessly.
           for f in migrations/*.sql; do
-            case "$f" in migrations/m2_*) continue ;; esac
+            case "$f" in migrations/m[0-9]_*|migrations/m[0-9][0-9]_*) continue ;; esac
             mysql -h 127.0.0.1 -uroot --force assur_ci < "$f" || true
           done
 
@@ -75,7 +75,7 @@ jobs:
         # This is the guarantee the live database depends on: applying twice is a
         # no-op, not an error.
         run: |
-          for f in migrations/m2_*.sql; do
+          for f in migrations/m[0-9]_*.sql migrations/m[0-9][0-9]_*.sql; do
             MYSQL_PWD=ci_root_password mysql -h 127.0.0.1 -uroot assur_ci < "$f"
           done
           npm run migrate:status

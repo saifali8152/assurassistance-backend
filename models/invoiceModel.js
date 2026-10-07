@@ -9,8 +9,8 @@ const toAmount = (v) => {
   return Math.max(-MAX_AMOUNT, Math.min(MAX_AMOUNT, rounded));
 };
 
-export const createInvoice = async ({ sale_id, invoice_number, subtotal, tax, total, payment_status = 'Unpaid' }) => {
-  const pool = getPool();
+export const createInvoice = async ({ sale_id, invoice_number, subtotal, tax, total, payment_status = 'Unpaid' }, conn = null) => {
+  const pool = conn || getPool();
   const subtotalVal = toAmount(subtotal);
   const taxVal = toAmount(tax);
   const totalVal = toAmount(total);

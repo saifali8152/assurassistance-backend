@@ -652,7 +652,3 @@ Allows Admin to transfer a travel agency (e.g. **IT Voyages**) to a sub-administ
 4. **API (Admin JWT):**
    - `PATCH /api/admin/agents/:id/supervisor` body `{ supervisor_user_id, effective_from?, reason? }`
    - `GET /api/admin/agents/:id/supervision-history`
-
-
-ssh root@187.77.172.212
-?Eg7ouw'CcC?Dni4UKm8

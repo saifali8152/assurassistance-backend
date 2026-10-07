@@ -17,6 +17,8 @@ import {
   regenerateVerifyToken,
   revealVerifyToken,
   listAttributionCandidates,
+  getPlatformSettings,
+  updatePlatformSettings,
 } from "../controllers/settingsController.js";
 
 const router = express.Router();
@@ -27,6 +29,12 @@ router.get("/attribution-candidates", listAttributionCandidates);
 router.get("/verify-token", revealVerifyToken);
 router.post("/verify-token", regenerateVerifyToken);
 router.post("/test", testWhatsAppConnection);
+// Numbering, company identity, certificate wording and payment providers.
+// Same router, same JWT-and-admin-only rule: an API key must never read the
+// insurer's provider credentials, whatever its scopes.
+router.get("/platform", getPlatformSettings);
+router.put("/platform", updatePlatformSettings);
+
 router.get("/", getWhatsAppSettings);
 router.put("/", updateWhatsAppSettings);
 

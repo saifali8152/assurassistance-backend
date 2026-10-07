@@ -209,6 +209,48 @@ export async function sendAndLog({ to, payload, sessionId = null, stepKey = null
   return { ok: false, logId, code: result.code, message: result.message };
 }
 
+/**
+ * A document message — the certificate.
+ *
+ * Meta takes either an uploaded media id or a public https link. We send a
+ * link: uploading would need a multipart POST that graphSend (JSON only) cannot
+ * do, and the certificate already has a token-gated public URL for the QR code,
+ * so there is nothing new to expose.
+ *
+ * The link must be reachable by Meta's servers, not just by the customer, and
+ * must be https. A localhost or private address silently fails at Meta's end.
+ */
+export function buildDocumentPayload(to, { link, filename, caption = null }) {
+  return {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "document",
+    document: {
+      link,
+      filename: truncate(String(filename || "document.pdf"), 240),
+      ...(caption ? { caption: truncate(String(caption), LIMITS.bodyText) } : {}),
+    },
+  };
+}
+
+export async function sendDocument({ to, link, filename, caption = null, sessionId = null, stepKey = null, config = null }) {
+  if (!/^https:\/\//i.test(String(link || ""))) {
+    // Fail loudly rather than letting Meta reject it with an opaque code: a
+    // certificate that silently never arrives is the worst failure here.
+    return { ok: false, code: "invalid_document_link", message: "A document link must be an absolute https URL" };
+  }
+  return sendAndLog({
+    to,
+    payload: buildDocumentPayload(to, { link, filename, caption }),
+    sessionId,
+    stepKey,
+    bodyText: caption || filename || "document",
+    messageType: "document",
+    config,
+  });
+}
+
 export async function sendText({ to, text, sessionId = null, stepKey = null, config = null }) {
   return sendAndLog({
     to,

@@ -268,7 +268,7 @@ Response:
 The system has now:
 
 - Stored the sale, invoice, and certificate metadata.
-- Made the invoice + certificate PDFs available on demand.
+- Made the invoice PDF available on demand, and rendered and stored the certificate PDF.
 - Generated a public certificate URL with a unique token (used by the QR code on the printed certificate).
 
 ### Step 3b — Editing a confirmed policy

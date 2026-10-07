@@ -264,7 +264,12 @@ async function queryCasesPaginated({ agentIds, page, limit, status, startDate, e
   );
 
   return {
-    cases: rows,
+    // The SELECT above pulls passport_or_id_enc, so the rows have to be hydrated
+    // like every other read. Missing this was invisible for as long as the
+    // plaintext column was still populated — the list showed the plaintext and
+    // looked correct — and showed up as an empty passport field the moment
+    // `encrypt:passports --clear` emptied it.
+    cases: hydrateTravellers(rows),
     totalCases,
     totalPages: Math.max(1, Math.ceil(totalCases / limitNum) || 1),
     currentPage: pageNum,
@@ -320,13 +325,21 @@ export const updateCaseAndTraveller = async (caseId, travellerData, caseData) =>
     const genderValue = coerceGenderForDb(travellerData.gender);
     const nationalityValue = (travellerData.nationality && travellerData.nationality.trim() !== '') ? travellerData.nationality.trim() : null;
     const passportOrId = (travellerData.passport_or_id && travellerData.passport_or_id.trim() !== '') ? travellerData.passport_or_id.trim() : null;
+    // All three passport columns move together or the row contradicts itself.
+    // Writing only the plaintext column put the number back in the clear AND
+    // left the OLD ciphertext in place — and since reads prefer the ciphertext,
+    // a corrected passport number would have been silently ignored everywhere,
+    // the certificate included.
+    const passportCols = passportColumns(passportOrId);
     const phoneValue = (travellerData.phone && travellerData.phone.trim() !== '') ? travellerData.phone.trim() : null;
     const emailValue = (travellerData.email && travellerData.email.trim() !== '') ? travellerData.email.trim() : null;
     const addressValue = (travellerData.address && travellerData.address.trim() !== '') ? travellerData.address.trim() : null;
     
     await connection.execute(
       `UPDATE travellers SET 
-       first_name = ?, last_name = ?, date_of_birth = ?, country_of_residence = ?, gender = ?, nationality = ?, passport_or_id = ?, phone = ?, email = ?, address = ?
+       first_name = ?, last_name = ?, date_of_birth = ?, country_of_residence = ?, gender = ?, nationality = ?,
+       passport_or_id = ?, passport_or_id_enc = ?, passport_or_id_hash = ?,
+       phone = ?, email = ?, address = ?
        WHERE id = ?`,
       [
         travellerData.first_name?.trim() || null,
@@ -335,7 +348,9 @@ export const updateCaseAndTraveller = async (caseId, travellerData, caseData) =>
         countryOfResidence,
         genderValue,
         nationalityValue,
-        passportOrId,
+        passportCols.passport_or_id,
+        passportCols.passport_or_id_enc,
+        passportCols.passport_or_id_hash,
         phoneValue,
         emailValue,
         addressValue,

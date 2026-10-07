@@ -193,7 +193,10 @@ export async function getQuoteByReference(reference) {
      LIMIT 1`,
     [reference]
   );
-  return rows[0] || null;
+  // hydrateTravellers was imported for this and never called: the row carries
+  // passport_or_id_enc, so without it GET /quotes/:reference returned an empty
+  // passport once the plaintext column was cleared.
+  return hydrateTravellers(rows)[0] || null;
 }
 
 /** Quotes for the API and admin screens, filtered by source and status. */

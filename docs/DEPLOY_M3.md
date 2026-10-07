@@ -22,12 +22,23 @@ git rev-parse HEAD 2>/dev/null || echo "not a git deploy — note the current fo
 
 # A database backup you have actually verified exists.
 bash scripts/backup-db.sh
-ls -lh ~/backups | tail -3
+
+# The script prints where it wrote. It is /var/backups/mysql, not ~/backups.
+ls -lh /var/backups/mysql | tail -3
 ```
 
-**Check:** you have a dump file from the last few minutes with a sane size (not
-0 bytes, not a few hundred bytes). If `backup-db.sh` writes somewhere else, look
-there — the path is at the top of the script.
+**Check:** you have a gzipped dump from the last few minutes, and it survives
+these three questions:
+
+```bash
+F=/var/backups/mysql/<the file it just printed>
+gzip -t "$F" && echo "archive intact"
+zgrep -c "CREATE TABLE" "$F"    # expect ~24
+zgrep -c "INSERT INTO"  "$F"    # must be well above zero
+```
+
+A dump with tables and no `INSERT INTO` lines is schema-only and will not restore
+your data. If that happens, stop here.
 
 This matters more than usual this time, because step 5 rewrites a column in
 `travellers`.
@@ -284,35 +295,50 @@ command.
 pass.** If the key is ever lost or changed, the encrypted values are gone — and
 if you have already cleared the plaintext, they are gone for good. So:
 
+The script works in batches of **200 per run** (`--batch=` sets it). Note the
+bare `--`, otherwise npm swallows the flag:
+
 ```bash
 cd /opt/assurassistance-backend
 
 # 1. See what it would do. Changes nothing.
-npm run encrypt:passports:dry
+npm run encrypt:passports:dry -- --batch=1000
 ```
 
-**Check:** it reports a row count that looks like your real traveller count.
+**Check:** `with plaintext` and `would encrypt` agree. If `would encrypt` is
+smaller, the batch is capping it — raise `--batch` or run step 2 repeatedly.
 
 ```bash
 # 2. Write the encrypted column and the hash. Plaintext still untouched.
-npm run encrypt:passports
+npm run encrypt:passports -- --batch=1000
+
+# 3. Nothing left?
+npm run encrypt:passports:dry -- --batch=1000
 ```
 
-**Check:** the reported number encrypted matches the dry run, with 0 failures.
-Now confirm the app reads them correctly **before** clearing anything — open two
-or three policies in the admin panel and check the passport number still shows,
-and download one certificate and check the number printed on it.
+**Check:** the dry run now reports `would encrypt 0` and `already encrypted` equal
+to the plaintext count from step 1. Do not continue until it does — clearing while
+rows are still plaintext-only destroys those numbers.
+
+**Then read them back through every screen that shows a passport number, not just
+one.** The detail view, the case LIST, the certificate PDF, and — if a partner
+uses it — `GET /quotes/:reference`. Different screens use different queries, and a
+query that was never wired to the encrypted column keeps showing the plaintext
+right up until the clear, then goes blank. That is exactly what happened on the
+first live run; the three paths involved are fixed, and
+`tests/integration/passportPrivacy.integration.test.mjs` now clears the plaintext
+before asserting, so a fourth one cannot hide.
 
 ```bash
-# 3. Only once you have confirmed the above, and only after a fresh backup.
+# 4. Only once you have confirmed the above, and only after a fresh backup.
 bash scripts/backup-db.sh
-npm run encrypt:passports:clear
+npm run encrypt:passports:clear -- --batch=1000
 ```
 
 **Check:** passport numbers still display in the admin panel and on
 certificates, read now from the encrypted column alone.
 
-There is no hurry on step 3. Leaving the plaintext column populated for a week
+There is no hurry on step 4. Leaving the plaintext column populated for a week
 while you watch the app is a perfectly reasonable choice; nothing else depends
 on it being empty.
 

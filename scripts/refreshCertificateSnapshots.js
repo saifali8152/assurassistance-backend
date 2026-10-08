@@ -18,10 +18,20 @@
 //   node scripts/refreshCertificateSnapshots.js --sale=123
 //   node scripts/refreshCertificateSnapshots.js --case=572
 //
-//   --edited    every live policy whose policy_edit_count is above zero
+//   --drifted   every live policy whose snapshot no longer matches its case
+//               (USE THIS ONE — it finds the policies that are actually wrong)
+//   --edited    every live policy whose policy_edit_count is above zero. Note
+//               that counter only moves for OPERATOR-role edits, so an admin or
+//               sub-admin correction does not appear here. Kept for the operator
+//               edit limit, not useful for finding stale certificates.
 //   --sale=     one sale id
 //   --case=     one case id
+//   --id=       try it as a sale id, then as a case id
 //   --dry-run   report only, write nothing
+//   --live-only every policy EXCEPT soft-deleted ones. Off by default, because a
+//               soft-deleted policy in this platform still issues its
+//               certificate — so its snapshot has to stay correct like any
+//               other's. Excluding them was what hid case 572.
 //
 import dotenv from "dotenv";
 import { initializePool, getPool } from "../utils/db.js";
@@ -34,12 +44,22 @@ dotenv.config();
 const args = process.argv.slice(2);
 const DRY = args.includes("--dry-run");
 const EDITED = args.includes("--edited");
+const DRIFTED = args.includes("--drifted");
+const LIVE = args.includes("--live-only");
+/**
+ * Soft-deleted policies are INCLUDED by default. They stay visible in the admin
+ * panel and their certificates are still downloadable, so a stale snapshot on
+ * one is just as wrong as on any other policy — and filtering them out is
+ * exactly why case 572 came back empty four times.
+ */
+const LIVE_ONLY = LIVE ? " AND s.deleted_at IS NULL" : "";
 const saleArg = args.find((a) => a.startsWith("--sale="));
 const caseArg = args.find((a) => a.startsWith("--case="));
+const idArg = args.find((a) => a.startsWith("--id="));
 
 function usage(message) {
   console.error(`[snapshots] ${message}`);
-  console.error("[snapshots] usage: --edited | --sale=<id> | --case=<id>  [--dry-run]");
+  console.error("[snapshots] usage: --drifted | --edited | --sale=<id> | --case=<id> | --id=<id>  [--dry-run]");
   process.exit(1);
 }
 
@@ -48,7 +68,7 @@ async function targets(pool) {
     const id = Number(saleArg.split("=")[1]);
     if (!Number.isFinite(id)) usage("--sale needs a number");
     const [rows] = await pool.query(
-      `SELECT id AS sale_id, case_id FROM sales WHERE id = ? AND deleted_at IS NULL`,
+      `SELECT id AS sale_id, case_id FROM sales s WHERE id = ?${LIVE_ONLY}`,
       [id]
     );
     return rows;
@@ -57,8 +77,56 @@ async function targets(pool) {
     const id = Number(caseArg.split("=")[1]);
     if (!Number.isFinite(id)) usage("--case needs a number");
     const [rows] = await pool.query(
-      `SELECT id AS sale_id, case_id FROM sales WHERE case_id = ? AND deleted_at IS NULL`,
+      `SELECT id AS sale_id, case_id FROM sales s WHERE case_id = ?${LIVE_ONLY}`,
       [id]
+    );
+    return rows;
+  }
+  if (idArg) {
+    const id = Number(idArg.split("=")[1]);
+    if (!Number.isFinite(id)) usage("--id needs a number");
+    const [bySale] = await pool.query(
+      `SELECT id AS sale_id, case_id FROM sales s WHERE id = ?${LIVE_ONLY}`,
+      [id]
+    );
+    if (bySale.length) {
+      console.log(`[snapshots] ${id} matched a sale`);
+      return bySale;
+    }
+    const [byCase] = await pool.query(
+      `SELECT id AS sale_id, case_id FROM sales s WHERE case_id = ?${LIVE_ONLY}`,
+      [id]
+    );
+    if (byCase.length) console.log(`[snapshots] ${id} matched a case`);
+    return byCase;
+  }
+  if (DRIFTED) {
+    // Compare the snapshot against the case itself rather than trusting an edit
+    // counter: policy_edit_count only moves for operator-role edits, so an admin
+    // correction leaves no trace on it. Drift is the thing we actually care
+    // about, and it is directly observable.
+    //
+    // Dates come out of the driver as JS Date objects, so the snapshot stores
+    // them as full ISO timestamps — hence the prefix comparison rather than an
+    // equality test.
+    const [rows] = await pool.query(
+      `SELECT s.id AS sale_id, s.case_id
+         FROM sales s
+         JOIN certificates c ON c.sale_id = s.id
+         JOIN cases ca       ON ca.id = s.case_id
+         LEFT JOIN catalogue cat ON cat.id = ca.selected_plan_id
+        WHERE c.issued_snapshot IS NOT NULL${LIVE_ONLY}
+          AND (
+                COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.issued_snapshot, '$.trip.destination')), '')
+                  <> COALESCE(ca.destination, '')
+             OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.issued_snapshot, '$.plan.name')), '')
+                  <> COALESCE(cat.name, '')
+             OR LEFT(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.issued_snapshot, '$.trip.start_date')), ''), 10)
+                  <> DATE_FORMAT(ca.start_date, '%Y-%m-%d')
+             OR LEFT(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(c.issued_snapshot, '$.trip.end_date')), ''), 10)
+                  <> DATE_FORMAT(ca.end_date, '%Y-%m-%d')
+          )
+        ORDER BY s.id ASC`
     );
     return rows;
   }
@@ -67,13 +135,12 @@ async function targets(pool) {
       `SELECT s.id AS sale_id, s.case_id
          FROM sales s
          JOIN certificates c ON c.sale_id = s.id
-        WHERE s.deleted_at IS NULL
-          AND COALESCE(s.policy_edit_count, 0) > 0
+        WHERE COALESCE(s.policy_edit_count, 0) > 0${LIVE_ONLY}
         ORDER BY s.id ASC`
     );
     return rows;
   }
-  return usage("say which policies: --edited, --sale= or --case=");
+  return usage("say which policies: --drifted, --edited, --sale=, --case= or --id=");
 }
 
 async function main() {
@@ -81,6 +148,18 @@ async function main() {
   const pool = getPool();
   const rows = await targets(pool);
   console.log(`[snapshots] ${rows.length} policy(ies) selected${DRY ? " — dry run, nothing will be written" : ""}`);
+
+  if (rows.length === 0) {
+    if (saleArg || caseArg || idArg) {
+      console.log("[snapshots] nothing matched. That id may belong to the other table.");
+      console.log("[snapshots] try --id=<n>, which checks both, or --drifted to list every stale certificate.");
+    } else if (EDITED) {
+      console.log("[snapshots] note: --edited only sees OPERATOR-role edits. An admin correction does not increment that counter.");
+      console.log("[snapshots] use --drifted instead — it compares each snapshot against its case.");
+    } else if (DRIFTED) {
+      console.log("[snapshots] no certificate disagrees with its case. Nothing to refresh.");
+    }
+  }
 
   let refreshed = 0;
   let skipped = 0;

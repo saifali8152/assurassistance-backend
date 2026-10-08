@@ -183,4 +183,33 @@ async function updateCertificatePdfIfEmpty(certificateId, relativePath) {
   await updateCertificatePdf(certificateId, relativePath);
 }
 
+/**
+ * Forget the stored renderings of one certificate.
+ *
+ * Called when the policy is deliberately corrected: the file on disk is the
+ * whole point of the store, so nothing short of removing it will make the
+ * corrected certificate appear. Both languages go — a correction applies to the
+ * document, not to one translation of it.
+ *
+ * Safe by construction: the next request re-renders and re-stores.
+ */
+export function invalidateStoredCertificate(certificateNumber) {
+  const removed = [];
+  for (const locale of ["fr", "en"]) {
+    const fileName = certificateFileName(certificateNumber, locale);
+    const fsPath = absolutePathFor(fileName);
+    if (!fsPath) continue;
+    try {
+      if (fs.existsSync(fsPath)) {
+        fs.unlinkSync(fsPath);
+        removed.push(fileName);
+      }
+    } catch {
+      // A file we cannot delete is a stale document, which matters — but it is
+      // not a reason to fail the operator's edit. The caller logs it.
+    }
+  }
+  return removed;
+}
+
 export const __testables = { updateCertificatePdfIfEmpty };

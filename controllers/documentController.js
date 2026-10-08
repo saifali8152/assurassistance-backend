@@ -310,11 +310,24 @@ function applyIssuedSnapshot(payload, rawSnapshot) {
   }
   if (!snap || typeof snap !== "object" || !snap.pricing) return payload;
 
+  // The snapshot governs EVERY field it holds, not a subset. Overlaying only
+  // some of them produced a document that was half frozen and half live — an
+  // edited case printed its new dates beside its old destination, and no reader
+  // could tell which half to believe. A deliberate policy edit re-freezes the
+  // snapshot (see refreshIssuedSnapshot), so a corrected policy still prints the
+  // correction; what the snapshot stops is the catalogue moving underneath it.
+  const snapFullName = [snap.traveller?.first_name, snap.traveller?.last_name].filter(Boolean).join(" ");
+
   return {
     ...payload,
     issuedFromSnapshot: true,
     traveller: {
       ...payload.traveller,
+      ...(snap.traveller?.first_name ? { givenNames: snap.traveller.first_name } : {}),
+      ...(snap.traveller?.last_name ? { surname: snap.traveller.last_name } : {}),
+      ...(snapFullName ? { fullName: snapFullName } : {}),
+      ...(snap.traveller?.date_of_birth ? { dateOfBirth: formatDateDMY(snap.traveller.date_of_birth) } : {}),
+      ...(snap.traveller?.gender ? { gender: snap.traveller.gender } : {}),
       ...(snap.traveller?.passport_or_id ? { passportOrId: snap.traveller.passport_or_id } : {}),
       ...(snap.traveller?.nationality ? { nationality: snap.traveller.nationality } : {}),
       ...(snap.traveller?.country_of_residence ? { countryOfResidence: snap.traveller.country_of_residence } : {}),
@@ -324,6 +337,11 @@ function applyIssuedSnapshot(payload, rawSnapshot) {
       ...(snap.plan?.name ? { planName: snap.plan.name } : {}),
       ...(snap.pricing?.currency ? { currency: snap.pricing.currency } : {}),
       ...(snap.trip?.validity_days != null ? { validityDays: snap.trip.validity_days } : {}),
+      ...(snap.trip?.duration_days != null ? { stayDays: snap.trip.duration_days } : {}),
+      ...(snap.trip?.start_date ? { periodFrom: formatDateDMY(snap.trip.start_date) } : {}),
+      ...(snap.trip?.end_date ? { periodTo: formatDateDMY(snap.trip.end_date) } : {}),
+      ...(snap.traveller?.email ? { email: snap.traveller.email } : {}),
+      ...(snap.traveller?.phone ? { phone: snap.traveller.phone } : {}),
       ...(snap.trip?.destination ? { destinations: snap.trip.destination } : {}),
     },
     pricing: {

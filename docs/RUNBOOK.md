@@ -231,6 +231,26 @@ Deleting is always safe: nothing reads these files without falling back to a
 render. Deleting is also the only supported way to change them — never edit a
 stored PDF in place, because the database has no record of that having happened.
 
+### When a corrected policy still shows the old details
+
+An audited policy edit re-freezes the certificate and deletes its stored PDFs, so
+a correction reaches the document by itself. Policies edited **before** that
+behaviour existed are still carrying the snapshot they were issued with:
+
+```bash
+npm run snapshots:refresh:dry     # list every edited policy and what has drifted
+npm run snapshots:refresh         # bring them into line
+
+# or one policy at a time
+node scripts/refreshCertificateSnapshots.js --dry-run --case=572
+node scripts/refreshCertificateSnapshots.js --case=572
+```
+
+It touches no money: the amounts are read from the sale row rather than
+recalculated, so a catalogue change since issuance cannot move a premium through
+this script. Each refresh keeps the superseded values in
+`issued_snapshot.revisions`.
+
 Certificates issued before milestone 3 carry no frozen snapshot and are
 therefore **not** stored: they keep rendering live, exactly as they always did.
 Nothing needs to be done about that; an old policy has no file and does not need

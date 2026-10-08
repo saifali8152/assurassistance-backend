@@ -25,7 +25,8 @@ import {
 } from "../utils/policyEditRules.js";
 import { computePremiumForCaseDetails } from "../utils/recomputeSalePremium.js";
 import { commissionForSale } from "../utils/commissionRules.js";
-import { issuePolicy } from "../models/policyIssuance.js";
+import { issuePolicy, refreshIssuedSnapshot } from "../models/policyIssuance.js";
+import { invalidateStoredCertificate } from "../utils/certificateStore.js";
 
 const MAX_GROUP_MEMBERS = 500;
 
@@ -666,6 +667,38 @@ export const updateCase = async (req, res) => {
         ageBand: computed.ageBand ?? null,
         commission,
       };
+
+      // The certificate is frozen to what was issued, which is right against a
+      // catalogue edit and wrong against this one: the operator has just
+      // corrected the policy on purpose. Re-freeze it to the correction and
+      // drop the stored PDF, otherwise the case screen and the downloaded
+      // document disagree and the document wins.
+      try {
+        const reIssued = await refreshIssuedSnapshot({
+          saleId: sale.id,
+          caseRow: refreshed,
+          pricing: {
+            premium: computed.premium,
+            tax,
+            total: computed.premium + tax,
+            currency: sale.currency || refreshed?.currency || "XOF",
+            validityDays: computed.validityDays ?? null,
+            ageBand: computed.ageBand ?? null,
+            planPrice: computed.premium,
+          },
+          reason: "policy_edit",
+          byUserId: req.user?.id ?? null,
+        });
+        if (reIssued.ok) {
+          invalidateStoredCertificate(reIssued.certificateNumber);
+        } else if (reIssued.reason !== "no_snapshot") {
+          console.error(`certificate snapshot not refreshed for sale ${sale.id}: ${reIssued.reason}`);
+        }
+      } catch (snapErr) {
+        // Loud, because the failure mode is a corrected policy whose certificate
+        // keeps printing the old details — exactly the bug this block fixes.
+        console.error("certificate snapshot refresh after policy edit failed:", snapErr.message);
+      }
     }
 
     if (shouldIncrementOperatorEdit && sale?.id) {

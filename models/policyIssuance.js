@@ -202,6 +202,82 @@ export async function issuePolicy({ caseId, caseRow, pricing, paid = null }) {
   }
 }
 
+/**
+ * Re-freeze the snapshot after a DELIBERATE correction to the policy.
+ *
+ * The snapshot exists so that editing the catalogue cannot silently rewrite a
+ * document a customer is carrying. It was never meant to stop an operator
+ * correcting the policy itself — and that is exactly what it did: an adviser
+ * fixed a destination, saw the change in the case screen, downloaded the
+ * certificate and got the old destination back, with no indication why.
+ *
+ * So the rule is: the catalogue cannot move the snapshot, an audited policy edit
+ * can. What does NOT change is the policy's identity — its numbers and the date
+ * it was issued. Those are what make it the same policy rather than a new one.
+ *
+ * Every revision is kept inside the snapshot, so "what did this certificate say
+ * before?" has an answer.
+ */
+export async function refreshIssuedSnapshot({ saleId, caseRow, pricing, reason = "policy_edit", byUserId = null }) {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT c.id AS certificate_id, c.certificate_number, c.issued_snapshot,
+            s.policy_number, i.invoice_number
+       FROM certificates c
+       JOIN sales s      ON s.id = c.sale_id
+       LEFT JOIN invoices i ON i.sale_id = c.sale_id
+      WHERE c.sale_id = ?
+      LIMIT 1`,
+    [saleId]
+  );
+  const row = rows[0];
+  if (!row) return { ok: false, reason: "no_certificate" };
+
+  let previous = row.issued_snapshot;
+  if (typeof previous === "string") {
+    try { previous = JSON.parse(previous); } catch { previous = null; }
+  }
+
+  // A policy with no snapshot predates m3_07 and is still rendered live, so
+  // writing one now would FREEZE it for the first time — a behaviour change
+  // nobody asked for, triggered by an unrelated edit.
+  if (!previous) return { ok: false, reason: "no_snapshot" };
+
+  const numbers = {
+    policyNumber: row.policy_number,
+    certificateNumber: row.certificate_number,
+    invoiceNumber: row.invoice_number || previous.invoice_number || null,
+  };
+
+  const next = buildSnapshot({ caseRow, pricing, numbers, paid: null });
+
+  // Identity and money that did not move carry over unchanged.
+  next.issued_at = previous.issued_at || next.issued_at;
+  next.payment = previous.payment ?? null;
+  next.revised_at = new Date().toISOString();
+  next.revisions = [
+    ...(Array.isArray(previous.revisions) ? previous.revisions : []),
+    {
+      at: next.revised_at,
+      by: byUserId,
+      reason,
+      replaced: {
+        traveller: previous.traveller ?? null,
+        trip: previous.trip ?? null,
+        plan: previous.plan ?? null,
+        pricing: previous.pricing ?? null,
+      },
+    },
+  ].slice(-10);
+
+  await pool.execute(`UPDATE certificates SET issued_snapshot = ? WHERE id = ?`, [
+    JSON.stringify(next),
+    row.certificate_id,
+  ]);
+
+  return { ok: true, certificateId: row.certificate_id, certificateNumber: row.certificate_number, snapshot: next };
+}
+
 /** The frozen snapshot for a sale, or null for a policy issued before m3_07. */
 export async function getIssuedSnapshot(saleId) {
   const [rows] = await getPool().query(

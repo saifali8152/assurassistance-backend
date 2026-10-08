@@ -423,6 +423,34 @@ separately.
 Certificates issued before the frozen-snapshot change are not stored and are
 still rendered on each request.
 
+### What an edit does to an issued certificate
+
+A certificate is frozen to what it said at issuance, so **changing the catalogue
+cannot alter a document a customer is already carrying** — rename a plan, adjust
+its wording, and every certificate issued before that keeps printing what it
+printed.
+
+A **deliberate policy edit is different**. `PUT /cases/:caseId/update` on a case
+that already has a sale re-freezes the certificate to the corrected details and
+deletes the stored PDF, so the next download carries the correction. That is the
+whole point of the edit: the operator is fixing the policy, not the catalogue.
+
+What an edit never changes:
+
+- the policy, certificate and invoice numbers,
+- the issue date,
+- the recorded payment.
+
+Each revision is kept inside `issued_snapshot.revisions` with its timestamp, the
+user who made it and the values it replaced, so "what did this certificate say
+before?" always has an answer. The last ten revisions are retained.
+
+Policies edited **before** this behaviour existed still carry the snapshot they
+were issued with. `npm run snapshots:refresh:dry` lists them and
+`npm run snapshots:refresh` brings them into line; neither recalculates a
+premium — the amounts come from the sale row, which is what the customer was
+charged.
+
 The public PDF route is **unauthenticated by design**: the 48-character token is
 the credential. It exists because WhatsApp delivers a document by fetching a link
 from Meta's servers, not from the customer's phone, so the link cannot carry a

@@ -24,7 +24,9 @@
     "summary:daily": "node scripts/dailySummary.js",
     "summary:daily:dry": "node scripts/dailySummary.js --dry-run",
     "poll:payments": "node scripts/pollPayments.js",
-    "poll:payments:dry": "node scripts/pollPayments.js --dry-run"
+    "poll:payments:dry": "node scripts/pollPayments.js --dry-run",
+    "snapshots:refresh:dry": "node scripts/refreshCertificateSnapshots.js --dry-run --edited",
+    "snapshots:refresh": "node scripts/refreshCertificateSnapshots.js --edited"
   },
   "dependencies": {
     "archiver": "^7.0.1",

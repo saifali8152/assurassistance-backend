@@ -142,17 +142,17 @@ is stored. A form that does not render them cannot wipe them.
 
 Duration is inclusive stay days (`end_date − start_date + 1`). Map stay length to the smallest plan tier that covers it (default GNA tiers: **10 / 45 / 93 / 180 / 365** days; Agico fixed-duration plans use their own row labels such as 32 / 63).
 
-**Age multipliers (premium)** — same for every package:
+**Age multipliers (premium)** — same for every package. *Changed November 2026: the half-price band now covers travellers aged **17 and under** (previously under 16, so a 16-year-old paid full price).*
 
 | Age | Premium |
 |-----|---------|
-| Under 16 | ÷ 2 |
-| 16 – 75 | standard (tier rate) |
+| 17 and under | ÷ 2 |
+| 18 – 75 | standard (tier rate) |
 | 76 – 80 | × 2 |
 | 81 – 85 | × 4 |
 | Over 85 | not eligible — `"The customer must request a specific exemption"` |
 
-**Commission** (partner invoices only; never stored on the sale): under 16 → commission ÷ 2; senior premium surcharges do **not** increase commission. Plans with `fixed_duration_premiums` (Agico Burundi) have **commission = 0** (no deduction).
+**Commission** (partner invoices only; never stored on the sale): 17 and under → commission ÷ 2; senior premium surcharges do **not** increase commission. Plans with `fixed_duration_premiums` (Agico Burundi) have **commission = 0** (no deduction).
 
 **Coverage limits** (`guarantees_details`) are benefit ceilings — they are **not** added to `premium_amount` / `total`. `guarantees_total` is always stored as `0`.
 
@@ -1076,8 +1076,8 @@ given set of inputs always produces the same premium.
 
    | Age | Multiplier |
    |---|---|
-   | under 16 | × 0.5 |
-   | 16 – 75 | × 1 |
+   | 17 and under | × 0.5 |
+   | 18 – 75 | × 1 |
    | 76 – 80 | × 2 |
    | 81 – 85 | × 4 |
    | over 85 | not eligible — `422 age_ineligible` |

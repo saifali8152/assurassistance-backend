@@ -234,8 +234,8 @@ age:
 
 | Age | Premium factor |
 |-----|----------------|
-| Under 16 | × 0.5 |
-| 16 – 75 | × 1 |
+| 17 and under | × 0.5 |
+| 18 – 75 | × 1 |
 | 76 – 80 | × 2 |
 | 81 – 85 | × 4 |
 | Over 85 | reject — customer must request a specific exemption |
@@ -243,7 +243,7 @@ age:
 Do **not** add guarantee/coverage limit amounts into the billable total.
 `guarantees_total` is always stored as `0`.
 
-Example: 26-day stay, traveller under 16 → 45-day tier 30 500 × 0.5 = **15 250**.
+Example: 26-day stay, traveller aged 17 → 45-day tier 30 500 × 0.5 = **15 250**.
 
 ### Step 3 — Confirm the sale
 
@@ -392,7 +392,7 @@ applied, in order:
    not define falls back to the plan's first column.
 2. **Validity tier** — the stay is rounded up to the smallest duration the plan
    sells. A 20-day trip on a plan with 10 / 32 / 63 tiers is priced as 32 days.
-3. **Age band** — under 16 halves the premium, 76–80 doubles it, 81–85 quadruples
+3. **Age band** — 17 and under halves the premium, 76–80 doubles it, 81–85 quadruples
    it, and over 85 returns `422 age_ineligible` rather than a price.
 
 ### Turning a price into a sale

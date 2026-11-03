@@ -10,7 +10,7 @@
 //   365 days — premium 78,000 XOF — commission 18,000 XOF
 //
 // Age rules (same for all plans that earn commission):
-//   • under 16 → commission ÷ 2
+//   • 17 and under (MINOR_AGE_LIMIT in travelPricing.js) → commission ÷ 2
 //   • senior premium surcharges (×2 / ×4) do NOT increase commission
 //
 // Agico Burundi (catalogue.fixed_duration_premiums = 1): no commission deduction.

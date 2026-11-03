@@ -680,7 +680,7 @@ components:
           type: number
           description: >
             Billable premium after duration-tier mapping and age multipliers.
-            Do not include coverage-limit amounts. Under 16 → half; 76–80 → ×2;
+            Do not include coverage-limit amounts. 17 and under → half; 76–80 → ×2;
             81–85 → ×4; over 85 rejected.
         tax: { type: number, default: 0 }
         total:
@@ -3274,7 +3274,7 @@ paths:
         sees every active plan. Plans that cannot be priced are returned in
         `rejected` with a reason, so a short list is never silently shorter.
 
-        Age bands (travel products only): under 16 x0.5, 16-75 x1, 76-80 x2,
+        Age bands (travel products only): 17 and under x0.5, 18-75 x1, 76-80 x2,
         81-85 x4, over 85 not eligible.
       security:
         - bearerJWT: []

@@ -117,7 +117,10 @@ test("every tier resolves to its own price", () => {
 test("age multipliers match the documented bands", () => {
   assert.equal(getAgePremiumMultiplier(0).multiplier, 0.5);
   assert.equal(getAgePremiumMultiplier(15).multiplier, 0.5);
-  assert.equal(getAgePremiumMultiplier(16).multiplier, 1);
+  // The minor band ends at 17 (client request, Nov 2026). 16 used to pay full.
+  assert.equal(getAgePremiumMultiplier(16).multiplier, 0.5, "16 is a minor");
+  assert.equal(getAgePremiumMultiplier(17).multiplier, 0.5, "17 is the last minor year");
+  assert.equal(getAgePremiumMultiplier(18).multiplier, 1, "18 pays the standard premium");
   assert.equal(getAgePremiumMultiplier(75).multiplier, 1);
   assert.equal(getAgePremiumMultiplier(76).multiplier, 2);
   assert.equal(getAgePremiumMultiplier(80).multiplier, 2);
@@ -130,7 +133,9 @@ test("age multipliers match the documented bands", () => {
 test("every age band boundary is priced correctly on every tier", () => {
   const bands = [
     { age: 15, factor: 0.5, band: "child" },
-    { age: 16, factor: 1, band: "standard" },
+    { age: 16, factor: 0.5, band: "child" },
+    { age: 17, factor: 0.5, band: "child" },
+    { age: 18, factor: 1, band: "standard" },
     { age: 75, factor: 1, band: "standard" },
     { age: 76, factor: 2, band: "senior76_80" },
     { age: 80, factor: 2, band: "senior76_80" },
@@ -161,6 +166,9 @@ test("every age band boundary is priced correctly on every tier", () => {
 
 test("commission is halved for children but never raised by senior surcharges", () => {
   assert.equal(getAgeCommissionMultiplier(10), 0.5);
+  assert.equal(getAgeCommissionMultiplier(16), 0.5);
+  assert.equal(getAgeCommissionMultiplier(17), 0.5, "the commission rule follows the same minor limit");
+  assert.equal(getAgeCommissionMultiplier(18), 1);
   assert.equal(getAgeCommissionMultiplier(30), 1);
   assert.equal(getAgeCommissionMultiplier(82), 1);
 });
@@ -409,4 +417,17 @@ test("formatDate reads a plain YYYY-MM-DD string as that exact day", () => {
   assert.match(formatDate("2026-10-01", "en"), /01 October 2026/);
   assert.match(formatDate("2026-10-01", "fr"), /01 octobre 2026/);
   assert.match(formatDate("2026-01-31", "en"), /31 January 2026/);
+});
+
+test("the premium and commission rules agree on who is a minor", async () => {
+  // Both read MINOR_AGE_LIMIT. If someone hard-codes a number into one of them
+  // again, this is what catches the drift.
+  const { MINOR_AGE_LIMIT } = await import("../utils/travelPricing.js");
+  assert.equal(MINOR_AGE_LIMIT, 18);
+  for (let age = 0; age <= 30; age += 1) {
+    const premiumHalved = getAgePremiumMultiplier(age).multiplier === 0.5;
+    const commissionHalved = getAgeCommissionMultiplier(age) === 0.5;
+    assert.equal(premiumHalved, commissionHalved, `age ${age}: premium and commission disagree`);
+    assert.equal(premiumHalved, age < MINOR_AGE_LIMIT, `age ${age}`);
+  }
 });

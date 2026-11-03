@@ -2536,7 +2536,7 @@
               "mode": "raw",
               "raw": "{\n  \"date_of_birth\": \"01/01/2015\",\n  \"start_date\": \"01/10/2026\",\n  \"end_date\": \"10/10/2026\",\n  \"destination_code\": \"CI\",\n  \"plan_id\": 1\n}"
             },
-            "description": "Under 16 halves the premium. Over 85 returns 422 age_ineligible instead of a price."
+            "description": "17 and under halves the premium. Over 85 returns 422 age_ineligible instead of a price."
           }
         },
         {

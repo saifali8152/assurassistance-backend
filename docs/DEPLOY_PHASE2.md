@@ -126,7 +126,7 @@ pm2 info backend | grep -i "exec user"
 chown -R <pm2-user>:<pm2-user> storage
 chmod -R 750 storage
 sudo -u <pm2-user> touch storage/claims/.probe && echo "writable OK" && rm -f storage/claims/.probe
-curl -s -o /dev/null -w "%{http_code}\n" https://<your-api-host>/storage/claims/   # must be 404
+curl -s -o /dev/null -w "%{http_code}\n" https://https://backend-api.assurassistancepro.org/storage/claims/   # must be 404
 ```
 
 To keep them elsewhere, set `CLAIMS_STORAGE_DIR=/absolute/path` in `.env` — same
@@ -168,7 +168,7 @@ grep -E "^(SETTINGS_ENCRYPTION_KEY|PUBLIC_API_URL|EMAIL_HOST|EMAIL_FROM)=" .env 
 
 ```ini
 # Link in the claim emails ("open in the admin panel")
-ADMIN_URL=https://<your-admin-host>
+ADMIN_URL=https://assurassistancepro.org
 ```
 
 **Optional (defaults are fine):**
@@ -184,7 +184,7 @@ Restart and verify:
 ```bash
 pm2 restart backend
 pm2 logs backend --lines 40
-curl -s https://<your-api-host>/api/health | head -40
+curl -s https://backend-api.assurassistancepro.org/api/health | head -40
 ```
 
 **Check:** the logs show no error and health reports the database reachable and

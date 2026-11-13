@@ -756,6 +756,42 @@ The two downloadable contract documents (`full`, `brief`) and where their files 
 
 ---
 
+## Claims and admin (Phase 2: M4 + M5)
+
+Added by `m4_01`–`m4_08` and `m5_01`–`m5_03`. All new tables; no foreign key points at
+a live table (`sales`, `cases`, `travellers`…). Claims **read** those tables and never
+write to them. Nothing in this section is ever deleted by the application except the
+stored *files* of old claim documents, and only when a retention period is set.
+
+| Table | One row is… | Key columns / rules |
+|---|---|---|
+| `feature_flags` | a switch | `flag_key` (PK), `enabled`. `claims_enabled` ships **0**. Read with a 10 s cache; unreadable = off. |
+| `feature_flag_allowlist` | a test number | `flag_key`, `wa_number`, `label`. Sees a switched-off feature; its claims are test claims. |
+| `feature_flag_audit` | a switch or allowlist change | `action`, `old_value`, `new_value`, `changed_by_user_id`, `ip`. |
+| `claims` | a claim, from first answer to closed | `reference` (unique, `SIN-YYYY-NNNNNN`), `status` (`draft → submitted → under_review → closed`, or `abandoned`), `priority`, **either** `sale_id` **or** `external_policy_id`, `policy_snapshot` (the policy as it was), `extra_fields`, `flags`, `is_test`, `wa_number`, `session_id`. |
+| `claim_documents` | one file sent by the customer | `storage_key` (encrypted file under `storage/claims/`), `detected_mime` (from the bytes), `sha256`, `status` (`pending` / `stored` / `failed` / `rejected` / `purged`), `attempts`, `next_attempt_at`, `wa_message_id`. FK → `claims` (restrict). |
+| `claim_status_history` | a status change | `from_status`, `to_status`, `changed_by_user_id` or `changed_by` (`customer` / `system`), `note`. FK → `claims` (restrict). |
+| `claim_categories` | a category or sub-category | `code`, `parent_code`, FR/EN names, `required_documents`, `optional_documents`, `extra_fields` (JSON questions), `default_priority`, `active` (hidden, never deleted). |
+| `external_policies` | a policy sold outside the platform, imported for claims only | `policy_number` (unique), `passport_or_id_enc` + `passport_or_id_hash` (never plaintext), `status`, `payment_status`, `is_test`, `source` (`import` / `manual`), `import_batch_id`. **Never** counted in sales, ledgers, invoices or commissions. |
+| `claim_validation_attempts` | one policy/passport check | `wa_number`, `identifier_hash`, `outcome`. Drives the per-number and per-policy lockouts. |
+| `claim_notifications` | an email to send about a claim | outbox: `status`, `attempts`, `next_attempt_at`, `sent_to`. Sent by `scripts/sendClaimNotifications.js`. FK → `claims` (restrict). |
+| `access_roles` | a role | `code`, `name`, `is_builtin` + `legacy_role` (the four built-in roles mirror `users.role`), `active`. Ships with the built-ins and the "Claims handler" template. |
+| `access_role_permissions` | a permission on a role | (`role_id`, `permission`). The main admin holds every permission implicitly. |
+| `admin_audit_log` | a sensitive admin action | `user_id`, `action` (e.g. `claim.view`, `claim_document.link`, `claim.status`, `claims.settings`, `role.update`, `user.role_assign`, `policies.import`), `entity`, `entity_id`, `detail`, `ip`. Append-only. |
+
+**New columns on existing tables** (nullable or defaulted — existing rows unchanged):
+
+| Table | Column | Notes |
+|---|---|---|
+| `users` | `access_role_id` | Optional custom role added on top of `role`. Empty for everyone after the migration. |
+| `users` | `failed_login_count`, `locked_until` | Login lockout (5 wrong passwords → 15 minutes, `LOGIN_MAX_FAILURES` / `LOGIN_LOCK_MINUTES`). |
+| `whatsapp_sessions` | `claim_id`, `parked_purchase` | The claim a conversation is filling in, and a purchase set aside while the customer reports a claim (restored after). Index `ix_sessions_claim`. |
+
+`app_settings` gains the `claims.*` keys (`m4_08`, `INSERT IGNORE`), edited in Admin →
+Claims settings.
+
+---
+
 ## Views
 
 ### `sales_ledger`
@@ -793,6 +829,9 @@ screens. No data of its own.
 | Customer conversations | `whatsapp_messages.body` / `payload` | Transcripts contain personal data, which is why `whatsapp:read` is a separate API scope from `cases:read`. Pruned by retention policy. |
 | Certificate links | `certificates.public_token` | The token IS the credential: that URL needs no login. Treat it as a secret. |
 | Stored certificate PDFs | `storage/certificates/` on disk, path in `certificates.pdf_path` | Outside the web-served `uploads/` tree on purpose — the file names are sequential and the documents carry passport numbers. Back it up; never serve it. |
+| Imported-policy passports | `external_policies.passport_or_id_enc` (+ `_hash`) | Same scheme as travellers. Exact search only; never stored in plain text. |
+| Claim documents | `storage/claims/YYYY/MM/<hex>.bin`, row in `claim_documents` | Encrypted (AES-256-GCM, `SETTINGS_ENCRYPTION_KEY`), outside `uploads/`, opened only through a signed 5-minute link; every view audited. Back it up; never serve it. |
+| Claim content | `claims.description`, `extra_fields`, `policy_snapshot` | Staff with *View claims* only. The partner API returns a claim's **status**, never its content, and claim conversations are filtered out of `/whatsapp/sessions*` for API keys. |
 | Provider callbacks | `payment_callbacks.raw_body` | Kept verbatim as dispute evidence, including whatever the provider chose to send. |
 
 Logging redacts all of the above by field name; see `utils/logger.js`.

@@ -24,6 +24,8 @@ endpoint, see [`API.md`](./API.md). For the security model, see
   with Assur'Assistance + GNA logos and optional PAID / SETTLED stamps.
 - Download contractual documentation (Terms & Conditions full / brief); Admin
   uploads and replaces those files.
+- Follow the status of claims your customers reported on WhatsApp
+  (`claims:read` — status only, see [§5c](#5c-following-a-claim)).
 
 Everything the AssurAssistance web app can do, your integration can do —
 within the **scopes** your API key was issued with.
@@ -36,7 +38,8 @@ within the **scopes** your API key was issued with.
 - **Read the destination zone map** — `GET /zones` explains why two destinations
   cost differently.
 - **Follow WhatsApp conversations** — `GET /whatsapp/sessions` and its transcript
-  endpoints expose the conversational purchase channel.
+  endpoints expose the conversational purchase channel. Claim conversations are
+  never included; use `GET /claims` for claim status.
 
 ## 2. Getting an API key
 
@@ -148,6 +151,7 @@ the endpoint.
 | `zones:read` | `GET /zones`, `GET /zones/countries`, `GET /zones/resolve` |
 | `whatsapp:read` | `GET /whatsapp/status`, `/whatsapp/sessions*`, `GET /whatsapp/stats` |
 | `whatsapp:write` | `POST /whatsapp/messages` |
+| `claims:read` | `GET /claims`, `GET /claims/{reference}` — claim **status** only |
 
 **Agency reassignment** (`PATCH /admin/agents/{id}/supervisor` and
 `GET /admin/agents/{id}/supervision-history`) is **admin JWT only** — there is
@@ -413,6 +417,29 @@ Two behaviours worth knowing:
 
 ---
 
+## 5c. Following a claim
+
+Customers report claims (*sinistres*) on WhatsApp. With the **`claims:read`**
+scope your integration can follow the status of claims made on the policies you
+can see — never their content (description, documents, passport, phone).
+
+```bash
+# Everything that changed since your last poll
+curl -H "Authorization: Bearer $AAS_KEY" \
+  "https://backend-api.assurassistancepro.org/api/claims?updatedSince=2026-11-01T00:00:00Z"
+
+# One claim (the customer gives you the reference, e.g. SIN-2026-000123)
+curl -H "Authorization: Bearer $AAS_KEY" \
+  https://backend-api.assurassistancepro.org/api/claims/SIN-2026-000123
+```
+
+A claim is `submitted`, then `under_review`, then `closed` (never reopened).
+Claims on test numbers and unfinished drafts are never returned; a claim outside
+your visibility answers `404`. Poll every 15–60 minutes with `updatedSince`.
+Full reference: [`API.md` §19](./API.md#19-claims--apiclaims-claim-status-read-only).
+
+---
+
 ## 6. Group subscriptions
 
 Sell one plan to many travellers at once (a family, a tour group):
@@ -670,6 +697,7 @@ Public-API endpoints return:
 | HTTP | `code` | When |
 |---|---|---|
 | 400 | `validation_error` | Body or query violates the schema. |
+| 400 | `invalid_parameter` | A query parameter has a value the endpoint does not accept (e.g. `updatedSince=yesterday`). |
 | 401 | `missing_token` | No `Authorization` header. |
 | 401 | `invalid_api_key` / `revoked_api_key` / `expired_api_key` / `invalid_token` | Bad credential. |
 | 403 | `insufficient_scope` | Key lacks the required scope. |

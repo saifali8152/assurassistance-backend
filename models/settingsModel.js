@@ -11,6 +11,11 @@
 import getPool from "../utils/db.js";
 import { encryptSecret, decryptSecret } from "../utils/appCrypto.js";
 import { validateFormat } from "../utils/documentNumbers.js";
+import {
+  validateEmailList,
+  validatePattern,
+  validateKeywordList,
+} from "../utils/claims/settingsValidators.js";
 
 /**
  * group     — which UI section the field belongs to.
@@ -246,6 +251,126 @@ for (const provider of PAYMENT_PROVIDERS) {
     };
   }
 }
+
+/* ------------------------------------------------------------------ claims */
+//
+// Milestone 4. Every rule the client would otherwise have to tell us is a
+// setting here, with a default that works, so the claims flow never waits on an
+// answer and the client changes behaviour without a deploy.
+//
+// Groups map to sections of the Claims Settings screen.
+const CLAIMS_SETTINGS = {
+  "claims.number_format": {
+    group: "claims_general", type: "string", secret: false, default: "SIN-{YYYY}-{SEQ:6}",
+    validator: validateFormat,
+    description: "Claim case number format. Tokens: {YYYY} {YY} {MM} {SEQ:n}",
+  },
+  "claims.description_min_chars": {
+    group: "claims_general", type: "number", secret: false, default: 20, min: 0, max: 500,
+    description: "Shortest description a customer may submit",
+  },
+  "claims.draft_abandon_hours": {
+    group: "claims_general", type: "number", secret: false, default: 48, min: 1, max: 720,
+    description: "Hours without activity after which an unfinished claim is marked abandoned (never deleted). Until then the customer is offered to resume it",
+  },
+  "claims.description_max_chars": {
+    group: "claims_general", type: "number", secret: false, default: 1500, min: 100, max: 3000,
+    description: "Longest description a customer may submit",
+  },
+
+  "claims.card_number_mode": {
+    group: "claims_validation", type: "string", secret: false, default: "certificate",
+    allowed: ["certificate", "separate", "none"],
+    description: "Assistance card number: same as the certificate number, a separate number, or not accepted",
+  },
+  "claims.card_number_pattern": {
+    group: "claims_validation", type: "string", secret: false,
+    validator: validatePattern,
+    description: "Pattern a separate card number must match (regular expression). Empty accepts any",
+  },
+  "claims.validation_max_attempts": {
+    group: "claims_validation", type: "number", secret: false, default: 3, min: 1, max: 10,
+    description: "Failed validations allowed per WhatsApp number before it is locked out",
+  },
+  "claims.validation_lockout_minutes": {
+    group: "claims_validation", type: "number", secret: false, default: 30, min: 1, max: 1440,
+    description: "How long a lockout lasts, and the window failures are counted in",
+  },
+  "claims.validation_max_per_policy": {
+    group: "claims_validation", type: "number", secret: false, default: 5, min: 1, max: 50,
+    description: "Failed validations against one policy, from any number, before that policy is locked out",
+  },
+
+  "claims.expiry_rule": {
+    group: "claims_policy_rules", type: "string", secret: false, default: "incident_date",
+    allowed: ["incident_date", "today"],
+    description: "Judge whether a policy has expired at the incident date (recommended) or today",
+  },
+  "claims.filing_window_days": {
+    group: "claims_policy_rules", type: "number", secret: false, min: 0, max: 3650,
+    description: "Days after cover ends that a claim may still be filed. Empty means no limit",
+  },
+  "claims.unpaid_policies": {
+    group: "claims_policy_rules", type: "string", secret: false, default: "allow_flag",
+    allowed: ["allow_flag", "refuse"],
+    description: "Claims against an unpaid policy: accept and flag, or refuse",
+  },
+  "claims.uncovered_claim_type": {
+    group: "claims_policy_rules", type: "string", secret: false, default: "flag",
+    allowed: ["flag", "refuse"],
+    description: "Claim type the plan does not cover: accept and flag, or refuse",
+  },
+
+  "claims.max_documents": {
+    group: "claims_documents", type: "number", secret: false, default: 10, min: 1, max: 30,
+    description: "Most documents one claim may carry",
+  },
+  "claims.max_file_mb": {
+    group: "claims_documents", type: "number", secret: false, default: 10, min: 1, max: 100,
+    description: "Largest single file accepted, in megabytes",
+  },
+  "claims.document_retention_days": {
+    group: "claims_documents", type: "number", secret: false, min: 30, max: 36500,
+    description: "Days uploaded documents are kept after a claim is closed or abandoned. Empty keeps them",
+  },
+
+  "claims.notification_emails": {
+    group: "claims_notifications", type: "string", secret: false,
+    validator: validateEmailList,
+    description: "Who is emailed when a claim is submitted, comma separated. Empty means dashboard only",
+  },
+
+  "claims.urgent_keywords_fr": {
+    group: "claims_messages", type: "string", secret: false,
+    default: "urgence, urgent, hôpital, hopital, hospitalisé, hospitalise, inconscient, coma, saigne, saignement, crise cardiaque, avc, réanimation, reanimation, ambulance, arrêté, arrete, prison, garde à vue, décès, deces",
+    validator: validateKeywordList,
+    description: "French words that mark a claim urgent, comma separated",
+  },
+  "claims.urgent_keywords_en": {
+    group: "claims_messages", type: "string", secret: false,
+    default: "emergency, urgent, hospital, hospitalised, hospitalized, unconscious, coma, bleeding, heart attack, stroke, intensive care, ambulance, arrested, jail, prison, custody, died, death",
+    validator: validateKeywordList,
+    description: "English words that mark a claim urgent, comma separated",
+  },
+  "claims.consent_text_fr": {
+    group: "claims_messages", type: "string", secret: false,
+    description: "Declaration the customer accepts before submitting, French. Empty skips the step",
+  },
+  "claims.consent_text_en": {
+    group: "claims_messages", type: "string", secret: false,
+    description: "Declaration the customer accepts before submitting, English. Empty skips the step",
+  },
+  "claims.confirmation_text_fr": {
+    group: "claims_messages", type: "string", secret: false,
+    description: "Next steps shown after submission, French. Empty uses the built-in text",
+  },
+  "claims.confirmation_text_en": {
+    group: "claims_messages", type: "string", secret: false,
+    description: "Next steps shown after submission, English. Empty uses the built-in text",
+  },
+};
+
+Object.assign(SETTING_REGISTRY, CLAIMS_SETTINGS);
 
 export const SETTING_KEYS = Object.keys(SETTING_REGISTRY);
 

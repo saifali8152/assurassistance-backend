@@ -279,7 +279,19 @@ addresses. Retention is bounded by a superadmin setting (180 days by default) an
 enforced by `POST /api/whatsapp/maintenance/prune`, which is the only operation in
 the module that deletes anything and never touches a session, case, traveller or
 sale. Reading a transcript requires the separate `whatsapp:read` scope rather than
-riding along with `cases:read`.
+riding along with `cases:read`. With a user login, reading transcripts and sending
+through `/api/whatsapp/messages` is restricted to the main admin (Phase 2; before,
+any signed-in user could).
+
+**Claims (Phase 2).** Claim descriptions, uploaded documents and claim transcripts
+never leave through the partner API: `claims:read` returns a status only, and claim
+conversations are filtered out of `/whatsapp/sessions*` for every API key and for
+staff without the *View claims* permission. Claim documents are stored encrypted
+(AES-256-GCM) under `storage/claims/` — outside the web-served `uploads/` — and are
+opened only through a signed link valid five minutes; every view, download and
+status change is written to the admin audit log with the user's name. Passports on
+imported policies are stored encrypted with a keyed blind index for exact search,
+never in plain text.
 
 ## 11. Endpoints that intentionally have no auth
 

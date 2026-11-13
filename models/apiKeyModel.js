@@ -49,7 +49,12 @@ export const ALLOWED_SCOPES = [
   // WhatsApp conversations. Transcripts contain personal data, so reading them
   // needs its own scope rather than riding along with cases:read.
   "whatsapp:read",
-  "whatsapp:write"
+  "whatsapp:write",
+
+  // ---- Milestone 4 (claims) -----------------------------------------------
+  // Status of claims on policies the key's owner can see — reference, status,
+  // dates, type. Never the description, documents, passport or phone (D10).
+  "claims:read"
 ];
 
 const ALLOWED_SCOPE_SET = new Set(ALLOWED_SCOPES);

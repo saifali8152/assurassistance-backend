@@ -147,3 +147,42 @@ export function getWebhookUrl() {
     .replace(/\/+$/, "");
   return base ? `${base}/api/whatsapp/webhook` : "/api/whatsapp/webhook";
 }
+
+/**
+ * Claims configuration (Milestone 4) — every rule the client controls, with the
+ * registry defaults applied, in the shape the claims code wants.
+ */
+export async function getClaimsConfig() {
+  const s = await loadSettings();
+  const num = (k, d) => {
+    const n = Number(s[k]);
+    return s[k] === null || s[k] === undefined || s[k] === "" || !Number.isFinite(n) ? d : n;
+  };
+  const words = (k) =>
+    String(s[k] || "").split(",").map((w) => w.trim().toLowerCase()).filter(Boolean);
+  return {
+    numberFormat: s["claims.number_format"] || "SIN-{YYYY}-{SEQ:6}",
+    descriptionMin: num("claims.description_min_chars", 20),
+    descriptionMax: num("claims.description_max_chars", 1500),
+    cardNumberMode: ["certificate", "separate", "none"].includes(s["claims.card_number_mode"])
+      ? s["claims.card_number_mode"] : "certificate",
+    cardNumberPattern: s["claims.card_number_pattern"] || null,
+    maxAttempts: num("claims.validation_max_attempts", 3),
+    lockoutMinutes: num("claims.validation_lockout_minutes", 30),
+    maxPerPolicy: num("claims.validation_max_per_policy", 5),
+    expiryRule: s["claims.expiry_rule"] === "today" ? "today" : "incident_date",
+    filingWindowDays: s["claims.filing_window_days"] === null || s["claims.filing_window_days"] === undefined || s["claims.filing_window_days"] === ""
+      ? null : num("claims.filing_window_days", null),
+    unpaidPolicies: s["claims.unpaid_policies"] === "refuse" ? "refuse" : "allow_flag",
+    uncoveredClaimType: s["claims.uncovered_claim_type"] === "refuse" ? "refuse" : "flag",
+    maxDocuments: num("claims.max_documents", 10),
+    maxFileMb: num("claims.max_file_mb", 10),
+    draftAbandonHours: num("claims.draft_abandon_hours", 48),
+    retentionDays: s["claims.document_retention_days"] ? num("claims.document_retention_days", null) : null,
+    notificationEmails: String(s["claims.notification_emails"] || "")
+      .split(/[,;\s]+/).map((e) => e.trim()).filter(Boolean),
+    urgentKeywords: { fr: words("claims.urgent_keywords_fr"), en: words("claims.urgent_keywords_en") },
+    consentText: { fr: s["claims.consent_text_fr"] || null, en: s["claims.consent_text_en"] || null },
+    confirmationText: { fr: s["claims.confirmation_text_fr"] || null, en: s["claims.confirmation_text_en"] || null },
+  };
+}

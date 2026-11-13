@@ -122,7 +122,16 @@ Only once you have looked at it, and with the application stopped
 10 6 * * *  cd /opt/assurassistance-backend && /usr/bin/node scripts/dailySummary.js  >> /var/log/aas-summary.log 2>&1
 15 3 * * 0  cd /opt/assurassistance-backend && /usr/bin/node scripts/pruneMessages.js >> /var/log/aas-prune.log 2>&1
 30 2 * * *  cd /opt/assurassistance-backend && bash scripts/backup-db.sh             >> /var/log/aas-backup.log 2>&1
+# Phase 2 — claims
+*/2 * * * * cd /opt/assurassistance-backend && /usr/bin/node scripts/sendClaimNotifications.js >> /var/log/aas-claim-mail.log 2>&1
+*/5 * * * * cd /opt/assurassistance-backend && /usr/bin/node scripts/refetchClaimDocuments.js  >> /var/log/aas-claim-docs.log 2>&1
+20 * * * *  cd /opt/assurassistance-backend && /usr/bin/node scripts/abandonClaimDrafts.js     >> /var/log/aas-claim-drafts.log 2>&1
+40 3 * * 0  cd /opt/assurassistance-backend && /usr/bin/node scripts/purgeClaimDocuments.js    >> /var/log/aas-claim-retention.log 2>&1
 ```
+
+The claims jobs never delete a row. `purgeClaimDocuments` removes stored *files* only,
+and only once Admin → Claims settings → document retention has a value (empty by
+default = it does nothing). Each has a `--dry-run` except the re-fetch job.
 
 The order of the first two matters: **poll before sweep**. The poller asks the
 provider what really happened; the sweeper gives up. Running the sweeper alone
@@ -271,3 +280,46 @@ is logged, not raised at the customer.
 | `SUMMARY_EMAIL` | Where the daily summary goes. Falls back to `ALERT_EMAIL`. |
 
 Rotating a provider credential is a settings change, not a deploy.
+
+---
+
+## 7. Claims (Phase 2)
+
+### Stop claims now
+
+Admin → **Activation & test numbers** → **Switch off**, type OFF. Immediate for every
+customer; submitted claims stay and can still be handled. This is the whole rollback
+for the claims module — no code or database change is needed.
+
+### A claim document stays `pending`
+
+The download from Meta failed for a temporary reason. `refetchClaimDocuments.js`
+retries at 5, 15, 30, 60, 180 and 360 minutes, then marks it `failed`. Meta keeps
+media for a limited time, so a document still failing after a day will not come back:
+ask the customer for it.
+
+```bash
+tail -50 /var/log/aas-claim-docs.log
+```
+
+### No claim emails arrive
+
+```bash
+npm run claims:notify:dry            # what is due and to whom
+tail -50 /var/log/aas-claim-mail.log
+```
+
+No recipients in Claims settings → rows are marked *skipped* (the claim is on the
+dashboard regardless). SMTP errors → check `EMAIL_*` in `.env`. Failed sends are
+retried with backoff, up to 8 times.
+
+### A staff account is locked
+
+Five wrong passwords lock an account for 15 minutes; it unlocks by itself. The
+"Who has what" tab in Roles & permissions shows locked accounts.
+
+### Claim files and backups
+
+`storage/claims/` holds encrypted files that exist nowhere else. It must be in the
+nightly file backup with `storage/certificates/`, and it is unreadable without
+`SETTINGS_ENCRYPTION_KEY` — keep the key safe separately.

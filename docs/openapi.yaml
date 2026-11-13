@@ -14,6 +14,8 @@ info:
       * Pull ledger and "invoices by region" reports.
       * Download contractual documentation (Terms & Conditions full / brief);
         Admin JWT uploads and replaces those files.
+      * Follow the status of claims customers reported on WhatsApp
+        (`claims:read` — status only).
       * Admin JWT may change a supervisor / agency login email
         (`PATCH /admin/agents/{id}` + `GET /admin/email-available`); the address
         must be unique among all login accounts.
@@ -100,7 +102,14 @@ tags:
       The conversational purchase channel. The webhook is authenticated by Meta's
       X-Hub-Signature-256 over the raw body, not by a bearer token. Transcripts
       contain personal data, so reading them requires `whatsapp:read` rather than
-      riding along with `cases:read`.
+      riding along with `cases:read`. Claim conversations are never returned to
+      an API key, whatever its scopes; use the Claims endpoints for claim status.
+      With a user login (JWT), transcripts, stats and sending are main-admin only.
+  - name: Claims
+    description: >
+      Status of claims (sinistres) reported on WhatsApp, on the policies visible to
+      the key's owner. Read with `claims:read`. Status only: descriptions, documents,
+      passports and phone numbers never leave through the API.
   - name: WhatsApp settings
     description: >
       Superadmin configuration of the WhatsApp integration. Admin JWT only — API
@@ -434,6 +443,30 @@ components:
             availableScopes:
               type: array
               items: { type: string }
+    ClaimStatus:
+      type: object
+      description: A claim as seen by a partner — status only.
+      properties:
+        reference: { type: string, example: SIN-2026-000003 }
+        status: { type: string, enum: [submitted, under_review, closed] }
+        policyNumber: { type: string, example: AA-2026-000003 }
+        policySource: { type: string, enum: [platform, imported] }
+        priority: { type: string, enum: [urgent, high, normal] }
+        category:
+          type: object
+          properties:
+            code: { type: string, example: travel }
+            fr: { type: string, example: Voyage }
+            en: { type: string, example: Travel }
+        subcategory:
+          type: object
+          properties:
+            code: { type: string, example: theft }
+            fr: { type: string, example: "Vol d'effets personnels" }
+            en: { type: string, example: Theft of belongings }
+        submittedAt: { type: string, format: date-time }
+        closedAt: { type: [string, 'null'], format: date-time }
+        updatedAt: { type: string, format: date-time }
     Pagination:
       type: object
       properties:
@@ -4003,3 +4036,75 @@ paths:
                         name: { type: string }
                         email: { type: string }
                         role: { type: string }
+
+  /claims:
+    get:
+      operationId: listClaimStatuses
+      tags: [Claims]
+      summary: Claim statuses on the policies visible to this key.
+      description: >
+        Status only — never the customer's description, documents, passport or
+        phone. Test claims and drafts are never returned. Visibility follows the
+        key's owner, as for /cases.
+      security:
+        - bearerApiKey: []
+        - bearerJWT: []
+      parameters:
+        - { name: policyNumber, in: query, schema: { type: string }, example: AA-2026-000003 }
+        - { name: status, in: query, schema: { type: string, enum: [submitted, under_review, closed] } }
+        - { name: updatedSince, in: query, schema: { type: string, format: date-time }, description: Only claims changed at or after this instant. Invalid dates are refused with 400. }
+        - { name: page, in: query, schema: { type: integer, default: 1, minimum: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Claims, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ClaimStatus' }
+                  page: { type: integer, example: 1 }
+                  limit: { type: integer, example: 50 }
+        "400":
+          description: A query parameter has an unsupported value (invalid_parameter).
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        "401":
+          description: Missing or invalid credential.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        "403":
+          description: The key lacks claims:read (insufficient_scope).
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /claims/{reference}:
+    get:
+      operationId: getClaimStatus
+      tags: [Claims]
+      summary: One claim's status by reference.
+      security:
+        - bearerApiKey: []
+        - bearerJWT: []
+      parameters:
+        - { name: reference, in: path, required: true, schema: { type: string }, example: SIN-2026-000123, description: Case-insensitive. }
+      responses:
+        "200":
+          description: The claim.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, example: true }
+                  data: { $ref: '#/components/schemas/ClaimStatus' }
+        "401":
+          description: Missing or invalid credential.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        "403":
+          description: The key lacks claims:read (insufficient_scope).
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        "404":
+          description: No claim with this reference is visible to this key (not_found).
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

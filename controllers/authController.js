@@ -14,6 +14,7 @@ import {
   isPasswordCompromised,
 } from "../utils/passwordUtils.js";
 import getPool from "../utils/db.js";
+import { accountLock, recordFailedLogin, clearFailedLogins, MAX_FAILURES } from "../utils/loginLockout.js";
 export const login = async (req, res) => {
   try {
     const email = req.body.email.toLowerCase();
@@ -24,13 +25,35 @@ export const login = async (req, res) => {
     const user = await findUserByEmail(email);
     if (!user) return res.status(401).json({ message: "Email does not exist" });
 
+    // Milestone 5: an account under lockout is refused before the password is
+    // even checked, so guessing during the lock teaches nothing.
+    const lock = await accountLock(user.id);
+    if (lock.locked) {
+      return res.status(423).json({
+        message: `Too many incorrect passwords. This account is locked for ${lock.retryAfterMinutes} more minute(s). You can also reset your password.`,
+        code: "account_locked",
+        retryAfterMinutes: lock.retryAfterMinutes,
+      });
+    }
+
     const isMatch = await verifyPassword(password, user.password);
-    if (!isMatch)
-      return res.status(401).json({ message: "Password is incorrect" });
+    if (!isMatch) {
+      const failed = await recordFailedLogin(user.id);
+      if (failed.locked) {
+        await logActivity(user.id, "Account locked after repeated failed logins").catch(() => {});
+        return res.status(423).json({
+          message: "Too many incorrect passwords. This account is temporarily locked. You can also reset your password.",
+          code: "account_locked",
+        });
+      }
+      const left = failed.failures ? Math.max(0, MAX_FAILURES - failed.failures) : null;
+      return res.status(401).json({ message: "Password is incorrect", ...(left !== null ? { attemptsLeft: left } : {}) });
+    }
     if (user.status != "active")
       return res.status(401).json({ message: "Your access to the system has been revoked. For further assistance, please contact your company administrator." });
 
     await updateLastLogin(user.id);
+    await clearFailedLogins(user.id);
 
     // Generate JWT token
     const token = generateToken(user);
@@ -208,6 +231,13 @@ export const resetPassword = async (req, res) => {
       hashed,
       email,
     ]);
+
+    // A completed reset also lifts an account lockout (Milestone 5).
+    try {
+      await pool.query("UPDATE users SET failed_login_count = 0, locked_until = NULL WHERE email = ?", [email]);
+    } catch {
+      /* lockout columns not migrated yet */
+    }
 
     // Delete used OTP
     await pool.query("DELETE FROM password_resets WHERE email = ?", [email]);

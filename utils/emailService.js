@@ -25,6 +25,13 @@ export const initializeEmailTransporter = (config) => {
 
 // Get the transporter instance
 export const getEmailTransporter = () => {
+  // Cron scripts (daily summary, payment poller/sweeper alerts, claim
+  // notifications) run outside server.js, which is where the transporter is
+  // normally created. Build it from the same environment variables instead of
+  // failing — before this, those emails could never be sent from cron.
+  if (!transporter && process.env.EMAIL_HOST) {
+    initializeEmailTransporter(process.env);
+  }
   if (!transporter) {
     throw new Error('Email transporter not initialized. Make sure to call initializeEmailTransporter() first.');
   }

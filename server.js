@@ -40,6 +40,11 @@ import healthRoutes from './routes/healthRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
 import quoteRoutes from './routes/quoteRoutes.js';
 import zoneRoutes from './routes/zoneRoutes.js';
+import accessRoutes from './routes/accessRoutes.js';
+import claimsAdminRoutes from './routes/claimsAdminRoutes.js';
+import externalPolicyRoutes from './routes/externalPolicyRoutes.js';
+import simulatorRoutes from './routes/simulatorRoutes.js';
+import partnerClaimsRoutes from './routes/partnerClaimsRoutes.js';
 
 // Initialize database pool
 const pool = initializePool({
@@ -262,6 +267,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin/api-keys', apiKeyRoutes);
 app.use('/api/admin/payments', paymentAdminRoutes);
 app.use('/api/admin/whatsapp-settings', settingsRoutes);
+app.use('/api/admin/access', accessRoutes); // Milestone 5: roles & permissions
+app.use('/api/admin/claims', claimsAdminRoutes); // Milestone 5: claims management
+app.use('/api/admin/external-policies', externalPolicyRoutes); // Milestone 5: imported policies
+app.use('/api/admin/simulator', simulatorRoutes); // Milestone 5: WhatsApp simulator (never sends)
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/catalogue', catalogueRoutes);
@@ -281,6 +290,7 @@ app.use("/api/contractual-documents", contractualDocumentRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/quotes", quoteRoutes);
 app.use("/api/zones", zoneRoutes);
+app.use("/api/claims", partnerClaimsRoutes); // Milestone 4 (D10): claim status for partners
 
 // 404 for unknown API routes (so proxy gets a response, not hang)
 app.use('/api', (req, res, next) => {

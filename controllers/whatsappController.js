@@ -50,7 +50,22 @@ import { getLatestPolicyForWhatsAppNumber } from "../models/salesModel.js";
 import { getCountries, getDestinations, getCountryByCode } from "../utils/referenceData.js";
 import { listWhatsAppPlans, createQuote } from "../models/quoteModel.js";
 import getPool from "../utils/db.js";
+import { hasPermission } from "../models/accessModel.js";
 import { captureException } from "../utils/monitoring.js";
+import { getClaimsConfig } from "../utils/appSettings.js";
+import { flagAccess, CLAIMS_FLAG } from "../utils/featureFlags.js";
+import { getCategoryTree } from "../models/claimCategoryModel.js";
+import { validatePolicy } from "../models/claimPolicyLookup.js";
+import { ingestDocument } from "../models/claimDocumentModel.js";
+import { isClaimStep } from "../utils/whatsapp/claimEngine.js";
+import {
+  createDraft as createClaimDraft,
+  updateDraft as updateClaimDraft,
+  abandonDraft as abandonClaimDraft,
+  findResumableDraft,
+  trackClaimForNumber,
+  submitClaim,
+} from "../models/claimModel.js";
 
 const ok = (res, data, extra = {}) => res.json({ success: true, data, ...extra });
 const fail = (res, status, code, message, extra = {}) =>
@@ -240,10 +255,22 @@ async function handleSingleMessage(message, config) {
       session.collectedData?.residence_code || session.collectedData?.nationality_code
     ).catch(() => ({ enabled: false, options: [] }));
 
+    // Claims (Milestone 4): who may use them right now, and the functions the
+    // claim conversation needs. Fails closed — any error means "not available".
+    const claims = await claimsContextFor(waNumber);
+
+    // A photo or file sent during a claim is fetched from Meta, checked and
+    // stored HERE, before the engine runs — the engine never does I/O. The
+    // outcome rides on the message so the reply can say what happened.
+    if (message.media && isClaimStep(session.currentStep) && claims.access.allowed) {
+      message.stored = await ingestClaimMedia({ message, session, claims, config });
+    }
+
     const ctx = {
       flow: await loadFlow(),
       config,
       payment,
+      claims,
       now: new Date(),
       deps: {
         startPayment: startPaymentForSession,
@@ -334,6 +361,76 @@ async function handleSingleMessage(message, config) {
   }
 }
 
+/** Fetch, check and store one file for the session's claim. Never throws. */
+async function ingestClaimMedia({ message, session, claims, config }) {
+  if (!session.claimId) return { ok: false, code: "no_claim" };
+  try {
+    return await ingestDocument({
+      claimId: session.claimId,
+      waMessageId: message.waMessageId,
+      mediaId: message.media.id,
+      declaredMime: message.media.mimeType,
+      filename: message.media.filename,
+      declaredSha256: message.media.sha256,
+      waConfig: config,
+      claimsConfig: claims.config,
+    });
+  } catch (err) {
+    captureException(err, { scope: "claim_document_ingest", claimId: session.claimId });
+    return { ok: false, code: "download_failed" };
+  }
+}
+
+/**
+ * Everything the claim conversation needs for one message.
+ *
+ * `access.allowed` is the switch OR the allowlist. When it is false the claim
+ * journey shows nothing but a neutral "coming soon", and none of the deps is
+ * ever called. Any failure here — a missing table, a database hiccup — gives
+ * allowed:false: claims are dormant by default and stay dormant on error.
+ */
+export async function claimsContextFor(waNumber, { forceAccess = null } = {}) {
+  const closed = { access: { enabled: false, allowlisted: false, allowed: false }, config: {}, getCategoryTree: async () => [], deps: {} };
+  try {
+    // forceAccess is used by the admin simulator only (its numbers are test
+    // numbers by construction); the webhook never passes it.
+    const access = forceAccess || (await flagAccess(CLAIMS_FLAG, waNumber));
+    if (!access.allowed) return { ...closed, access };
+    const config = await getClaimsConfig();
+    return {
+      access,
+      config,
+      getCategoryTree,
+      deps: {
+        validatePolicy: ({ waNumber: number, sessionId, identifier, passport }) =>
+          validatePolicy({ waNumber: number, sessionId, identifier, passport, today: new Date(), config }),
+        createDraft: ({ waNumber: number, sessionId, language, policy, isTest, flags }) =>
+          createClaimDraft({
+            waNumber: number,
+            sessionId,
+            language,
+            saleId: policy?.saleId || null,
+            externalPolicyId: policy?.externalPolicyId || null,
+            policyNumber: policy?.policyNumber || null,
+            holderName: policy?.holderFirstName || null,
+            isTest,
+            flags,
+          }),
+        saveDraft: (claimId, patch) => updateClaimDraft(claimId, patch),
+        abandonDraft: (claimId, reason) => abandonClaimDraft(claimId, reason),
+        findResumableDraft: ({ waNumber: number, sessionId }) =>
+          findResumableDraft({ waNumber: number, excludeSessionId: sessionId, maxAgeHours: config.draftAbandonHours }),
+        trackClaim: ({ waNumber: number, reference }) => trackClaimForNumber({ waNumber: number, reference }),
+        submitClaim: ({ claimId, state, language, waNumber: number }) =>
+          submitClaim({ claimId, state, language, waNumber: number, config }),
+      },
+    };
+  } catch (err) {
+    console.warn("WhatsApp: claims context unavailable, treating claims as off:", err.message);
+    return closed;
+  }
+}
+
 /**
  * Events from the engine that need something done in the world.
  *
@@ -395,7 +492,7 @@ async function deliverReply(reply, { waNumber, sessionId, config }) {
  * customised it, otherwise the built-in one. Unknown steps and parsers in a
  * stored definition are ignored by mergeFlowDefinition rather than trusted.
  */
-async function loadFlow() {
+export async function loadFlow() {
   try {
     const pool = getPool();
     const [rows] = await pool.query(
@@ -413,6 +510,20 @@ async function loadFlow() {
 
 /* --------------------------------------------------------------- read APIs */
 
+/**
+ * Claim conversations are readable only by signed-in staff with claims.view
+ * (the admin always has it). Partner API keys never see them, whatever their
+ * scopes: the partner API exposes a claim as a status only (D10).
+ */
+async function canReadClaimConversations(req) {
+  if (req.authMode === "api_key") return false;
+  try {
+    return await hasPermission(req.user, "claims.view");
+  } catch {
+    return false;
+  }
+}
+
 export const getSessions = async (req, res) => {
   try {
     const result = await listSessions({
@@ -420,6 +531,7 @@ export const getSessions = async (req, res) => {
       limit: req.query.limit,
       status: req.query.status || null,
       search: req.query.search || "",
+      excludeClaims: !(await canReadClaimConversations(req)),
     });
     return ok(res, result.sessions, { pagination: result.pagination });
   } catch (err) {
@@ -432,6 +544,9 @@ export const getSession = async (req, res) => {
   try {
     const session = await getSessionById(Number(req.params.id));
     if (!session) return fail(res, 404, "not_found", "Conversation not found");
+    if (session.flowKey === "claim" && !(await canReadClaimConversations(req))) {
+      return fail(res, 404, "not_found", "Conversation not found");
+    }
     return ok(res, session);
   } catch (err) {
     console.error("getSession failed:", err);
@@ -443,7 +558,9 @@ export const getSessionMessages = async (req, res) => {
   try {
     const session = await getSessionById(Number(req.params.id));
     if (!session) return fail(res, 404, "not_found", "Conversation not found");
-    const messages = await listSessionMessages(session.id, { limit: req.query.limit });
+    const claimsAllowed = await canReadClaimConversations(req);
+    if (session.flowKey === "claim" && !claimsAllowed) return fail(res, 404, "not_found", "Conversation not found");
+    const messages = await listSessionMessages(session.id, { limit: req.query.limit, excludeClaims: !claimsAllowed });
     return ok(res, messages, { session: { id: session.id, waNumber: session.waNumber, status: session.status } });
   } catch (err) {
     console.error("getSessionMessages failed:", err);

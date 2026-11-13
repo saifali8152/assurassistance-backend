@@ -70,6 +70,10 @@ function mapSession(row) {
     travellerId: row.traveller_id,
     caseId: row.case_id,
     quoteReference: row.quote_reference,
+    // Milestone 4 (m4_07). Absent on a database that has not been migrated,
+    // which reads as "no claim, nothing parked".
+    claimId: row.claim_id ?? null,
+    parkedPurchase: parseJson(row.parked_purchase, null),
     lastActivityAt: row.last_activity_at,
     expiresAt: row.expires_at,
     createdAt: row.created_at,
@@ -153,6 +157,8 @@ export async function updateSession(id, patch = {}) {
     caseId: "case_id",
     quoteReference: "quote_reference",
     paymentTransactionId: "payment_transaction_id",
+    claimId: "claim_id",
+    parkedPurchase: "parked_purchase",
   };
 
   const sets = [];
@@ -161,6 +167,7 @@ export async function updateSession(id, patch = {}) {
     if (!(key in patch)) continue;
     let value = patch[key];
     if (key === "stepHistory" || key === "collectedData") value = JSON.stringify(value ?? (key === "stepHistory" ? [] : {}));
+    if (key === "parkedPurchase") value = value ? JSON.stringify(value) : null;
     sets.push(`${column} = ?`);
     params.push(value);
   }
@@ -253,7 +260,13 @@ export async function expireStaleSessions() {
 }
 
 /** Sessions for the admin screen and the 3rd-party API. */
-export async function listSessions({ page = 1, limit = 25, status = null, search = "" } = {}) {
+/**
+ * `excludeClaims`: leave out claim conversations (flow_key = 'claim'). Used for
+ * callers that may not read claims — partner API keys, and staff without the
+ * claims.view permission. Claim transcripts hold incident details and identity
+ * numbers that the partner API only ever exposes as a status (D10).
+ */
+export async function listSessions({ page = 1, limit = 25, status = null, search = "", excludeClaims = false } = {}) {
   const pool = getPool();
   const size = Math.min(100, Math.max(1, Number(limit) || 25));
   const offset = (Math.max(1, Number(page) || 1) - 1) * size;
@@ -264,6 +277,7 @@ export async function listSessions({ page = 1, limit = 25, status = null, search
     where.push("s.status = ?");
     params.push(status);
   }
+  if (excludeClaims) where.push("(s.flow_key IS NULL OR s.flow_key <> 'claim')");
   if (search) {
     where.push("(s.wa_number LIKE ? OR s.wa_profile_name LIKE ? OR s.quote_reference LIKE ?)");
     const like = `%${search}%`;
@@ -390,11 +404,13 @@ export async function applyStatusUpdate({ waMessageId, status, errorCode = null,
   return result.affectedRows > 0;
 }
 
-export async function listSessionMessages(sessionId, { limit = 200 } = {}) {
+export async function listSessionMessages(sessionId, { limit = 200, excludeClaims = false } = {}) {
   const pool = getPool();
   const size = Math.min(500, Math.max(1, Number(limit) || 200));
+  // A purchase conversation can switch into a claim; those messages carry a claim_ step.
+  const claimFilter = excludeClaims ? " AND (step_key IS NULL OR step_key NOT LIKE 'claim\\_%')" : "";
   const [rows] = await pool.query(
-    `SELECT * FROM whatsapp_messages WHERE session_id = ? ORDER BY id ASC LIMIT ${size}`,
+    `SELECT * FROM whatsapp_messages WHERE session_id = ?${claimFilter} ORDER BY id ASC LIMIT ${size}`,
     [sessionId]
   );
   return rows.map(mapMessage);

@@ -9,7 +9,8 @@ import {
   softDeleteSaleController,
   listPolicyDeletionReasonsController
 } from "../controllers/salesController.js";
-import { adminOnly } from "../middlewares/roleMiddleware.js";
+import { adminOnly, adminOrAgencyManager } from "../middlewares/roleMiddleware.js";
+import { resendCertificateWhatsApp } from "../controllers/certificateResendController.js";
 import authenticate from "../middlewares/authMiddleware.js";
 import { idempotency } from "../middlewares/idempotencyMiddleware.js";
 import {
@@ -50,4 +51,6 @@ router.get(
 router.get("/:id", authenticateAny, requireScope("sales:read"), getSaleByIdController);
 router.patch("/:id/payment", authenticateAny, requireScope("sales:payment"), idempotency("sales:payment"), updatePaymentStatusController);
 router.post("/:id/soft-delete", authenticate, adminOnly, softDeleteSaleController);
+// Milestone 5: staff button on the policy screen. JWT only — never an API key.
+router.post("/:id/resend-whatsapp", authenticate, adminOrAgencyManager, resendCertificateWhatsApp);
 export default router;

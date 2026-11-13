@@ -26,6 +26,11 @@ export const COMMANDS = {
   LANGUAGE_EN: "language_en",
   CANCEL: "cancel",
   CERTIFICATE: "certificate",
+  // Milestone 4. Recognised whether or not claims are switched on: when they
+  // are off, the engine answers with a neutral "coming soon" instead of
+  // mistaking the request for an answer to the current question.
+  CLAIM: "claim",
+  TRACK: "track",
 };
 
 const TABLE = [
@@ -98,6 +103,11 @@ export function detectCommand(input) {
   // every other command the whole-message rule below is what stops a legitimate
   // answer being eaten.
   if (isCertificateRequest(s)) return COMMANDS.CERTIFICATE;
+  // Same loose reading for claims, and for the same reason: people write
+  // "je veux declarer un sinistre", not a keyword. Tracking is checked first —
+  // "suivre mon sinistre" mentions a claim but asks about one.
+  if (isTrackRequest(s)) return COMMANDS.TRACK;
+  if (isClaimRequest(s)) return COMMANDS.CLAIM;
   // Guard against a long sentence that merely contains a command word.
   if (s.split(" ").length > 4) return null;
   for (const entry of TABLE) {
@@ -120,6 +130,42 @@ export function isCertificateRequest(normalised) {
   if (words.length > 5) return false;
   if (/\d/.test(s)) return false;
   return words.some((w) => CERTIFICATE_WORDS.includes(w));
+}
+
+const CLAIM_WORDS = ["sinistre", "sinistres", "claim", "claims"];
+const TRACK_WORDS = ["suivi", "suivre", "track", "tracking", "statut", "status"];
+
+/** "declarer un sinistre", "I want to make a claim" — short, no digits. */
+export function isClaimRequest(normalised) {
+  const s = normalizeCommandText(normalised);
+  if (!s || /\d/.test(s)) return false;
+  const words = s.split(" ");
+  if (words.length > 6) return false;
+  return words.some((w) => CLAIM_WORDS.includes(w));
+}
+
+/** "suivi", "suivre mon sinistre", "track my claim" — short, no digits. */
+export function isTrackRequest(normalised) {
+  const s = normalizeCommandText(normalised);
+  if (!s || /\d/.test(s)) return false;
+  const words = s.split(" ");
+  if (words.length > 5) return false;
+  if (!words.some((w) => TRACK_WORDS.includes(w))) return false;
+  // "suivi" / "track" alone, or with a word that says what is tracked.
+  return words.length === 1 || words.some((w) => ["sinistre", "claim", "dossier", "declaration", "case"].includes(w));
+}
+
+/**
+ * "SUIVI SIN-2026-000123", "track SIN-2026-000123", "suivi de mon dossier SIN-…".
+ * Carries a reference, so it has digits and is checked on the RAW text before
+ * the command table (which refuses anything with digits).
+ * @returns {{ reference: string } | null}
+ */
+export function parseTrackRequest(input) {
+  const raw = String(input ?? "").trim();
+  const m = /^(?:suivi|suivre|track|statut|status)\s+(?:(?:de|du|mon|ma|my|the|le|la)\s+)*(?:(?:dossier|sinistre|claim|case)\s+)?([A-Za-z]{1,6}[-\/ ]?\d{2,4}[-\/ ]?\d{1,8})$/i.exec(raw);
+  if (!m) return null;
+  return { reference: m[1].toUpperCase().replace(/\s+/g, "-").replace(/\//g, "-") };
 }
 
 export function isGreeting(input) {

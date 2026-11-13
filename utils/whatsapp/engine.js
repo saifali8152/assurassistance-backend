@@ -41,6 +41,14 @@ import {
   isGreeting,
   languageForCommand,
 } from "./commands.js";
+import { parseTrackRequest } from "./commands.js";
+import {
+  isClaimStep,
+  processClaimMessage,
+  renderClaimStep,
+  startClaimJourney,
+  startTrackJourney,
+} from "./claimEngine.js";
 
 /** Internal keys kept on collectedData; never shown to the customer. */
 const RETURN_TO = "__returnTo";
@@ -466,6 +474,13 @@ export async function renderStep(stepKey, session, ctx) {
 
   const data = session.collectedData || {};
 
+  // Milestone 4: with claims available to this number, the main menu becomes
+  // a list (WhatsApp allows only three buttons). With claims off it stays
+  // exactly the three buttons it has always been.
+  if (step.key === "welcome" && ctx.claims?.access?.allowed) {
+    return renderClaimsMenu(step, t);
+  }
+
   switch (step.type) {
     case "buttons":
       return {
@@ -524,6 +539,44 @@ export async function renderStep(stepKey, session, ctx) {
     default:
       return { replies: [textReply(t("system.error"))], patch: {} };
   }
+}
+
+function renderClaimsMenu(step, t) {
+  const rows = [
+    { id: "menu:buy", title: t("welcome.optionBuy"), description: t("welcome.hintBuy") },
+    { id: "menu:claim", title: t("welcome.optionClaim"), description: t("welcome.hintClaim") },
+    { id: "menu:track", title: t("welcome.optionTrack"), description: t("welcome.hintTrack") },
+    { id: "menu:question", title: t("welcome.optionQuestion"), description: t("welcome.hintQuestion") },
+    { id: "cmd:agent", title: t("welcome.optionAgent"), description: t("welcome.hintAgent") },
+  ];
+  return {
+    replies: [listReply(t(step.promptKey), [{ rows }], t("welcome.menuButton"), step.key)],
+    patch: { currentStep: step.key },
+  };
+}
+
+/** What the claim journey may borrow from this one, without importing it. */
+function claimHelpers({ ctx, flow, message }) {
+  return {
+    countryParser: PARSERS.country,
+    renderPurchaseStep: (key, s) => renderStep(key, s, ctx),
+    sharedCommand: (command, s) =>
+      [COMMANDS.AGENT, COMMANDS.CERTIFICATE].includes(command)
+        ? handleCommand({ command, session: s, ctx, flow, events: [] })
+        : null,
+    reenter: (s) => processMessage({ message, session: s, ctx }),
+    startPurchase: async (s) => {
+      const welcome = getStep(flow, flow.startStep);
+      const first = resolveNext(welcome, {}) || flow.startStep;
+      const rendered = await renderStep(first, { ...s, currentStep: first }, ctx);
+      return {
+        replies: rendered.replies,
+        patch: { ...rendered.patch, stepHistory: [welcome?.key || flow.startStep], collectedData: {}, retryCount: 0 },
+        events: [{ type: "purchase_started_from_claim" }],
+        countsAsCustomerMessage: true,
+      };
+    },
+  };
 }
 
 /**
@@ -787,6 +840,11 @@ export async function processMessage({ message, session, ctx }) {
 
   /* --- 1. Unsupported content: answer politely, never go silent ----------- */
   if (message.type === "unsupported") {
+    // A photo or a file sent during a claim belongs to the claim (Milestone 4).
+    // Anywhere else it is answered exactly as before.
+    if (message.media && isClaimStep(activeSession.currentStep)) {
+      return processClaimMessage({ message, session: activeSession, ctx, helpers: claimHelpers({ ctx, flow: ctx.flow || FLOW, message }) });
+    }
     const kind = message.unsupportedKind || "generic";
     const keyByKind = {
       image: "unsupported.image",
@@ -800,7 +858,9 @@ export async function processMessage({ message, session, ctx }) {
     const replies = [textReply(t(keyByKind[kind] || "unsupported.generic"))];
     // Re-ask the current question so the customer knows where they are.
     if (activeSession.currentStep) {
-      const again = await renderStep(activeSession.currentStep, activeSession, ctx);
+      const again = isClaimStep(activeSession.currentStep)
+        ? await renderClaimStep(activeSession.currentStep, activeSession, ctx)
+        : await renderStep(activeSession.currentStep, activeSession, ctx);
       replies.push(...again.replies);
     }
     return { replies, patch: {}, events, countsAsCustomerMessage: false };
@@ -824,8 +884,34 @@ export async function processMessage({ message, session, ctx }) {
     };
   }
 
+  /* --- 1b. Claims (Milestone 4) ------------------------------------------ */
+  // A session already in a claim step belongs to the claim journey entirely.
+  const helpers = claimHelpers({ ctx, flow, message });
+  if (isClaimStep(activeSession.currentStep)) {
+    return processClaimMessage({ message, session: activeSession, ctx, helpers });
+  }
+  // "SUIVI SIN-2026-000123" carries digits, so it is read before the command
+  // table (which ignores anything with a digit in it).
+  const trackRequest = parseTrackRequest(rawText);
+  if (trackRequest) {
+    return startTrackJourney({ session: activeSession, ctx, helpers, reference: trackRequest.reference, events });
+  }
+  if (message.selectionId === "menu:claim") {
+    return startClaimJourney({ session: activeSession, ctx, helpers, events });
+  }
+  if (message.selectionId === "menu:track") {
+    return startTrackJourney({ session: activeSession, ctx, helpers, events });
+  }
+
   /* --- 2. Global commands, from typed text or a button id ----------------- */
-  const command = detectCommandFromSelection(message.selectionId) || detectCommand(rawText);
+  let command = detectCommandFromSelection(message.selectionId) || detectCommand(rawText);
+  // The Milestone 4 commands are read from TYPED text only: a tapped button
+  // carries its title as text, and a plan or option whose name contains
+  // "claim" or "status" must not start a claim. (The older commands keep
+  // their existing behaviour.)
+  if (message.selectionId && !detectCommandFromSelection(message.selectionId) && [COMMANDS.CLAIM, COMMANDS.TRACK].includes(command)) {
+    command = null;
+  }
   if (command) {
     return handleCommand({ command, session: activeSession, ctx, flow, events });
   }
@@ -838,9 +924,12 @@ export async function processMessage({ message, session, ctx }) {
     const welcomeStep = getStep(flow, flow.startStep);
     const rendered = await renderStep(flow.startStep, activeSession, ctx);
     const [first, ...rest] = rendered.replies;
-    const merged = first?.kind === "buttons"
-      ? [{ ...first, body: `${greeting}\n\n${first.body}` }, ...rest]
-      : [textReply(greeting), ...rendered.replies];
+    const claimsGreeting = ctx.claims?.access?.allowed
+      ? t("welcome.greetingClaims", { name: message.profileName ? ` ${message.profileName}` : "" })
+      : greeting;
+    const merged = first?.kind === "buttons" || first?.kind === "list"
+      ? [{ ...first, body: `${claimsGreeting}\n\n${first.body}` }, ...rest]
+      : [textReply(claimsGreeting), ...rendered.replies];
 
     return {
       replies: merged,
@@ -1122,6 +1211,13 @@ async function handleCommand({ command, session, ctx, flow, events }) {
 
   if (command === COMMANDS.CERTIFICATE) {
     return handleCertificateRequest({ session, ctx, events, t });
+  }
+
+  if (command === COMMANDS.CLAIM || command === COMMANDS.TRACK) {
+    const helpers = claimHelpers({ ctx, flow, message: { text: "", type: "text" } });
+    return command === COMMANDS.CLAIM
+      ? startClaimJourney({ session, ctx, helpers, events })
+      : startTrackJourney({ session, ctx, helpers, events });
   }
 
   const language = languageForCommand(command);

@@ -102,11 +102,29 @@ function normaliseMessage(m, { metadata, contacts }) {
         text: m.button?.text || null,
       };
 
+    // Photos and files stay "unsupported" — that is still exactly how the
+    // purchase journey answers them. Milestone 4 adds what a claim needs to
+    // fetch the file (Meta's media id, type, hash, name, caption); only the
+    // claim journey ever uses it.
     case "image":
+    case "document":
+      return {
+        ...base,
+        type: "unsupported",
+        unsupportedKind: m.type,
+        media: {
+          kind: m.type,
+          id: m[m.type]?.id || null,
+          mimeType: m[m.type]?.mime_type || null,
+          sha256: m[m.type]?.sha256 || null,
+          filename: m[m.type]?.filename || null,
+          caption: (m[m.type]?.caption || "").trim() || null,
+        },
+      };
+
     case "video":
     case "audio":
     case "voice":
-    case "document":
     case "sticker":
     case "location":
     case "contacts":

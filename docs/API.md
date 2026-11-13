@@ -9,7 +9,7 @@ and rendered as Swagger UI at `/api/docs`).
 - **Local:** `http://localhost:3000/api`
 - **Auth:** `Authorization: Bearer <jwt|api-key>` (see [SECURITY.md](./SECURITY.md))
 
-Notable recent additions: [partner invoices / receipts](#11-partner-invoices--api-partner-invoices-admin--sub-admin-jwt) (`documentType`, `stamp`), [contractual documents](#12-contractual-documents--api-contractual-documents-jwt) (Terms & Conditions `full` / `brief`), [supervisor login email](#patch-adminagentsid--change-login-email-admin-jwt-only) (`PATCH /admin/agents/:id` `email` + `GET /admin/email-available`), [insurer supervisors](#insurer-supervisors) (`insurer_supervisor` + `partner_insurer` plan scoping). Milestone 2 adds [quotes](#14-quotes--apiquotes) (`quotes:read` / `quotes:write`), [destination zones](#15-destination-zones--apizones) (`zones:read`), the [WhatsApp channel](#16-whatsapp--apiwhatsapp) (`whatsapp:read` / `whatsapp:write`) and [superadmin WhatsApp settings](#17-whatsapp-settings--apiadminwhatsapp-settings).
+Notable recent additions: [partner invoices / receipts](#11-partner-invoices--api-partner-invoices-admin--sub-admin-jwt) (`documentType`, `stamp`), [contractual documents](#12-contractual-documents--api-contractual-documents-jwt) (Terms & Conditions `full` / `brief`), [supervisor login email](#patch-adminagentsid--change-login-email-admin-jwt-only) (`PATCH /admin/agents/:id` `email` + `GET /admin/email-available`), [insurer supervisors](#insurer-supervisors) (`insurer_supervisor` + `partner_insurer` plan scoping). Milestone 2 adds [quotes](#14-quotes--apiquotes) (`quotes:read` / `quotes:write`), [destination zones](#15-destination-zones--apizones) (`zones:read`), the [WhatsApp channel](#16-whatsapp--apiwhatsapp) (`whatsapp:read` / `whatsapp:write`) and [superadmin WhatsApp settings](#17-whatsapp-settings--apiadminwhatsapp-settings). Milestone 4 adds [claim status](#19-claims--apiclaims-claim-status-read-only) (`claims:read`, status only); Milestone 5's admin-panel endpoints are listed in [§20](#20-phase-2-admin-endpoints-jwt--permission--not-reachable-with-an-api-key).
 
 Legend:
 
@@ -1234,11 +1234,11 @@ signature-authenticated; everything else uses the normal auth stack.
 | GET | `/whatsapp/webhook` | PUBLIC | — | Meta verification handshake. Echoes `hub.challenge`. |
 | POST | `/whatsapp/webhook` | SIGNATURE | — | Inbound messages and delivery receipts. |
 | GET | `/whatsapp/status` | JWT, KEY | `whatsapp:read` | Non-secret runtime status. |
-| GET | `/whatsapp/sessions` | JWT, KEY | `whatsapp:read` | Conversations (`?status=`, `?search=`, paginated). |
-| GET | `/whatsapp/sessions/:id` | JWT, KEY | `whatsapp:read` | One conversation with its collected data. |
-| GET | `/whatsapp/sessions/:id/messages` | JWT, KEY | `whatsapp:read` | Full transcript. |
-| GET | `/whatsapp/stats` | JWT, KEY | `whatsapp:read` | Customer-message counts vs the message budget. |
-| POST | `/whatsapp/messages` | JWT, KEY | `whatsapp:write` | Send an outbound text. |
+| GET | `/whatsapp/sessions` | ADMIN JWT, KEY | `whatsapp:read` | Conversations (`?status=`, `?search=`, paginated). |
+| GET | `/whatsapp/sessions/:id` | ADMIN JWT, KEY | `whatsapp:read` | One conversation with its collected data. |
+| GET | `/whatsapp/sessions/:id/messages` | ADMIN JWT, KEY | `whatsapp:read` | Full transcript. |
+| GET | `/whatsapp/stats` | ADMIN JWT, KEY | `whatsapp:read` | Customer-message counts vs the message budget. |
+| POST | `/whatsapp/messages` | ADMIN JWT, KEY | `whatsapp:write` | Send an outbound text. |
 | POST | `/whatsapp/maintenance/prune` | ADMIN | — | Apply the transcript retention policy. |
 
 ### Commands a customer can type at any point
@@ -1283,6 +1283,15 @@ messages in two seconds cannot advance the flow three times.
 
 `whatsapp:read` is deliberately separate from `cases:read`: transcripts contain
 personal data that a partner with case access has no automatic right to read.
+
+With a user login (JWT), transcripts, stats and sending are **main admin only**;
+any other signed-in user gets `403`. API keys are governed by their scopes.
+
+**Claim conversations are never returned to an API key**, whatever its scopes, nor
+to staff without the *View claims* permission: `/whatsapp/sessions` leaves them out,
+opening one answers `404`, and claim messages inside a purchase conversation are
+removed from its transcript. A partner follows a claim through
+[`/api/claims`](#19-claims--apiclaims-claim-status-read-only) — status only.
 
 ### GET /whatsapp/stats
 
@@ -1385,7 +1394,7 @@ In either case the HTTP status code is authoritative.
 
 | Status | `code` |
 |---|---|
-| 400 | `validation_error` |
+| 400 | `validation_error`, `invalid_parameter` |
 | 401 | `missing_token`, `invalid_token`, `invalid_api_key`, `revoked_api_key`, `expired_api_key`, `owner_disabled` |
 | 403 | `insufficient_scope`, `ip_not_allowed`, `Forbidden: admin only`, `Forbidden: admin or sub-administrator only` |
 | 404 | `not_found` |
@@ -1487,3 +1496,150 @@ written once per reason rather than once per provider:
 
 Each is a standalone script run by cron, never an in-process timer: the app runs
 under PM2 and an interval would fire once per worker.
+
+---
+
+## 19. Claims — `/api/claims` (claim status, read-only)
+
+Customers report claims (*sinistres*) on WhatsApp; Assur'Assistance staff handle
+them in the admin panel. A partner can **follow the status** of the claims made on
+the policies it can see. It never sees what the customer wrote, the documents
+they sent, their passport or their phone number — only where the claim stands.
+
+| Method | Path | Auth | Scope | Description |
+|---|---|---|---|---|
+| GET | `/claims` | KEY, JWT | `claims:read` | Claims on policies visible to the key's owner, newest first. |
+| GET | `/claims/{reference}` | KEY, JWT | `claims:read` | One claim by its reference (`SIN-2026-000123`, any case). |
+
+**Visibility** follows the key's owner, exactly like `/cases`: an agency key sees
+claims on the policies it (or an agency it supervises) sold; an insurer-supervisor
+key sees its own insurer's policies; an admin key sees everything, including claims
+on imported policies. Claims made on numbers used for testing (`is_test`) and
+claims not yet submitted (drafts, abandoned) are **never** returned. A claim that
+exists but is outside your visibility answers `404`, the same as one that does not
+exist.
+
+### Statuses
+
+| `status` | Meaning |
+|---|---|
+| `submitted` | Received from the customer; not yet picked up. |
+| `under_review` | A claims handler is working on it. |
+| `closed` | Handled. A closed claim is never reopened. |
+
+`priority` is `urgent`, `high` or `normal` (urgent is set when the customer's
+description mentions hospitalisation, emergency and similar words).
+`policySource` is `platform` for a policy sold on Assur'Assistance and `imported`
+for a policy loaded by the admin for claims only.
+
+### GET /claims
+
+Query parameters (all optional):
+
+| Name | Example | Notes |
+|---|---|---|
+| `policyNumber` | `AA-2026-000003` | Exact policy number. |
+| `status` | `closed` | `submitted`, `under_review` or `closed`; anything else is `400 invalid_parameter`. |
+| `updatedSince` | `2026-11-01T00:00:00Z` | ISO 8601. Use it to poll for changes; an invalid date is `400 invalid_parameter`. |
+| `page`, `limit` | `1`, `50` | `limit` 1–100, default 50. |
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "reference": "SIN-2026-000003",
+      "status": "under_review",
+      "policyNumber": "AA-2026-000003",
+      "policySource": "platform",
+      "priority": "normal",
+      "category": {
+        "code": "travel",
+        "fr": "Voyage",
+        "en": "Travel"
+      },
+      "subcategory": {
+        "code": "theft",
+        "fr": "Vol d'effets personnels",
+        "en": "Theft of belongings"
+      },
+      "submittedAt": "2026-11-13T14:55:35.000Z",
+      "closedAt": null,
+      "updatedAt": "2026-11-14T09:12:04.000Z"
+    }
+  ],
+  "page": 1,
+  "limit": 50
+}
+```
+
+### GET /claims/{reference}
+
+```json
+{
+  "success": true,
+  "data": {
+    "reference": "SIN-2026-000003",
+    "status": "under_review",
+    "policyNumber": "AA-2026-000003",
+    "policySource": "platform",
+    "priority": "normal",
+    "category": {
+      "code": "travel",
+      "fr": "Voyage",
+      "en": "Travel"
+    },
+    "subcategory": {
+      "code": "theft",
+      "fr": "Vol d'effets personnels",
+      "en": "Theft of belongings"
+    },
+    "submittedAt": "2026-11-13T14:55:35.000Z",
+    "closedAt": null,
+    "updatedAt": "2026-11-14T09:12:04.000Z"
+  }
+}
+```
+
+Errors: `401 missing_token` / `invalid_api_key`, `403 insufficient_scope` (the key
+lacks `claims:read`), `404 not_found`, `400 invalid_parameter`.
+
+**Polling.** Claims change a few times over days, not seconds. Poll
+`GET /claims?updatedSince=<last poll time>` every 15–60 minutes rather than
+fetching claims one by one.
+
+---
+
+## 20. Phase 2 admin endpoints (JWT + permission — not reachable with an API key)
+
+These drive the admin panel's claims, imported-policy, roles and simulator
+screens. They accept a **user JWT only**; an API key gets `401` whatever its
+scopes. Each is gated by a permission (the main administrator holds all of
+them; the built-in roles hold none unless the administrator adds them; the
+"Claims handler" role holds `claims.view`, `claims.update_status` and
+`claims.documents`).
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/admin/claims` | `claims.view` — list (`status`, `priority`, `category`, `q`, `from`, `to`, `test`, `page`) |
+| GET | `/admin/claims/summary` | `claims.view` or `claims.activate` |
+| GET | `/admin/claims/{id}` | `claims.view` — full detail; every view is audited |
+| POST | `/admin/claims/{id}/status` | `claims.update_status` — `{ "status": "under_review" \| "closed", "note": "…" }` |
+| GET | `/admin/claims/{id}/documents/{docId}/link` | `claims.documents` — a signed link valid 5 minutes; every view audited |
+| GET / PUT | `/admin/claims/settings` | `claims.settings` |
+| GET / POST / PUT | `/admin/claims/categories[/{code}]` | `claims.categories` (read also with `claims.view`) |
+| GET / PUT | `/admin/claims/activation` | `claims.activate` — the public on/off switch (typed confirmation in the panel) |
+| GET / POST / DELETE | `/admin/claims/allowlist[/{waNumber}]` | `claims.allowlist` — test numbers |
+| GET / POST | `/admin/external-policies` | `policies.import` — list / add one |
+| POST | `/admin/external-policies/import/preview`, `/admin/external-policies/import` | `policies.import` — CSV text or parsed Excel rows; preview first, then commit |
+| GET | `/admin/external-policies/template`, `/columns` | `policies.import` |
+| PUT | `/admin/external-policies/{id}/status` | `policies.import` — `active` / `cancelled` |
+| GET / POST | `/admin/simulator`, `/admin/simulator/message`, `/admin/simulator/reset` | `simulator.use` — never sends to WhatsApp, never charges, never writes cases |
+| GET | `/admin/access/me` | any signed-in user — their own permissions |
+| GET / POST / PUT | `/admin/access/roles[/{id}]`, `/admin/access/permissions` | main administrator only |
+| GET / PUT | `/admin/access/users[/{id}/role]` | main administrator only |
+| GET | `/admin/access/audit` | main administrator only |
+| POST | `/sales/{id}/resend-whatsapp` | admin or agency manager — re-sends a certificate on WhatsApp (`409 whatsapp_not_ready` until WhatsApp is connected) |
+
+Imported policies (`external_policies`) exist only so their holders can report a
+claim. They never appear in sales, ledgers, invoices or commissions.

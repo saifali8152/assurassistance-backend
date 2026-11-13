@@ -1,7 +1,7 @@
 //src/models/caseModel.js
 
 import getPool from "../utils/db.js";
-import { passportColumns, hydrateTraveller, hydrateTravellers } from "../utils/travellerPrivacy.js";
+import { passportColumns, hydrateTraveller, hydrateTravellers, passportHash } from "../utils/travellerPrivacy.js";
 import { normalizeDateOfBirthForDb } from "../utils/parseFlexibleDate.js";
 import { coerceGenderForDb } from "../utils/normalizeGender.js";
 
@@ -213,7 +213,12 @@ function buildCaseListFilters({ agentIds, status, startDate, endDate, search, pa
   }
   if (search && String(search).trim()) {
     const term = `%${String(search).trim()}%`;
+    // Milestone 5: an exact passport number finds its traveller through the
+    // blind index — the encrypted column cannot be searched with LIKE, and
+    // a partial passport search is deliberately not offered.
+    const passportIndex = passportHash(String(search).trim());
     whereClauses.push(`(
+      ${passportIndex ? "t.passport_or_id_hash = ? OR" : ""}
       CONCAT(t.first_name, ' ', t.last_name) LIKE ?
       OR t.email LIKE ?
       OR t.phone LIKE ?
@@ -224,6 +229,7 @@ function buildCaseListFilters({ agentIds, status, startDate, endDate, search, pa
       OR s.policy_number LIKE ?
       OR s.certificate_number LIKE ?
     )`);
+    if (passportIndex) params.push(passportIndex);
     params.push(term, term, term, term, term, term, term, term, term);
   }
 
